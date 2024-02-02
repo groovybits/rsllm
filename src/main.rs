@@ -4,7 +4,7 @@ use tokio;
 use serde_derive::{Serialize, Deserialize};
 use serde_json;
 
-const OPENAI_ENDPOINT: &str = "https://api.openai.com/v1/chat/completions";
+const OPENAI_ENDPOINT: &str = "http://earth.groovylife.ai:8081/v1/chat/completions";
 
 #[derive(Serialize, Deserialize)]
 struct Message {
@@ -19,17 +19,34 @@ struct OpenAIRequest<'a> {
 }
 
 #[derive(Deserialize)]
+struct Completions {
+    completion_tokens: i32,
+    prompt_tokens: i32,
+    total_tokens: i32
+}
+
+#[derive(Deserialize)]
 struct OpenAIResponse {
+    created: i64,
+    id: String,
+    model: String,
+    object: String,
+    usage: Completions,
     choices: Vec<Choice>,
 }
 
 #[derive(Deserialize)]
 struct Choice {
     finish_reason: String,
-    model: String,
-    created: i64,
+    index: i32,
     message: Message
 }
+
+/*
+ * {"choices":[{"finish_reason":"stop","index":0,"message":{"content":"The Los Angeles Dodgers won
+ * the World Series in 2020. They defeated the Tampa Bay Rays in six
+ * games.","role":"assistant"}}],"created":1706900958,"id":"chatcmpl-8jqjxqYj1IkKixqlHVvmTyJynoPOjaoA","model":"gpt-3.5-turbo","object":"chat.completion","usage":{"completion_tokens":30,"prompt_tokens":62,"total_tokens":92}}
+ */
 
 #[tokio::main]
 async fn main() {
