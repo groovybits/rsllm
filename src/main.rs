@@ -1,10 +1,11 @@
 use chrono::NaiveDateTime;
+use log::{debug, error, info};
 use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::env;
-use tokio;
-//use tokio::runtime::Runtime;
+use std::io::Write;
+use tokio; // Import traits and modules required for IO operations
 
 const OPENAI_ENDPOINT: &str = "http://earth.groovylife.ai:8081/v1/chat/completions";
 
@@ -27,27 +28,24 @@ struct OpenAIRequest<'a> {
 }
 
 #[derive(Deserialize)]
-struct Completions {
-    completion_tokens: i32,
-    prompt_tokens: i32,
-    total_tokens: i32,
-}
-
-#[derive(Deserialize)]
 struct OpenAIResponse {
     created: i64,
     id: String,
     model: String,
     object: String,
-    usage: Completions,
     choices: Vec<Choice>,
 }
 
 #[derive(Deserialize)]
 struct Choice {
-    finish_reason: String,
+    finish_reason: Option<String>,
     index: i32,
-    message: Message,
+    delta: Delta, // Use Option to handle cases where it might be null or missing
+}
+
+#[derive(Debug, Deserialize)]
+struct Delta {
+    content: Option<String>,
 }
 
 /*
@@ -59,61 +57,78 @@ struct Choice {
 async fn stream_completion(
     open_ai_request: OpenAIRequest<'_>,
     openai_key: &str,
-) -> reqwest::Result<()> {
-    //let client = Client::new();
-    let resp = Client::new()
+) -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new();
+    let response_result = client
         .post(OPENAI_ENDPOINT)
         .header("Authorization", format!("Bearer {}", openai_key))
         .json(&open_ai_request)
         .send()
-        .await
-        .unwrap_or_else(|err| {
-            println!("Failed to send request: {}", err);
-            std::process::exit(1);
-        })
-        .text() // get the full response text
-        .await
-        .unwrap_or_else(|err| {
-            println!("Failed to read response text: {}", err);
-            std::process::exit(1);
-        });
+        .await;
 
-    //let mut stream = resp.bytes_stream();
+    // Handle response_result error properly
+    if response_result.is_err() {
+        error!("Failed to send request: {}", response_result.unwrap_err());
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Network request failed",
+        )));
+    }
 
-    let response: Result<OpenAIResponse, _> = serde_json::from_str(&resp);
+    let mut response = response_result.unwrap(); // this is safe due to the check above
 
-    match response {
-        Ok(res) => {
-            println!(
-                "#{} {}/{} created at {:?} Index {} Role {} Finished because: {}",
-                res.id,
-                res.model,
-                res.object,
-                NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
-                res.choices[0].index,
-                res.choices[0].message.role,
-                res.choices[0].finish_reason
-            );
-            println!("Response: {}", res.choices[0].message.content);
-            // show tokens used, total_tokens, prompt_tokens, completion_tokens
-            println!(
-                "Tokens: completion_tokens: {}, prompt_tokens: {}, total_tokens: {}",
-                res.usage.completion_tokens, res.usage.prompt_tokens, res.usage.total_tokens
-            );
+    println!("\nResponse status: {}\n---\n", response.status());
+    while let Ok(Some(chunk)) = response.chunk().await {
+        let mut accumulated_response = Vec::new();
+        for byte in &chunk {
+            accumulated_response.push(*byte);
         }
-        Err(e) => {
-            // Print the error and the response that caused it
-            println!("Failed to parse response: {}", e);
-            println!("Response that failed to parse: {}", resp);
+        /* Example of a response chunk string we need to turn into a openairesponse struct
+        data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
+        data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
+        */
+        let removed_data = accumulated_response[6..].to_vec();
+        let final_response = String::from_utf8(removed_data)?;
+        debug!("Final response: {}", final_response);
+
+        match serde_json::from_str::<OpenAIResponse>(&final_response) {
+            Ok(res) => match res.choices.get(0) {
+                Some(choice) => {
+                    // check if we have content in the delta
+                    if let Some(content) = &choice.delta.content {
+                        print!("{}", content);
+                        // flush stdout
+                        std::io::stdout().flush().unwrap();
+                    }
+                    // check if we have a finish reason
+                    if let Some(reason) = &choice.finish_reason {
+                        info!(
+                            "Index {} ID {} Object {} by Model {} Created on {} Finish reason: {}",
+                            choice.index,
+                            res.id,
+                            res.object,
+                            res.model,
+                            NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
+                            reason
+                        );
+                    }
+                }
+                None => error!("No choices available."),
+            },
+            Err(e) => {
+                // Handle the parse error here
+                error!("Failed to parse response: {}", e);
+                error!("Response that failed to parse: {}", final_response);
+            }
         }
     }
+    println!();
+
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-    //let runtime = Runtime::new().unwrap();
-
     let openai_key =
         env::var("OPENAI_API_KEY").unwrap_or_else(|_| panic!("OPENAI_API_KEY not set in env"));
 
@@ -146,7 +161,7 @@ async fn main() {
     let presence_penalty = 0.0;
     let frequency_penalty = 0.0;
     let max_tokens = 800;
-    let stream = false;
+    let stream = true;
 
     let open_ai_request = OpenAIRequest {
         model: "gpt-3.5-turbo",
@@ -159,9 +174,7 @@ async fn main() {
         stream: &stream,
     };
 
-    /*runtime
-    .block_on(stream_completion(open_ai_request, &openai_key))
-    .unwrap();*/
+    // Directly await the future; no need for an explicit runtime block
     stream_completion(open_ai_request, &openai_key)
         .await
         .unwrap();
