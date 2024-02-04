@@ -130,12 +130,10 @@ Response status: 200 OK
 
 1. Packet Section Information for NAL Packets:
 
-```
 0000: 47 01 00 10 (start of an access unit)
 0010: 0d a9 6f 55 b2 e5 06 63 1f 95 7e 4c (NAL unit - Start of sequence)
 0020: a9 78 ab b3 73 b5 11 0b 9d dd 40 8f 3f 9c 32 75 (NAL unit - Sequence parameter set)
 0030: 89 47 64 45 99 76 a9 a2 68 97 75 d8 05 42 e4 f8 (NAL unit - Picture parameter set)
-```
 
 The first four bytes of each NAL unit are the same: `47 01 00`, which is an MPEG-TS PES packet header. The next byte represents the NAL unit type:
 
