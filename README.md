@@ -23,12 +23,12 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
     --host 127.0.0.1
 ```
 
-```
-This model is based on Mixtral-8x7b
+```markdown
+The Dolphin mixtral model is based on Mixtral-8x7b
 
-The base model has 32k context, I finetuned it with 16k.
+The base model has 32k context, Dolphin finetuned it with 16k.
 
-This Dolphin is really good at coding, I trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as I show in the below examples.
+This Dolphin is really good at coding, They trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as they show in the examples on the main model site on Huggingface.
 ```
 
 ## Features
