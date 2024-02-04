@@ -43,7 +43,7 @@ Ensure Rust and Cargo are installed on your system. If not, follow the installat
 1. Clone the repository:
 
     ```bash
-    git clone https://github.com/your-repository/RsLLM-OpenAI-API-client.git
+    git clone https://github.com/groovybits/rsllm.git
     ```
 
 2. Move into the project directory:
@@ -126,20 +126,44 @@ $ cargo run
 Response status: 200 OK
 ---
 
-Based on the provided NAL dump, we can derive several statistics:
+ Based on the given video settings and NAL dump, we can analyze the MPEG-TS stream as follows:
 
-1. The MPEG-TS Packet is 88 bytes in length.
-2. There are no headers or other metadata included.
-3. The NAL unit types found within this packet include:
-   - IDR_W_RADL (0x01): Indicates an IDR picture with a random access point, meaning it can be used for decoding starting from any frame without requiring prior frames.
-   - VPS (Video Parameter Set) (0x02): Contains information about the video encoding parameters such as resolution, frame rate, and other settings.
+1. Packet Section Information for NAL Packets:
 
-Note that these statistics are based on the NAL unit types present within the packet and not actual video content analysis. Further examination of the video content itself would be required to determine more specific details about its contents or quality.
+```
+0000: 47 01 00 10 (start of an access unit)
+0010: 0d a9 6f 55 b2 e5 06 63 1f 95 7e 4c (NAL unit - Start of sequence)
+0020: a9 78 ab b3 73 b5 11 0b 9d dd 40 8f 3f 9c 32 75 (NAL unit - Sequence parameter set)
+0030: 89 47 64 45 99 76 a9 a2 68 97 75 d8 05 42 e4 f8 (NAL unit - Picture parameter set)
+```
+
+The first four bytes of each NAL unit are the same: `47 01 00`, which is an MPEG-TS PES packet header. The next byte represents the NAL unit type:
+
+- `10` corresponds to the start of an access unit (SEI)
+- `0b` corresponds to sequence parameter set (SPS)
+- `0c` corresponds to picture parameter set (PPS)
+
+2. Other Stats like MPEG-TS Analyzer would do:
+
+- Video Codec: H.264/AVC
+- Frame Rate: 29.976 fps (from the lavfi smptebars source filter)
+- Bitrate: 60 Mbps (`-b:v 60M`)
+- Mux Rate: 20 Mbps (`-muxrate 20M`)
+- Audio Codec: AAC (`-c:a aac`)
+- Audio Bitrate: 128 kbps (`-b:a 128k`)
+- Sample Rate: 48000 Hz (from the lavfi sine source filter)
+- Channels: Stereo (`-ac 2`)
+- PID for Video: 0x1000 (from `-mpegts_start_pid 0x0100`)
+- PID for Audio: 0x1001 (derived from the video PID)
+- Program Map Table start PID: 0x1000 (from `-mpegts_pmt_start_pid 0x1000`)
+- MPEG Transport Stream mode enabled (derived from other options provided)
+
+Note: The provided NAL dump contains four different sequences, each with its respective sequence parameter set (SPS) and picture parameter set (PPS). In a real-world MPEG-TS stream, these would be interleaved within the PES packets.
 --
-Index 0 ID chatcmpl-xdlMWl3qBAWSsJ1QcKJ9pdOU7cViEtOS
+Index 0 ID chatcmpl-sPW7MhQL3SNf6jB1ePdmVgLlx7EBQOiU
 Object chat.completion.chunk by Model gpt-3.5-turbo
-Created on 2024-02-04 15:29:06 Finish reason: stop
-Tokens 186 Bytes 794
+Created on 2024-02-04 15:52:02 Finish reason: stop
+Tokens 677 Bytes 1619
 --
 ```
 
