@@ -4,6 +4,7 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::env;
 use tokio;
+//use tokio::runtime::Runtime;
 
 const OPENAI_ENDPOINT: &str = "http://earth.groovylife.ai:8081/v1/chat/completions";
 
@@ -55,12 +56,66 @@ struct Choice {
  * games.","role":"assistant"}}],"created":1706900958,"id":"chatcmpl-8jqjxqYj1IkKixqlHVvmTyJynoPOjaoA","model":"gpt-3.5-turbo","object":"chat.completion","usage":{"completion_tokens":30,"prompt_tokens":62,"total_tokens":92}}
  */
 
+async fn stream_completion(
+    open_ai_request: OpenAIRequest<'_>,
+    openai_key: &str,
+) -> reqwest::Result<()> {
+    //let client = Client::new();
+    let resp = Client::new()
+        .post(OPENAI_ENDPOINT)
+        .header("Authorization", format!("Bearer {}", openai_key))
+        .json(&open_ai_request)
+        .send()
+        .await
+        .unwrap_or_else(|err| {
+            println!("Failed to send request: {}", err);
+            std::process::exit(1);
+        })
+        .text() // get the full response text
+        .await
+        .unwrap_or_else(|err| {
+            println!("Failed to read response text: {}", err);
+            std::process::exit(1);
+        });
+
+    //let mut stream = resp.bytes_stream();
+
+    let response: Result<OpenAIResponse, _> = serde_json::from_str(&resp);
+
+    match response {
+        Ok(res) => {
+            println!(
+                "#{} {}/{} created at {:?} Index {} Role {} Finished because: {}",
+                res.id,
+                res.model,
+                res.object,
+                NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
+                res.choices[0].index,
+                res.choices[0].message.role,
+                res.choices[0].finish_reason
+            );
+            println!("Response: {}", res.choices[0].message.content);
+            // show tokens used, total_tokens, prompt_tokens, completion_tokens
+            println!(
+                "Tokens: completion_tokens: {}, prompt_tokens: {}, total_tokens: {}",
+                res.usage.completion_tokens, res.usage.prompt_tokens, res.usage.total_tokens
+            );
+        }
+        Err(e) => {
+            // Print the error and the response that caused it
+            println!("Failed to parse response: {}", e);
+            println!("Response that failed to parse: {}", resp);
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
+    //let runtime = Runtime::new().unwrap();
+
     let openai_key =
         env::var("OPENAI_API_KEY").unwrap_or_else(|_| panic!("OPENAI_API_KEY not set in env"));
-
-    let client = Client::new();
 
     let packet_dump = "analyze this mpegts nal dump and packet information, give a short summary of the stats like an mpegts
         analyzer would do. The nal dump is as follows:
@@ -93,57 +148,21 @@ async fn main() {
     let max_tokens = 800;
     let stream = false;
 
-    let resp = client
-        .post(OPENAI_ENDPOINT)
-        .header("Authorization", format!("Bearer {}", openai_key))
-        .json(&OpenAIRequest {
-            model: "gpt-3.5-turbo",
-            max_tokens: &max_tokens, // add this field to the request struct
-            messages: &messages,
-            temperature: &temperature, // add this field to the request struct
-            top_p: &top_p,             // add this field to the request struct
-            presence_penalty: &presence_penalty, // add this field to the request struct
-            frequency_penalty: &frequency_penalty, // add this field to the request struct
-            stream: &stream,
-        })
-        .send()
-        .await
-        .unwrap_or_else(|err| {
-            println!("Failed to send request: {}", err);
-            std::process::exit(1);
-        })
-        .text() // get the full response text
-        .await
-        .unwrap_or_else(|err| {
-            println!("Failed to read response text: {}", err);
-            std::process::exit(1);
-        });
+    let open_ai_request = OpenAIRequest {
+        model: "gpt-3.5-turbo",
+        max_tokens: &max_tokens, // add this field to the request struct
+        messages: &messages,
+        temperature: &temperature, // add this field to the request struct
+        top_p: &top_p,             // add this field to the request struct
+        presence_penalty: &presence_penalty, // add this field to the request struct
+        frequency_penalty: &frequency_penalty, // add this field to the request struct
+        stream: &stream,
+    };
 
-    let response: Result<OpenAIResponse, _> = serde_json::from_str(&resp);
-
-    match response {
-        Ok(res) => {
-            println!(
-                "#{} {}/{} created at {:?} Index {} Role {} Finished because: {}",
-                res.id,
-                res.model,
-                res.object,
-                NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
-                res.choices[0].index,
-                res.choices[0].message.role,
-                res.choices[0].finish_reason
-            );
-            println!("Response: {}", res.choices[0].message.content);
-            // show tokens used, total_tokens, prompt_tokens, completion_tokens
-            println!(
-                "Tokens: completion_tokens: {}, prompt_tokens: {}, total_tokens: {}",
-                res.usage.completion_tokens, res.usage.prompt_tokens, res.usage.total_tokens
-            );
-        }
-        Err(e) => {
-            // Print the error and the response that caused it
-            println!("Failed to parse response: {}", e);
-            println!("Response that failed to parse: {}", resp);
-        }
-    }
+    /*runtime
+    .block_on(stream_completion(open_ai_request, &openai_key))
+    .unwrap();*/
+    stream_completion(open_ai_request, &openai_key)
+        .await
+        .unwrap();
 }
