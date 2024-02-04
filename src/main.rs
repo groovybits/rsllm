@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
@@ -16,6 +17,12 @@ struct Message {
 struct OpenAIRequest<'a> {
     model: &'a str,
     messages: &'a [Message],
+    max_tokens: &'a i32,        // add this field to the request struct
+    temperature: &'a f32,       // add this field to the request struct
+    top_p: &'a f32,             // add this field to the request struct
+    presence_penalty: &'a f32,  // add this field to the request struct
+    frequency_penalty: &'a f32, // add this field to the request struct
+    stream: &'a bool,
 }
 
 #[derive(Deserialize)]
@@ -55,7 +62,9 @@ async fn main() {
 
     let client = Client::new();
 
-    let packet_dump = "analyze this mpegts nal dump and packet information:
+    let packet_dump = "analyze this mpegts nal dump and packet information, give a short summary of the stats like an mpegts
+        analyzer would do. The nal dump is as follows:
+
     --- Packet Offset 0 Packet Length 88 ---
 
     0000: 00 00 01 01 9f 70 74 41 9f 00 02 a6 82 1d 76 1b
@@ -76,12 +85,26 @@ async fn main() {
     };
     let messages = vec![system_message, user_message];
 
+    // add these values to the input for completions endpoint
+    let temperature = 0.8;
+    let top_p = 1.0;
+    let presence_penalty = 0.0;
+    let frequency_penalty = 0.0;
+    let max_tokens = 800;
+    let stream = false;
+
     let resp = client
         .post(OPENAI_ENDPOINT)
         .header("Authorization", format!("Bearer {}", openai_key))
         .json(&OpenAIRequest {
             model: "gpt-3.5-turbo",
+            max_tokens: &max_tokens, // add this field to the request struct
             messages: &messages,
+            temperature: &temperature, // add this field to the request struct
+            top_p: &top_p,             // add this field to the request struct
+            presence_penalty: &presence_penalty, // add this field to the request struct
+            frequency_penalty: &frequency_penalty, // add this field to the request struct
+            stream: &stream,
         })
         .send()
         .await
@@ -100,8 +123,22 @@ async fn main() {
 
     match response {
         Ok(res) => {
-            println!("Finished because: {}", res.choices[0].finish_reason);
+            println!(
+                "#{} {}/{} created at {:?} Index {} Role {} Finished because: {}",
+                res.id,
+                res.model,
+                res.object,
+                NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
+                res.choices[0].index,
+                res.choices[0].message.role,
+                res.choices[0].finish_reason
+            );
             println!("Response: {}", res.choices[0].message.content);
+            // show tokens used, total_tokens, prompt_tokens, completion_tokens
+            println!(
+                "Tokens: completion_tokens: {}, prompt_tokens: {}, total_tokens: {}",
+                res.usage.completion_tokens, res.usage.prompt_tokens, res.usage.total_tokens
+            );
         }
         Err(e) => {
             // Print the error and the response that caused it
