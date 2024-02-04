@@ -5,7 +5,8 @@ Simple rust program that can use an llm using the OpenAI specifications.
 A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically.
 
 ## Recommended model and server in C++ to run it with:
-- Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.5-mixtral-8x7b-GGUF>
+- GGUF Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF>
+- Dolphin 2.7 information <https://huggingface.co/cognitivecomputations/dolphin-2.7-mixtral-8x7b>
 - Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
 
 Run llama.cpp as a server with OpenAI API compatibility:
