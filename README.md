@@ -11,6 +11,8 @@ target/debug/rsllm
 
 A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically.
 
+![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
+
 ## Features
 
 - **CLI Support**: Uses the clap crate for an easy command-line interface.
