@@ -1,17 +1,35 @@
-## rsllm - LLM OpenAI API for chat completions in Rust
+# rsllm - LLM OpenAI API for chat completions in Rust
 
 Simple rust program that can use an llm using the OpenAI specifications.
 
-```
-cargo build
-target/debug/rsllm
-```
-
-# RsLLM OpenAI API client
-
 A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically.
 
-![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
+## Recommended model and server in C++ to run it with:
+- Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.5-mixtral-8x7b-GGUF>
+- Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
+
+Run llama.cpp as a server with OpenAI API compatibility:
+
+```bash
+# Context to model max, port 8081 lisenting on 127.0.0.1.
+# gpu 60x, threads 24x, slots of context 8 (divides up to allow multiple requests to the model).
+# Tuned for a Mac Studio M2 Ultra in this example, adjust for your GPU/CPU.
+server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.gguf \
+    -c 0 \
+    --port 8081 \
+    -ngl 60 \
+    -np 8 \
+    -t 24 \
+    --host 127.0.0.1
+```
+
+```
+This model is based on Mixtral-8x7b
+
+The base model has 32k context, I finetuned it with 16k.
+
+This Dolphin is really good at coding, I trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as I show in the below examples.
+```
 
 ## Features
 
@@ -20,6 +38,8 @@ A Rust-based client for interacting with the OpenAI API, designed to send prompt
 - **Configurable**: Supports environment variables and command-line options for custom requests.
 - **Structured Logging**: Implements the log crate for clear and configurable logging.
 - **JSON Handling**: Utilizes serde and serde_json for hassle-free data serialization and deserialization.
+
+![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
 
 ## Dependencies
 
