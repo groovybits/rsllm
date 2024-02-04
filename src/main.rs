@@ -229,7 +229,7 @@ async fn stream_completion(
     let mut byte_count = 0;
 
     println!("\nResponse status: {}\n---\n", response.status());
-    println!("Headers: {:#?}\n---\n", response.headers());
+    debug!("Headers: {:#?}\n---\n", response.headers());
     if !open_ai_request.stream {
         println!("Body: {}\n---\n", response.text().await?);
     } else {
