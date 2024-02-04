@@ -17,11 +17,10 @@
 
 use chrono::NaiveDateTime;
 use clap::Parser;
-use log::{debug, error, info};
+use log::{debug, error};
 use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
-use std::env;
 use std::io::Write;
 use tokio; // Import traits and modules required for IO operations
 
@@ -91,9 +90,19 @@ struct Args {
     /// OpenAI API Key
     #[clap(long, env = "OPENAI_API_KEY", default_value = "FAKE_KEY")]
     openai_key: String,
-}
 
-const OPENAI_ENDPOINT: &str = "http://earth.groovylife.ai:8081/v1/chat/completions";
+    /// LLM Host url with protocol, host, port,  no path
+    #[clap(
+        long,
+        env = "LLM_HOST",
+        default_value = "http://earth.groovylife.ai:8081"
+    )]
+    llm_host: String,
+
+    /// LLM Url path
+    #[clap(long, env = "LLM_PATH", default_value = "/v1/chat/completions")]
+    llm_path: String,
+}
 
 #[derive(Serialize, Deserialize)]
 struct Message {
@@ -143,10 +152,12 @@ struct Delta {
 async fn stream_completion(
     open_ai_request: OpenAIRequest<'_>,
     openai_key: &str,
+    llm_host: &str,
+    llm_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let response_result = client
-        .post(OPENAI_ENDPOINT)
+        .post(format!("{}{}", llm_host, llm_path))
         .header("Authorization", format!("Bearer {}", openai_key))
         .json(&open_ai_request)
         .send()
@@ -227,9 +238,7 @@ async fn main() {
 
     let args = Args::parse();
 
-    let openai_key =
-        env::var("OPENAI_API_KEY").unwrap_or_else(|_| panic!("OPENAI_API_KEY not set in env"));
-
+    let openai_key = args.openai_key;
     let system_prompt = args.system_prompt;
     let query = args.query;
 
@@ -251,6 +260,8 @@ async fn main() {
     let max_tokens = args.max_tokens;
     let stream = args.stream;
     let model = args.model;
+    let llm_host = args.llm_host;
+    let llm_path = args.llm_path;
 
     let open_ai_request = OpenAIRequest {
         model: &model,
@@ -264,7 +275,7 @@ async fn main() {
     };
 
     // Directly await the future; no need for an explicit runtime block
-    stream_completion(open_ai_request, &openai_key)
+    stream_completion(open_ai_request, &openai_key, &llm_host, &llm_path)
         .await
         .unwrap();
 }
