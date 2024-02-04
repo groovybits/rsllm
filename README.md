@@ -64,7 +64,7 @@ Ensure Rust and Cargo are installed on your system. If not, follow the installat
 2. Move into the project directory:
 
     ```bash
-    cd RsLLM-OpenAI-API-client
+    cd rsllm
     ```
 
 3. Build the project:
@@ -75,9 +75,13 @@ Ensure Rust and Cargo are installed on your system. If not, follow the installat
 
 ### Configuration
 
-Create a `.env` file in the project root and add your OpenAI API key:
+Create a `.env` file in the project root and add your OpenAI API key (if using OpenAI):
 
     OPENAI_API_KEY=your_openai_api_key_here
+
+To use OpenAI GPT API instead of a local LLM, you need to have an account and an API key. You can sign up for an API key [https://beta.openai.com/signup/](https://beta.openai.com/signup/).
+
+You must alter the --host option to match your server for rsllm to fit your environment. For example, if you are running llama.cpp on the same machine as rsllm, you can use the following: `--host http://127.0.0.1:8080`. For using OpenAI GPT API you can use `https://api.openai.com`.
 
 ### Usage
 

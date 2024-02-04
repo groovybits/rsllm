@@ -135,29 +135,25 @@ struct Args {
     #[clap(long, env = "MAX_TOKENS", default_value = "800")]
     max_tokens: i32,
 
-    /// Stream
-    #[clap(long, env = "STREAM", default_value = "true")]
-    stream: bool,
-
     /// Model
-    #[clap(long, env = "MODEL", default_value = "gpt-3.5-turbo")]
+    #[clap(long, env = "MODEL", default_value = "gpt-4-0125-preview")]
     model: String,
 
     /// OpenAI API Key
-    #[clap(long, env = "OPENAI_API_KEY", default_value = "FAKE_KEY")]
+    #[clap(long, env = "OPENAI_API_KEY", default_value = "ADD_YOUR_KEY_TO_ENV")]
     openai_key: String,
 
     /// LLM Host url with protocol, host, port,  no path
-    #[clap(
-        long,
-        env = "LLM_HOST",
-        default_value = "http://earth.groovylife.ai:8081"
-    )]
+    #[clap(long, env = "LLM_HOST", default_value = "https://api.openai.com")]
     llm_host: String,
 
     /// LLM Url path
     #[clap(long, env = "LLM_PATH", default_value = "/v1/chat/completions")]
     llm_path: String,
+
+    /// Don't stream output
+    #[clap(long, env = "NO_STREAM", default_value = "false")]
+    no_stream: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -233,25 +229,29 @@ async fn stream_completion(
     let mut byte_count = 0;
 
     println!("\nResponse status: {}\n---\n", response.status());
-    while let Ok(Some(chunk)) = response.chunk().await {
-        let mut accumulated_response = Vec::new();
-        for byte in &chunk {
-            accumulated_response.push(*byte);
-        }
-        /* Example of a response chunk string we need to turn into a openairesponse struct
-        data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
-        data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
-        */
-        let removed_data = accumulated_response[6..].to_vec();
-        let response_json = String::from_utf8(removed_data)?;
-        debug!("Final response: {}", response_json);
+    println!("Headers: {:#?}\n---\n", response.headers());
+    if !open_ai_request.stream {
+        println!("Body: {}\n---\n", response.text().await?);
+    } else {
+        while let Ok(Some(chunk)) = response.chunk().await {
+            let mut accumulated_response = Vec::new();
+            for byte in &chunk {
+                accumulated_response.push(*byte);
+            }
+            /* Example of a response chunk string we need to turn into a openairesponse struct
+            data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
+            data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
+            */
+            let removed_data = accumulated_response[6..].to_vec();
+            let response_json = String::from_utf8(removed_data)?;
+            debug!("Final response: {}", response_json);
 
-        match serde_json::from_str::<OpenAIResponse>(&response_json) {
-            Ok(res) => match res.choices.get(0) {
-                Some(choice) => {
-                    // check if we have a finish reason
-                    if let Some(reason) = &choice.finish_reason {
-                        println!(
+            match serde_json::from_str::<OpenAIResponse>(&response_json) {
+                Ok(res) => match res.choices.get(0) {
+                    Some(choice) => {
+                        // check if we have a finish reason
+                        if let Some(reason) = &choice.finish_reason {
+                            println!(
                             "\n--\nIndex {} ID {}\nObject {} by Model {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {}\n--\n",
                             choice.index,
                             res.id,
@@ -262,24 +262,25 @@ async fn stream_completion(
                             token_count,
                             byte_count
                         );
-                        break; // break the loop if we have a finish reason
-                    }
+                            break; // break the loop if we have a finish reason
+                        }
 
-                    // check if we have content in the delta
-                    if let Some(content) = &choice.delta.content {
-                        token_count += 1;
-                        byte_count += content.len();
-                        print!("{}", content);
-                        // flush stdout
-                        std::io::stdout().flush().unwrap();
+                        // check if we have content in the delta
+                        if let Some(content) = &choice.delta.content {
+                            token_count += 1;
+                            byte_count += content.len();
+                            print!("{}", content);
+                            // flush stdout
+                            std::io::stdout().flush().unwrap();
+                        }
                     }
+                    None => error!("No choices available."),
+                },
+                Err(e) => {
+                    // Handle the parse error here
+                    error!("Failed to parse response: {}", e);
+                    error!("Response that failed to parse: {}", response_json);
                 }
-                None => error!("No choices available."),
-            },
-            Err(e) => {
-                // Handle the parse error here
-                error!("Failed to parse response: {}", e);
-                error!("Response that failed to parse: {}", response_json);
             }
         }
     }
@@ -314,11 +315,12 @@ async fn main() {
     let presence_penalty = args.presence_penalty;
     let frequency_penalty = args.frequency_penalty;
     let max_tokens = args.max_tokens;
-    let stream = args.stream;
     let model = args.model;
     let llm_host = args.llm_host;
     let llm_path = args.llm_path;
 
+    // Stream API Completion
+    let stream = !args.no_stream;
     let open_ai_request = OpenAIRequest {
         model: &model,
         max_tokens: &max_tokens, // add this field to the request struct
