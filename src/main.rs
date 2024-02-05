@@ -15,6 +15,7 @@
  *
 */
 
+use bytes::Bytes;
 use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
@@ -24,7 +25,7 @@ use serde_json;
 use std::env;
 use std::io::Write;
 use std::time::Instant;
-use tokio; // Import traits and modules required for IO operations
+use tokio::sync::mpsc;
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
@@ -136,6 +137,15 @@ struct Args {
         help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false."
     )]
     use_openai: bool,
+
+    /// debug inline on output (can mess up the output) as a bool
+    #[clap(
+        long,
+        env = "DEBUG_INLINE",
+        default_value = "false",
+        help = "debug inline on output (can mess up the output) as a bool. Default is false."
+    )]
+    debug_inline: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -192,192 +202,238 @@ async fn stream_completion(
     openai_key: &str,
     llm_host: &str,
     llm_path: &str,
+    debug_inline: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
 
     let start_time = Instant::now();
-    let response_result = client
+    let mut response = client
         .post(format!("{}{}", llm_host, llm_path))
         .header("Authorization", format!("Bearer {}", openai_key))
         .json(&open_ai_request)
         .send()
-        .await;
+        .await?;
 
-    // Handle response_result error properly
-    if response_result.is_err() {
-        error!("Failed to send request: {}", response_result.unwrap_err());
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Network request failed",
-        )));
+    // handle errors
+    match response.error_for_status_ref() {
+        Ok(_) => (),
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(Box::new(e));
+        }
     }
 
-    let mut response = response_result.unwrap(); // this is safe due to the check above
     let mut token_count = 0;
     let mut byte_count = 0;
     let mut loop_count = 0;
+    // errors are strings
 
     println!("\nResponse status: {}\n---\n", response.status());
     debug!("Headers: {:#?}\n---\n", response.headers());
     if !open_ai_request.stream {
         println!("Body: {}\n---\n", response.text().await?);
     } else {
+        // Create an mpsc channel
+        let (tx, mut rx) = mpsc::channel::<Bytes>(32);
+        let (etx, mut erx) = mpsc::channel::<String>(32);
+
         // loop through the chunks
-        while let Ok(Some(chunk)) = response.chunk().await {
-            loop_count += 1;
-            debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
-            let chunk_str = String::from_utf8(chunk.to_vec())?;
+        // Spawn a new task for each chunk to process it asynchronously
+        let worker = tokio::spawn(async move {
+            while let Some(chunk) = rx.recv().await {
+                loop_count += 1;
 
-            // Splitting the chunk based on "data: " prefix to handle multiple JSON blobs
-            let json_blobs: Vec<&str> = chunk_str.split("\ndata: ").collect();
-            let mut blob_count = 0;
+                debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
+                let chunk_vec = Vec::from(chunk.as_ref());
+                let chunk_str = match String::from_utf8(chunk_vec).ok() {
+                    Some(s) => s,
+                    None => {
+                        error!(
+                            "Invalid UTF-8 sequence, skipping chunk. {}/{:?}",
+                            chunk.len(),
+                            chunk
+                        );
+                        continue;
+                    } // skip non-UTF-8 chunks
+                };
 
-            for json_blob in json_blobs.iter() {
-                blob_count += 1;
-                debug!("Json Blob: {}/{} - {}", loop_count, blob_count, json_blob);
-                if json_blob.is_empty() || *json_blob == "\n" {
-                    debug!("Empty line in response chunks.");
-                    continue;
-                }
+                // Splitting the chunk based on "data: " prefix to handle multiple JSON blobs
+                let json_blobs: Vec<&str> = chunk_str.split("\ndata: ").collect();
+                let mut blob_count = 0;
 
-                if json_blob == &"[DONE]" {
-                    info!("End of response chunks.\n");
-                    break;
-                }
-
-                // Confirm we have a '{' at the start, or find the offset of first '{' character
-                let offset = json_blob.find('{').unwrap_or(0);
-                let response_json = &json_blob[offset..];
-
-                if response_json.is_empty() {
-                    error!("Invalid response chunk:\n - '{}'", json_blob);
-                    continue;
-                }
-
-                debug!("Chunk #{} response: '{}'", loop_count, response_json);
-
-                match serde_json::from_str::<OpenAIResponse>(response_json) {
-                    Ok(res) => {
-                        let content = match &res.content {
-                            Some(content) => content,
-                            None => "",
-                        };
-
-                        if !content.is_empty() {
-                            println!("LLM Content Response: {}", content);
-                        }
-
-                        // if res.content exists then continue to the next chunk
-                        if res.content.is_some() {
-                            continue;
-                        }
-
-                        let choices = match &res.choices {
-                            Some(choices) => choices,
-                            None => {
-                                error!("No choices found in response.");
-                                return Err(Box::new(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    "No choices found in response",
-                                )));
-                            }
-                        };
-
-                        let role = match res.role {
-                            Some(role) => role,
-                            None => "unknown".to_string(),
-                        };
-
-                        if let Some(choice) = choices.get(0) {
-                            // check if we got the created date from res.created, if so convert it to naivedatatime for usage else use a default value
-                            let created_date = match res.created {
-                                Some(created_timestamp) => {
-                                    NaiveDateTime::from_timestamp_opt(created_timestamp, 0)
-                                        .map(|dt| dt.to_string())
-                                        .unwrap_or_else(|| "unknown".to_string())
-                                }
-                                None => "unknown".to_string(),
-                            };
-
-                            let id = match res.id {
-                                Some(id) => id,
-                                None => "unknown".to_string(),
-                            };
-
-                            let model = match res.model {
-                                Some(model) => model,
-                                None => "unknown".to_string(),
-                            };
-
-                            let object = match res.object {
-                                Some(object) => object,
-                                None => "unknown".to_string(),
-                            };
-
-                            // check if we have a finish reason
-                            if let Some(reason) = &choice.finish_reason {
-                                println!(
-                                    "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {}\n--\n",
-                                    choice.index,
-                                    id,
-                                    object,
-                                    model,
-                                    role,
-                                    created_date,
-                                    reason,
-                                    token_count,
-                                    byte_count
-                                );
-                                // break the loop if we have a finish reason
-                                break;
-                            }
-
-                            // check for system_fingerprint
-                            if let Some(fingerprint) = &res.system_fingerprint {
-                                debug!("\nSystem fingerprint: {}", fingerprint);
-                            }
-
-                            // check for logprobs
-                            if let Some(logprobs) = choice.logprobs {
-                                println!("Logprobs: {}", logprobs);
-                            }
-
-                            // check if we have content in the delta
-                            if let Some(content) = &choice.delta.content {
-                                token_count += 1;
-                                byte_count += content.len();
-                                print!("{}", content);
-                                // flush stdout
-                                std::io::stdout().flush().unwrap();
-                            }
-                        } else {
-                            error!("No choices available.");
-                        }
+                for json_blob in json_blobs.iter() {
+                    blob_count += 1;
+                    debug!("Json Blob: {}/{} - {}", loop_count, blob_count, json_blob);
+                    if json_blob.is_empty() || *json_blob == "\n" {
+                        debug!("Empty line in response chunks.");
+                        continue;
                     }
-                    Err(e) => {
-                        // Handle the parse error here
-                        if blob_count == 1 && json_blobs.len() == 1 {
-                            // FIXME: this is most likely openAI with the first request being empty
-                            // We probably are doing something wrong.
-                        } else {
-                            error!("Failed to parse response: {}", e);
-                            error!("Response that failed to parse: '{}'", response_json);
+
+                    if json_blob == &"[DONE]" {
+                        info!("End of response chunks.\n");
+                        break;
+                    }
+
+                    // Confirm we have a '{' at the start, or find the offset of first '{' character
+                    let offset = json_blob.find('{').unwrap_or(0);
+                    let response_json = &json_blob[offset..];
+
+                    if response_json.is_empty() {
+                        error!("Invalid response chunk:\n - '{}'", json_blob);
+                        continue;
+                    }
+
+                    debug!("Chunk #{} response: '{}'", loop_count, response_json);
+
+                    match serde_json::from_str::<OpenAIResponse>(response_json) {
+                        Ok(res) => {
+                            let content = match &res.content {
+                                Some(content) => content,
+                                None => "",
+                            };
+
+                            if !content.is_empty() {
+                                println!("LLM Content Response: {}", content);
+                            }
+
+                            // if res.content exists then continue to the next chunk
+                            if res.content.is_some() {
+                                continue;
+                            }
+
+                            // Assume `res` is an instance of `OpenAIResponse` you've deserialized
+                            let choices = &res.choices.unwrap_or_else(|| {
+                                error!("No choices found in response.");
+                                Vec::new() // Provide a default value that matches the expected type
+                            });
+
+                            let role = match res.role {
+                                Some(role) => role,
+                                None => "unknown".to_string(),
+                            };
+
+                            if let Some(choice) = choices.get(0) {
+                                // check if we got the created date from res.created, if so convert it to naivedatatime for usage else use a default value
+                                let created_date = match res.created {
+                                    Some(created_timestamp) => {
+                                        NaiveDateTime::from_timestamp_opt(created_timestamp, 0)
+                                            .map(|dt| dt.to_string())
+                                            .unwrap_or_else(|| "unknown".to_string())
+                                    }
+                                    None => "unknown".to_string(),
+                                };
+
+                                let id = match res.id {
+                                    Some(id) => id,
+                                    None => "unknown".to_string(),
+                                };
+
+                                let model = match res.model {
+                                    Some(model) => model,
+                                    None => "unknown".to_string(),
+                                };
+
+                                let object = match res.object {
+                                    Some(object) => object,
+                                    None => "unknown".to_string(),
+                                };
+
+                                // check if we have a finish reason
+                                if let Some(reason) = &choice.finish_reason {
+                                    let end_time = Instant::now();
+                                    let duration = end_time.duration_since(start_time);
+                                    let pretty_time = format!("{:?}", duration);
+
+                                    println!(
+                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {} at {} tokens per second and {} seconds to complete.\n--\n",
+                                        choice.index,
+                                        id,
+                                        object,
+                                        model,
+                                        role,
+                                        created_date,
+                                        reason,
+                                        token_count,
+                                        byte_count,
+                                        token_count / duration.as_secs(),
+                                        pretty_time
+                                    );
+
+                                    // break the loop if we have a finish reason
+                                    break;
+                                }
+
+                                // check for system_fingerprint
+                                if let Some(fingerprint) = &res.system_fingerprint {
+                                    debug!("\nSystem fingerprint: {}", fingerprint);
+                                }
+
+                                // check for logprobs
+                                if let Some(logprobs) = choice.logprobs {
+                                    println!("Logprobs: {}", logprobs);
+                                }
+
+                                // check if we have content in the delta
+                                if let Some(content) = &choice.delta.content {
+                                    token_count += 1;
+                                    byte_count += content.len();
+                                    print!("{}", content);
+                                    // flush stdout
+                                    std::io::stdout().flush().unwrap();
+                                }
+                            } else {
+                                error!("No choices available.");
+                            }
+                        }
+                        Err(e) => {
+                            // Handle the parse error here
+                            if debug_inline {
+                                error!("\nFailed to parse response: {}\n", e);
+                                error!("\nResponse that failed to parse: '{}'\n", response_json);
+                            } else {
+                                // push to etx channel
+                                etx.send(format!("{} - {}", e, response_json))
+                                    .await
+                                    .expect("Failed to send error");
+                                print!("*X*");
+                            }
                         }
                     }
                 }
             }
+        });
+
+        // Spawn a separate task to collect errors concurrently
+        let error_collector = tokio::spawn(async move {
+            let mut errors = Vec::new();
+            while let Some(error_message) = erx.recv().await {
+                errors.push(error_message);
+            }
+            errors // Return collected errors from the task
+        });
+
+        // Main task to send chunks to the worker
+        while let Some(chunk) = response.chunk().await? {
+            tx.send(chunk).await.expect("Failed to send chunk");
+        }
+
+        // Close the channel by dropping tx
+        drop(tx);
+
+        // Await the worker task to finish processing
+        worker.await?;
+
+        // Await the error collector task to retrieve the collected errors
+        let errors_array = error_collector.await?; // Handle errors from the error collector task
+
+        // Print errors or perform further actions with them
+        if !errors_array.is_empty() {
+            println!("\nErrors:");
+            for error in errors_array.iter() {
+                println!("{}", error);
+            }
         }
     }
-    println!();
-
-    let end_time = Instant::now();
-    let duration = end_time.duration_since(start_time);
-    let pretty_time = format!("{:?}", duration);
-    println!(
-        "LLM took {} tokens per second and a total of {} seconds to complete.",
-        token_count / duration.as_secs(),
-        pretty_time
-    );
 
     Ok(())
 }
@@ -415,6 +471,7 @@ async fn main() {
     let model = args.model;
     let mut llm_host = args.llm_host;
     let llm_path = args.llm_path;
+    let debug_inline = args.debug_inline;
 
     if args.use_openai {
         // set the llm_host to the openai api
@@ -435,7 +492,13 @@ async fn main() {
     };
 
     // Directly await the future; no need for an explicit runtime block
-    stream_completion(open_ai_request, &openai_key, &llm_host, &llm_path)
-        .await
-        .unwrap();
+    stream_completion(
+        open_ai_request,
+        &openai_key,
+        &llm_host,
+        &llm_path,
+        debug_inline,
+    )
+    .await
+    .unwrap();
 }

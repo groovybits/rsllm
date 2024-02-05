@@ -16,3 +16,6 @@ log = "0.4.20"
 clap = { version = "4.4.11", features = ["derive", "env"] }
 dotenv = "0.15.0"
 env_logger = "0.9"
+futures = "0.3.30"
+task = "0.0.1"
+bytes = "1.5.0"
