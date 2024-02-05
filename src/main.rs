@@ -181,13 +181,13 @@ struct OpenAIResponse {
     model: String,
     object: String,
     choices: Vec<Choice>,
+    system_fingerprint: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct Choice {
     finish_reason: Option<String>,
     logprobs: Option<bool>,
-    system_fingerprint: Option<String>,
     index: i32,
     delta: Delta, // Use Option to handle cases where it might be null or missing
 }
@@ -244,7 +244,6 @@ async fn stream_completion(
                 "Failed to get response chunks",
             )));
         }
-        info!("Response chunks:");
 
         // loop through the chunks
         while let Ok(Some(chunk)) = response.chunk().await {
@@ -258,11 +257,32 @@ async fn stream_completion(
             data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
             data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
             */
+
+            // check for [DONE] as the response after 'data: ' like 'data: [DONE]\n' as OpenAI sends
+            if accumulated_response.len() >= 6
+                && accumulated_response[6..] == [91, 68, 79, 78, 69, 93, 10]
+            {
+                info!("End of response chunks.\n");
+                break;
+            }
+
             if accumulated_response.len() < 6 {
-                error!("Invalid response chunk {:?}", accumulated_response);
+                if accumulated_response == [10] {
+                    debug!("Empty line in response chunks.");
+                }
+                if accumulated_response.len() == 0 {
+                    debug!("Empty line in response chunks.");
+                } else {
+                    error!("Invalid response chunk:\n - '{:?}'", accumulated_response);
+                }
                 continue;
             }
-            let removed_data = accumulated_response[6..].to_vec();
+            let mut offset = 0;
+            // check if accumulated_response starts with 'data: ' and if so change offset to 6
+            if accumulated_response[0..6] == [100, 97, 116, 97, 58, 32] {
+                offset = 6;
+            }
+            let removed_data = accumulated_response[offset..].to_vec();
             let response_json = String::from_utf8(removed_data)?;
             debug!("Chunk #{} response: {}", loop_count, response_json);
 
@@ -283,6 +303,16 @@ async fn stream_completion(
                             byte_count
                         );
                             break; // break the loop if we have a finish reason
+                        }
+
+                        // check for system_fingerprint
+                        if let Some(fingerprint) = &res.system_fingerprint {
+                            println!("System fingerprint: {}", fingerprint);
+                        }
+
+                        // check for logprobs
+                        if let Some(logprobs) = choice.logprobs {
+                            println!("Logprobs: {}", logprobs);
                         }
 
                         // check if we have content in the delta
