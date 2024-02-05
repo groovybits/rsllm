@@ -214,7 +214,8 @@ Tokens 800 Bytes 2964
 
 ## TODO
 
-- preserve history as a small db possibly sqlite or mongodb locally.
+- use pcap input and use LLM to analyze the network and provide insights.
+- preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
 - use chroma db to do RAG with documents for augmenting the prompt with relevant information.
 - allow daemon mode to run and listent for requests via zmq input and pass to output.
 - return results from streaming function, fix streaming function to non-block and be more efficient.
