@@ -21,6 +21,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
+use std::env;
 use std::io::Write;
 use std::time::Instant;
 use tokio; // Import traits and modules required for IO operations
@@ -47,72 +48,7 @@ struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "analyze this mpegts nal dump and packet information,
-        give a chart showing the packet sections information decoded for nal packets and other stats like an mpegts
-        analyzer would do.
-
-        The video settings for this stream are:
-        - ffmpeg -f lavfi -i smptebars=size=1920x1080:rate=29.976 -f lavfi -i sine=frequency=1000:sample_rate=48000 \
-               -c:v libx264 -c:a aac -b:a 128k -ar 48000 -ac 2 \
-               -mpegts_pmt_start_pid 0x1000 -mpegts_start_pid 0x0100 \
-               -metadata service_provider=TestStream -metadata service_name=ColorBarsWithTone \
-               -nal-hrd cbr -maxrate 19M -minrate 19M -bufsize 19M -b:v 60M -muxrate 20M
-
-        The nal dump is as follows:
-
-        0000: 47 01 00 10 0d a9 6f 55 b2 e5 06 63 1f 95 7e 4c
-        0010: a9 78 ab b3 73 b5 11 0b 9d dd 40 8f 3f 9c 32 75
-        0020: 89 47 64 45 99 76 a9 a2 68 97 75 d8 05 42 e4 f8
-        0030: 95 6a 49 51 61 a8 09 9c bb 29 bb 71 b8 70 6d 21
-        0040: bd 43 8a 0f 05 e6 79 f9 bd d5 af 85 05 e1 ff 0d
-        0050: c5 ce 53 97 89 9a 7b 06 2b 74 f0 87 16 93 6d 9e
-        0060: 41 f0 cc 3b f5 6f 7c 14 9d 25 75 ab b7 c5 b8 9a
-        0070: cd 10 06 9a 30 48 49 66 6c cc 20 6f ab e5 22 6a
-        0080: d7 6a 96 25 03 c5 a6 bb 9d aa 9a 93 17 8d 44 c4
-        0090: 94 7f 02 e7 c0 6d dd b5 1a 66 d3 9d 08 4e 6e b8
-        00a0: 47 d6 a5 fd 1f ff c8 41 8a 90 e9 d0 3c 5c ef 8c
-        00b0: 9c 71 d6 e1 82 5a c0 da 74 dc c7 52
-
-        0000: 47 01 00 11 ac 00 1f 25 4c d5 bb 3c 0a 69 9c a3
-        0010: da e7 a9 07 37 2b e4 fb cb 1b e4 77 ca 23 8e d0
-        0020: 9b 8c ba 4c 1d a9 f2 d1 0e b7 7f f4 73 37 cf 7d
-        0030: 78 34 97 05 fd 80 14 fb 9a 1a 39 1a 3e 75 6d 7b
-        0040: be 0a ae 3b 86 3c 89 a0 63 e5 4b d7 8f 58 4c c6
-        0050: cb 17 13 e6 85 09 a9 69 e5 58 11 a4 a5 8b 18 cd
-        0060: 91 42 f0 c6 6c 2a 93 c0 9d f5 08 f4 1d 4b 89 26
-        0070: f2 aa d6 8b 40 a1 da 36 c5 da 88 29 4c 14 30 5f
-        0080: 91 4a 0b 0f 94 5e b2 29 de fd 99 ed e6 63 2d 98
-        0090: da 5c 72 32 fb ae 06 90 9d 4f 9f 28 ee 8f 3a 7b
-        00a0: 04 6a aa 54 8f e2 9b d0 f9 40 5c b4 a3 be 5a dd
-        00b0: b8 cc 9a 37 f7 50 76 29 12 0a 7d 50
-
-        0000: 47 01 00 12 eb 76 7c 60 92 c8 f5 2b 3e 17 e2 21
-        0010: 72 07 43 83 75 10 21 bb 11 d8 31 1c 1c 80 a6 7c
-        0020: c2 27 be 43 72 9c 33 55 48 61 0d 04 9e fd 56 7b
-        0030: c1 9b d7 5d 94 39 ce 81 5e 29 41 31 15 84 1d a3
-        0040: f7 79 1e 27 5a f9 d1 dc 71 2c a3 e0 e7 d3 be a0
-        0050: 94 38 ea 71 87 fc 0f 75 f6 ef 03 5f 42 15 8c 8f
-        0060: ea 75 e8 c1 55 fd ee 46 40 aa a9 db 2a dd 81 5c
-        0070: 4d 74 97 f1 49 c0 af e9 0c 6b 17 94 81 a2 c5 00
-        0080: c4 f1 29 62 52 54 2d c0 9a 6f f9 ac fe aa 8b 44
-        0090: b0 40 65 cc f3 1c 2f 11 81 14 d7 fd af 89 6d 1a
-        00a0: f2 f5 6a dc 08 29 41 13 38 c9 86 1f c3 49 b1 5c
-        00b0: 76 b2 53 39 5d d2 89 92 d9 bf b7 44
-
-        0000: 47 01 00 13 a3 ed 45 59 74 9a f1 d1 66 31 4e 1a
-        0010: f5 94 67 cc 11 1f e6 cc e7 e0 d7 91 54 ab c0 71
-        0020: aa 2e 16 19 32 1b ca 16 50 4d 88 06 47 7d 43 a0
-        0030: df 70 a7 ff 6e b6 88 c3 ac 72 0a 05 98 90 0d 66
-        0040: cf 6b 61 95 ec 9f b3 06 3e a6 e5 99 ba c5 b8 a3
-        0050: 54 86 dc c5 48 d6 eb 07 84 58 93 07 59 11 06 5d
-        0060: d0 12 4d 11 f5 8a ed 5d 8b 89 72 e5 16 c3 51 3d
-        0070: 24 68 2c 85 dd ff ff ec d0 3b 94 fc e6 6a 40 e3
-        0080: 85 fd ac 42 5f 6d 53 2a 07 24 7d 49 dc 31 33 7f
-        0090: b0 e1 23 37 27 e5 d4 76 e3 b8 01 2e ff fd 97 90
-        00a0: 42 31 e6 2b b8 57 f5 da cd 3a d3 3e fb b2 1b 82
-        00b0: 78 42 43 8f 2c 7c 82 8d 51 10 b6 8d
-
-        ",
+        default_value = "Explain each MpegTS NAL type in a chart format.",
         help = "Query to generate completions for"
     )]
     query: String,
@@ -165,15 +101,6 @@ struct Args {
         help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
     )]
     model: String,
-
-    /// OpenAI API Key
-    #[clap(
-        long,
-        env = "OPENAI_API_KEY",
-        default_value = "ADD_YOUR_KEY_TO_ENV",
-        help = "OpenAI API Key, set in .env, do not use on cmdline unless you want to expose your key."
-    )]
-    openai_key: String,
 
     /// LLM Host url with protocol, host, port,  no path
     #[clap(
@@ -473,7 +400,9 @@ async fn main() {
 
     let args = Args::parse();
 
-    let openai_key = args.openai_key;
+    let openai_key = env::var("OPENAI_API_KEY")
+        .ok()
+        .unwrap_or_else(|| "NO_API_KEY".to_string());
     let system_prompt = args.system_prompt;
     let query = args.query;
 
