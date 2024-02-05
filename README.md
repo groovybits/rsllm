@@ -108,7 +108,7 @@ Options:
       --model <MODEL>
           OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-0125-preview]
       --openai-key <OPENAI_KEY>
-          OpenAI API Key, set in .env, do not use on cmdline unless you want to expose your key. [env: OPENAI_API_KEY=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] [default: ADD_YOUR_KEY_TO_ENV]
+          OpenAI API Key, set in .env, do not use on cmdline unless you want to expose your key. [env: OPENAI_API_KEY=sk-your-private-key] [default: ADD_YOUR_KEY_TO_ENV]
       --llm-host <LLM_HOST>
           LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://127.0.0.1:8080]
       --llm-path <LLM_PATH>
