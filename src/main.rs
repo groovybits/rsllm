@@ -223,13 +223,13 @@ async fn stream_completion(
         println!("Body: {}\n---\n", response.text().await?);
     } else {
         // check if we got a response with chunks
-        if response.chunk().await.is_err() {
-            error!("Failed to get response chunks");
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to get response chunks",
-            )));
-        }
+        /*if response.chunk().await.is_err() {
+        error!("Failed to get response chunks");
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to get response chunks",
+        )));
+        }*/
 
         // loop through the chunks
         while let Ok(Some(chunk)) = response.chunk().await {
