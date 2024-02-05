@@ -212,6 +212,26 @@ Tokens 800 Bytes 2964
 --
 ```
 
+## TODO
+
+- preserve history as a small db possibly sqlite or mongodb locally.
+- use chroma db to do RAG with documents for augmenting the prompt with relevant information.
+- allow daemon mode to run and listent for requests via zmq input and pass to output.
+- return results from streaming function, fix streaming function to non-block and be more efficient.
+- segment output into smaller chunks for realtime processing downstream.
+- add more options for the LLM and openai api.
+- capnproto for serialization and deserialization of data.
+- add stable diffusion for image generation for visualizing results.
+- add text to speech for audio output of results.
+- add music generation for mood enhancement based on results.
+- add video generation with consistent frame context of objects staying same in frame.
+- speech to text for audio input for llm ingestion and subtitling of video.
+- setup as a crate library to use in other projects.
+- freeform input options for the LLM to figure out what the user wants to do.
+- dynamic code generation of python for new tasks on the fly like video processing? risks?
+- iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
+- use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
+
 ## License
 
 This project is under the MIT License - see the LICENSE file for details.
