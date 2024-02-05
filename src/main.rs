@@ -176,11 +176,13 @@ struct OpenAIRequest<'a> {
 
 #[derive(Deserialize)]
 struct OpenAIResponse {
-    created: i64,
-    id: String,
-    model: String,
-    object: String,
-    choices: Vec<Choice>,
+    role: Option<String>,
+    created: Option<i64>,
+    id: Option<String>,
+    model: Option<String>,
+    object: Option<String>,
+    choices: Option<Vec<Choice>>,
+    content: Option<String>,
     system_fingerprint: Option<String>,
 }
 
@@ -249,92 +251,144 @@ async fn stream_completion(
         while let Ok(Some(chunk)) = response.chunk().await {
             loop_count += 1;
             debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
-            let mut accumulated_response = Vec::new();
-            for byte in &chunk {
-                accumulated_response.push(*byte);
-            }
-            /* Example of a response chunk string we need to turn into a openairesponse struct
-            data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
-            data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
-            */
+            let chunk_str = String::from_utf8(chunk.to_vec())?;
 
-            // check for [DONE] as the response after 'data: ' like 'data: [DONE]\n' as OpenAI sends
-            if accumulated_response.len() >= 6
-                && accumulated_response[6..] == [91, 68, 79, 78, 69, 93, 10]
-            {
-                info!("End of response chunks.\n");
-                break;
-            }
+            // Splitting the chunk based on "data: " prefix to handle multiple JSON blobs
+            let json_blobs: Vec<&str> = chunk_str.split("\ndata: ").collect();
+            let mut blob_count = 0;
 
-            if accumulated_response.len() < 6 {
-                if accumulated_response == [10] {
+            for json_blob in json_blobs.iter() {
+                blob_count += 1;
+                debug!("Json Blob: {}/{} - {}", loop_count, blob_count, json_blob);
+                if json_blob.is_empty() || *json_blob == "\n" {
                     debug!("Empty line in response chunks.");
+                    continue;
                 }
-                if accumulated_response.len() == 0 {
-                    debug!("Empty line in response chunks.");
-                } else {
-                    error!("Invalid response chunk:\n - '{:?}'", accumulated_response);
+
+                if json_blob == &"[DONE]" {
+                    info!("End of response chunks.\n");
+                    break;
                 }
-                continue;
-            }
-            let mut offset = 0;
-            // confirm we have a '{' at the start or else walk through and find offset of first '{' character
-            if accumulated_response[offset] != 123 {
-                for (i, byte) in accumulated_response.iter().enumerate() {
-                    if *byte == 123 {
-                        offset = i;
-                        break;
+
+                // Confirm we have a '{' at the start, or find the offset of first '{' character
+                let offset = json_blob.find('{').unwrap_or(0);
+                let response_json = &json_blob[offset..];
+
+                if response_json.is_empty() {
+                    error!("Invalid response chunk:\n - '{}'", json_blob);
+                    continue;
+                }
+
+                debug!("Chunk #{} response: '{}'", loop_count, response_json);
+
+                match serde_json::from_str::<OpenAIResponse>(response_json) {
+                    Ok(res) => {
+                        let content = match &res.content {
+                            Some(content) => content,
+                            None => "",
+                        };
+
+                        if !content.is_empty() {
+                            println!("LLM Content Response: {}", content);
+                        }
+
+                        // if res.content exists then continue to the next chunk
+                        if res.content.is_some() {
+                            continue;
+                        }
+
+                        let choices = match &res.choices {
+                            Some(choices) => choices,
+                            None => {
+                                error!("No choices found in response.");
+                                return Err(Box::new(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "No choices found in response",
+                                )));
+                            }
+                        };
+
+                        let role = match res.role {
+                            Some(role) => role,
+                            None => "unknown".to_string(),
+                        };
+
+                        if let Some(choice) = choices.get(0) {
+                            // check if we got the created date from res.created, if so convert it to naivedatatime for usage else use a default value
+                            let created_date = match res.created {
+                                Some(created_timestamp) => {
+                                    NaiveDateTime::from_timestamp_opt(created_timestamp, 0)
+                                        .map(|dt| dt.to_string())
+                                        .unwrap_or_else(|| "unknown".to_string())
+                                }
+                                None => "unknown".to_string(),
+                            };
+
+                            let id = match res.id {
+                                Some(id) => id,
+                                None => "unknown".to_string(),
+                            };
+
+                            let model = match res.model {
+                                Some(model) => model,
+                                None => "unknown".to_string(),
+                            };
+
+                            let object = match res.object {
+                                Some(object) => object,
+                                None => "unknown".to_string(),
+                            };
+
+                            // check if we have a finish reason
+                            if let Some(reason) = &choice.finish_reason {
+                                println!(
+                                    "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {}\n--\n",
+                                    choice.index,
+                                    id,
+                                    object,
+                                    model,
+                                    role,
+                                    created_date,
+                                    reason,
+                                    token_count,
+                                    byte_count
+                                );
+                                // break the loop if we have a finish reason
+                                break;
+                            }
+
+                            // check for system_fingerprint
+                            if let Some(fingerprint) = &res.system_fingerprint {
+                                debug!("\nSystem fingerprint: {}", fingerprint);
+                            }
+
+                            // check for logprobs
+                            if let Some(logprobs) = choice.logprobs {
+                                println!("Logprobs: {}", logprobs);
+                            }
+
+                            // check if we have content in the delta
+                            if let Some(content) = &choice.delta.content {
+                                token_count += 1;
+                                byte_count += content.len();
+                                print!("{}", content);
+                                // flush stdout
+                                std::io::stdout().flush().unwrap();
+                            }
+                        } else {
+                            error!("No choices available.");
+                        }
                     }
-                }
-            }
-            let removed_data = accumulated_response[offset..].to_vec();
-            let response_json = String::from_utf8(removed_data)?;
-            debug!("Chunk #{} response: '{}'", loop_count, response_json);
-
-            match serde_json::from_str::<OpenAIResponse>(&response_json) {
-                Ok(res) => match res.choices.get(0) {
-                    Some(choice) => {
-                        // check if we have a finish reason
-                        if let Some(reason) = &choice.finish_reason {
-                            println!(
-                            "\n--\nIndex {} ID {}\nObject {} by Model {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {}\n--\n",
-                            choice.index,
-                            res.id,
-                            res.object,
-                            res.model,
-                            NaiveDateTime::from_timestamp_opt(res.created, 0).unwrap(),
-                            reason,
-                            token_count,
-                            byte_count
-                        );
-                            break; // break the loop if we have a finish reason
-                        }
-
-                        // check for system_fingerprint
-                        if let Some(fingerprint) = &res.system_fingerprint {
-                            println!("System fingerprint: {}", fingerprint);
-                        }
-
-                        // check for logprobs
-                        if let Some(logprobs) = choice.logprobs {
-                            println!("Logprobs: {}", logprobs);
-                        }
-
-                        // check if we have content in the delta
-                        if let Some(content) = &choice.delta.content {
-                            token_count += 1;
-                            byte_count += content.len();
-                            print!("{}", content);
-                            // flush stdout
-                            std::io::stdout().flush().unwrap();
+                    Err(e) => {
+                        // Handle the parse error here
+                        if blob_count == 1 && json_blobs.len() == 1 {
+                            // FIXME: this is most likely openAI with the first request being empty
+                            // We probably are doing something wrong.
+                        } else {
+                            error!("Failed to parse response: {}", e);
+                            error!("Response that failed to parse: '{}'", response_json);
                         }
                     }
-                    None => error!("No choices available."),
-                },
-                Err(e) => {
-                    // Handle the parse error here
-                    error!("Failed to parse response: {}", e);
-                    error!("Response that failed to parse: '{}'", response_json);
                 }
             }
         }
