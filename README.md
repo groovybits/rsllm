@@ -97,7 +97,7 @@ Options:
       --system-prompt <SYSTEM_PROMPT>
           System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability."]
       --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "You are an expert assistant."]
+          Query to generate completions for [env: QUERY=] [default: "Explain the mpegts nals and show a chart for each type with the explanations."]
       --temperature <TEMPERATURE>
           Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
