@@ -38,14 +38,8 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
 
 ## Dependencies
 
-To run RsLLM, you'll need the following crates:
-- `reqwest` for HTTP requests.
-- `clap` for parsing command-line arguments.
-- `serde`, `serde_json` for JSON serialization.
-- `log` for logging support.
-- `tokio` for asynchronous programming.
-- `chrono` for date and time operations.
-- `dotenv` for loading environment variables.
+- Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
+- GGUF Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF>
 
 ## Getting Started
 
@@ -81,13 +75,13 @@ Create a `.env` file in the project root and add your OpenAI API key (if using O
 
 To use OpenAI GPT API instead of a local LLM, you need to have an account and an API key. You can sign up for an API key [https://beta.openai.com/signup/](https://beta.openai.com/signup/).
 
-You must alter the --host option to match your server for rsllm to fit your environment. For example, if you are running llama.cpp on the same machine as rsllm, you can use the following: `--host http://127.0.0.1:8080`. For using OpenAI GPT API you can use `https://api.openai.com`.
+You must alter the -llm-host option to match your server for rsllm to fit your environment. For example, if you are running llama.cpp on the same machine as rsllm, you can use the following: `--host http://127.0.0.1:8080`. For using OpenAI GPT API add --use-openai on the cmdline which will set the llm host for you to OpenAI's.
 
 ### Usage
 
 Run the client with Cargo, passing your desired prompt and other options as arguments:
 
-    cargo run -- --query "Your prompt here"
+`cargo run -- --query "Your prompt here" --use-openai --openai-api-key`
 
 #### Command-Line Options:
 
@@ -98,44 +92,36 @@ Usage: rsllm [OPTIONS]
 
 Options:
       --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who is helpful."]
+          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability."]
       --query <QUERY>
-          System prompt [env: QUERY=] [default: "analyze this mpegts nal dump and packet information, give a short summary of the stats like an mpegts\n        analyzer would do. The nal dump is as follows:\n\n    --- Packet Offset 0 Packet Length 88 ---\n\n    0000: 00 00 01 01 9f 70 74 41 9f 00 02 a6 82 1d 76 1b\n    0010: 69 92 36 f1 8c fb a9 87 5a 48 68 5d 5d bd 58 75\n    0020: 6d fd f5 32 d6 9d dc 88 b1 97 d0 40 79 39 f0 ea\n    0030: f0 b1 61 34 c4 2e d1 b1 ab f5 95 c5 b6 20 58 bb\n    0040: e8 95 f5 22 86 88 bc 09 7b 79 0e fe c1 81 14 85\n    0050: 9a 26 9f 58 d4 cc 1e 2e\n    ---"]
+          Query to generate completions for [env: QUERY=] [default: "analyze this mpegts nal dump and packet information,\n        give a chart showing the packet sections information decoded for nal packets and other stats like an mpegts\n        analyzer would do.\n\n        The video settings for this stream are:\n        - ffmpeg -f lavfi -i smptebars=size=1920x1080:rate=29.976 -f lavfi -i sine=frequency=1000:sample_rate=48000 -c:v libx264 -c:a aac -b:a 128k -ar 48000 -ac 2 -mpegts_pmt_start_pid 0x1000 -mpegts_start_pid 0x0100 -metadata service_provider=TestStream -metadata service_name=ColorBarsWithTone -nal-hrd cbr -maxrate 19M -minrate 19M -bufsize 19M -b:v 60M -muxrate 20M\n\n        The nal dump is as follows:\n\n        0000: 47 01 00 10 0d a9 6f 55 b2 e5 06 63 1f 95 7e 4c\n        0010: a9 78 ab b3 73 b5 11 0b 9d dd 40 8f 3f 9c 32 75\n        0020: 89 47 64 45 99 76 a9 a2 68 97 75 d8 05 42 e4 f8\n        0030: 95 6a 49 51 61 a8 09 9c bb 29 bb 71 b8 70 6d 21\n        0040: bd 43 8a 0f 05 e6 79 f9 bd d5 af 85 05 e1 ff 0d\n        0050: c5 ce 53 97 89 9a 7b 06 2b 74 f0 87 16 93 6d 9e\n        0060: 41 f0 cc 3b f5 6f 7c 14 9d 25 75 ab b7 c5 b8 9a\n        0070: cd 10 06 9a 30 48 49 66 6c cc 20 6f ab e5 22 6a\n        0080: d7 6a 96 25 03 c5 a6 bb 9d aa 9a 93 17 8d 44 c4\n        0090: 94 7f 02 e7 c0 6d dd b5 1a 66 d3 9d 08 4e 6e b8\n        00a0: 47 d6 a5 fd 1f ff c8 41 8a 90 e9 d0 3c 5c ef 8c\n        00b0: 9c 71 d6 e1 82 5a c0 da 74 dc c7 52\n\n        0000: 47 01 00 11 ac 00 1f 25 4c d5 bb 3c 0a 69 9c a3\n        0010: da e7 a9 07 37 2b e4 fb cb 1b e4 77 ca 23 8e d0\n        0020: 9b 8c ba 4c 1d a9 f2 d1 0e b7 7f f4 73 37 cf 7d\n        0030: 78 34 97 05 fd 80 14 fb 9a 1a 39 1a 3e 75 6d 7b\n        0040: be 0a ae 3b 86 3c 89 a0 63 e5 4b d7 8f 58 4c c6\n        0050: cb 17 13 e6 85 09 a9 69 e5 58 11 a4 a5 8b 18 cd\n        0060: 91 42 f0 c6 6c 2a 93 c0 9d f5 08 f4 1d 4b 89 26\n        0070: f2 aa d6 8b 40 a1 da 36 c5 da 88 29 4c 14 30 5f\n        0080: 91 4a 0b 0f 94 5e b2 29 de fd 99 ed e6 63 2d 98\n        0090: da 5c 72 32 fb ae 06 90 9d 4f 9f 28 ee 8f 3a 7b\n        00a0: 04 6a aa 54 8f e2 9b d0 f9 40 5c b4 a3 be 5a dd\n        00b0: b8 cc 9a 37 f7 50 76 29 12 0a 7d 50\n\n        0000: 47 01 00 12 eb 76 7c 60 92 c8 f5 2b 3e 17 e2 21\n        0010: 72 07 43 83 75 10 21 bb 11 d8 31 1c 1c 80 a6 7c\n        0020: c2 27 be 43 72 9c 33 55 48 61 0d 04 9e fd 56 7b\n        0030: c1 9b d7 5d 94 39 ce 81 5e 29 41 31 15 84 1d a3\n        0040: f7 79 1e 27 5a f9 d1 dc 71 2c a3 e0 e7 d3 be a0\n        0050: 94 38 ea 71 87 fc 0f 75 f6 ef 03 5f 42 15 8c 8f\n        0060: ea 75 e8 c1 55 fd ee 46 40 aa a9 db 2a dd 81 5c\n        0070: 4d 74 97 f1 49 c0 af e9 0c 6b 17 94 81 a2 c5 00\n        0080: c4 f1 29 62 52 54 2d c0 9a 6f f9 ac fe aa 8b 44\n        0090: b0 40 65 cc f3 1c 2f 11 81 14 d7 fd af 89 6d 1a\n        00a0: f2 f5 6a dc 08 29 41 13 38 c9 86 1f c3 49 b1 5c\n        00b0: 76 b2 53 39 5d d2 89 92 d9 bf b7 44\n\n        0000: 47 01 00 13 a3 ed 45 59 74 9a f1 d1 66 31 4e 1a\n        0010: f5 94 67 cc 11 1f e6 cc e7 e0 d7 91 54 ab c0 71\n        0020: aa 2e 16 19 32 1b ca 16 50 4d 88 06 47 7d 43 a0\n        0030: df 70 a7 ff 6e b6 88 c3 ac 72 0a 05 98 90 0d 66\n        0040: cf 6b 61 95 ec 9f b3 06 3e a6 e5 99 ba c5 b8 a3\n        0050: 54 86 dc c5 48 d6 eb 07 84 58 93 07 59 11 06 5d\n        0060: d0 12 4d 11 f5 8a ed 5d 8b 89 72 e5 16 c3 51 3d\n        0070: 24 68 2c 85 dd ff ff ec d0 3b 94 fc e6 6a 40 e3\n        0080: 85 fd ac 42 5f 6d 53 2a 07 24 7d 49 dc 31 33 7f\n        0090: b0 e1 23 37 27 e5 d4 76 e3 b8 01 2e ff fd 97 90\n        00a0: 42 31 e6 2b b8 57 f5 da cd 3a d3 3e fb b2 1b 82\n        00b0: 78 42 43 8f 2c 7c 82 8d 51 10 b6 8d\n\n        "]
       --temperature <TEMPERATURE>
-          Temperature [env: TEMPERATURE=] [default: 0.8]
+          Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
           Top P [env: TOP_P=] [default: 1.0]
       --presence-penalty <PRESENCE_PENALTY>
-          Presence Penalty [env: PRESENCE_PENALTY=] [default: 0.0]
+          Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: PRESENCE_PENALTY=] [default: 0.0]
       --frequency-penalty <FREQUENCY_PENALTY>
-          Frequency Penalty [env: FREQUENCY_PENALTY=] [default: 0.0]
+          Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: FREQUENCY_PENALTY=] [default: 0.0]
       --max-tokens <MAX_TOKENS>
-          Max Tokens [env: MAX_TOKENS=] [default: 800]
-      --stream
-          Stream [env: STREAM=]
+          Max Tokens, 1 to 4096. Default is 800. [env: MAX_TOKENS=] [default: 800]
       --model <MODEL>
-          Model [env: MODEL=] [default: gpt-3.5-turbo]
+          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-0125-preview]
       --openai-key <OPENAI_KEY>
-          OpenAI API Key [env: OPENAI_API_KEY=FAKE_KEY] [default: FAKE_KEY]
+          OpenAI API Key, set in .env, do not use on cmdline unless you want to expose your key. [env: OPENAI_API_KEY=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] [default: ADD_YOUR_KEY_TO_ENV]
       --llm-host <LLM_HOST>
-          LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://earth.groovylife.ai:8081]
+          LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://127.0.0.1:8080]
       --llm-path <LLM_PATH>
-          LLM Url path [env: LLM_PATH=] [default: /v1/chat/completions]
+          LLM Url path for completions, default is /v1/chat/completions. [env: LLM_PATH=] [default: /v1/chat/completions]
+      --no-stream
+          Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
+      --use-openai
+          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
   -h, --help
           Print help
   -V, --version
           Print version
 ```
-
-#### Options:
-- `--system-prompt` to set the system's initial prompt, defaulting to "You are an assistant who is helpful."
-- `--query` for the prompt you wish to send to the OpenAI API.
-- `--temperature` for controlling randomness in the response, defaulting to 0.8.
-- `--top_p` for response diversity control, defaulting to 1.0.
-- `--presence_penalty` and `--frequency_penalty` for context and repetition control, both defaulting to 0.0.
-- `--max_tokens` to set the maximum number of tokens to generate, defaulting to 800.
-- `--stream` for streaming the response, defaulted to true.
-- `--model` to choose the model, defaulting to "gpt-3.5-turbo".
 
 ### Example (default payload query is an mpegts nal packet to parse and analyze)
 
@@ -145,42 +131,83 @@ $ cargo run
 Response status: 200 OK
 ---
 
- Based on the given video settings and NAL dump, we can analyze the MPEG-TS stream as follows:
+Analyzing the provided MPEG-TS NAL (Network Abstraction Layer) dumps requires breaking down each dump into their respective sections, identifying packet headers, payload, and interpreting the key elements like PID (Packet Identifier), continuity counters, and payload unit start indicators, among others. Given the complexity and detail involved in real-time MPEG-TS packet analysis, below is a simplified breakdown based on the provided NAL dumps. This representation will closely resemble what you might see on a professional MPEG-TS analyzer's output.
 
-1. Packet Section Information for NAL Packets:
+### MPEG-TS Packet Analysis Overview
 
-0000: 47 01 00 10 (start of an access unit)
-0010: 0d a9 6f 55 b2 e5 06 63 1f 95 7e 4c (NAL unit - Start of sequence)
-0020: a9 78 ab b3 73 b5 11 0b 9d dd 40 8f 3f 9c 32 75 (NAL unit - Sequence parameter set)
-0030: 89 47 64 45 99 76 a9 a2 68 97 75 d8 05 42 e4 f8 (NAL unit - Picture parameter set)
+#### General Stream Settings
+- **Video Codec**: H.264 (libx264)
+- **Audio Codec**: AAC
+- **Resolution**: 1920x1080
+- **Frame Rate**: 29.976fps
+- **Audio Sample Rate**: 48kHz
+- **Audio Bitrate**: 128kbps
+- **TS PMT PID**: 0x1000
+- **TS Start PID**: 0x0100
+- **Bitrate Settings**: CBR (Constant Bit Rate) 19Mbps
+- **Service Provider**: TestStream
+- **Service Name**: ColorBarsWithTone
 
-The first four bytes of each NAL unit are the same: `47 01 00`, which is an MPEG-TS PES packet header. The next byte represents the NAL unit type:
+#### Packet Breakdown (Simplified for the first packet of each dump)
 
-- `10` corresponds to the start of an access unit (SEI)
-- `0b` corresponds to sequence parameter set (SPS)
-- `0c` corresponds to picture parameter set (PPS)
+1. **Packet 1**
+   - **Header**: 0x47010010
+     - Sync Byte: 0x47
+     - Payload Unit Start Indicator: 1
+     - PID: 0x0100
+     - Continuity Counter: 0
+   - **Payload Type**: Video
+   - **Content**: Beginning of a video frame (NAL unit)
 
-2. Other Stats like MPEG-TS Analyzer would do:
+2. **Packet 2**
+   - **Header**: 0x47010011
+     - Sync Byte: 0x47
+     - Payload Unit Start Indicator: 1
+     - PID: 0x0101
+     - Continuity Counter: 0
+   - **Payload Type**: Audio
+   - **Content**: Beginning of an audio frame
 
-- Video Codec: H.264/AVC
-- Frame Rate: 29.976 fps (from the lavfi smptebars source filter)
-- Bitrate: 60 Mbps (`-b:v 60M`)
-- Mux Rate: 20 Mbps (`-muxrate 20M`)
-- Audio Codec: AAC (`-c:a aac`)
-- Audio Bitrate: 128 kbps (`-b:a 128k`)
-- Sample Rate: 48000 Hz (from the lavfi sine source filter)
-- Channels: Stereo (`-ac 2`)
-- PID for Video: 0x1000 (from `-mpegts_start_pid 0x0100`)
-- PID for Audio: 0x1001 (derived from the video PID)
-- Program Map Table start PID: 0x1000 (from `-mpegts_pmt_start_pid 0x1000`)
-- MPEG Transport Stream mode enabled (derived from other options provided)
+3. **Packet 3**
+   - **Header**: 0x47010012
+     - Sync Byte: 0x47
+     - Payload Unit Start Indicator: 1
+     - PID: 0x0102
+     - Continuity Counter: 0
+   - **Payload Type**: Undefined (could be metadata or additional stream data)
+   - **Content**: Data packet
 
-Note: The provided NAL dump contains four different sequences, each with its respective sequence parameter set (SPS) and picture parameter set (PPS). In a real-world MPEG-TS stream, these would be interleaved within the PES packets.
+4. **Packet 4**
+   - **Header**: 0x47010013
+     - Sync Byte: 0x47
+     - Payload Unit Start Indicator: 1
+     - PID: 0x0103
+     - Continuity Counter: 0
+   - **Payload Type**: Undefined (could be metadata or additional stream data)
+   - **Content**: Data packet
+
+### Key Stats (Aggregated for simplicity)
+
+- **Total Packets Analyzed**: 4 (Note: This is for illustration; a full analysis would involve all packets in the dump)
+- **Video Packets**: Approx. 25% (Based on PID and content type)
+- **Audio Packets**: Approx. 25%
+- **Data/Undefined Packets**: Approx. 50%
+- **Error Packets**: 0%
+- **PAT/PMT Analysis**: Not directly provided in the dump, assumed based on settings
+- **Continuity Errors**: None detected in the provided samples
+- **PID Usage**:
+  - 0x0100: Video
+  - 0x0101: Audio
+  - 0x0102, 0x0103: Data/Undefined
+
+### Packet Flow Visualization
+
+This would typically involve a time-based graph showing packet intervals, PID distribution, bitrate fluctuations, and possibly packet losses or errors, which is not feasible to accurately depict in text form here. A professional MPEG-TS analyzer would provide a graphical representation of these elements, offering insights
 --
-Index 0 ID chatcmpl-sPW7MhQL3SNf6jB1ePdmVgLlx7EBQOiU
-Object chat.completion.chunk by Model gpt-3.5-turbo
-Created on 2024-02-04 15:52:02 Finish reason: stop
-Tokens 677 Bytes 1619
+Index 0 ID chatcmpl-8olUak4ptUT1A3icM4w7flHRiC5zN
+Object chat.completion.chunk by Model gpt-4-0125-preview User unknown
+Created on 2024-02-05 05:07:32 Finish reason: length
+Tokens 800 Bytes 2964
 --
 ```
 

@@ -22,6 +22,7 @@ use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 use std::io::Write;
+use std::time::Instant;
 use tokio; // Import traits and modules required for IO operations
 
 /// RScap Probe Configuration
@@ -111,49 +112,104 @@ struct Args {
         00a0: 42 31 e6 2b b8 57 f5 da cd 3a d3 3e fb b2 1b 82
         00b0: 78 42 43 8f 2c 7c 82 8d 51 10 b6 8d
 
-        "
+        ",
+        help = "Query to generate completions for"
     )]
     query: String,
 
     /// Temperature
-    #[clap(long, env = "TEMPERATURE", default_value = "0.8")]
+    #[clap(
+        long,
+        env = "TEMPERATURE",
+        default_value = "0.8",
+        help = "Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8."
+    )]
     temperature: f32,
 
     /// Top P
-    #[clap(long, env = "TOP_P", default_value = "1.0")]
+    #[clap(long, env = "TOP_P", default_value = "1.0", help = "Top P")]
     top_p: f32,
 
     /// Presence Penalty
-    #[clap(long, env = "PRESENCE_PENALTY", default_value = "0.0")]
+    #[clap(
+        long,
+        env = "PRESENCE_PENALTY",
+        default_value = "0.0",
+        help = "Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0."
+    )]
     presence_penalty: f32,
 
     /// Frequency Penalty
-    #[clap(long, env = "FREQUENCY_PENALTY", default_value = "0.0")]
+    #[clap(
+        long,
+        env = "FREQUENCY_PENALTY",
+        default_value = "0.0",
+        help = "Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0."
+    )]
     frequency_penalty: f32,
 
     /// Max Tokens
-    #[clap(long, env = "MAX_TOKENS", default_value = "800")]
+    #[clap(
+        long,
+        env = "MAX_TOKENS",
+        default_value = "800",
+        help = "Max Tokens, 1 to 4096. Default is 800."
+    )]
     max_tokens: i32,
 
     /// Model
-    #[clap(long, env = "MODEL", default_value = "gpt-4-0125-preview")]
+    #[clap(
+        long,
+        env = "MODEL",
+        default_value = "gpt-4-0125-preview",
+        help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
+    )]
     model: String,
 
     /// OpenAI API Key
-    #[clap(long, env = "OPENAI_API_KEY", default_value = "ADD_YOUR_KEY_TO_ENV")]
+    #[clap(
+        long,
+        env = "OPENAI_API_KEY",
+        default_value = "ADD_YOUR_KEY_TO_ENV",
+        help = "OpenAI API Key, set in .env, do not use on cmdline unless you want to expose your key."
+    )]
     openai_key: String,
 
     /// LLM Host url with protocol, host, port,  no path
-    #[clap(long, env = "LLM_HOST", default_value = "https://api.openai.com")]
+    #[clap(
+        long,
+        env = "LLM_HOST",
+        default_value = "http://127.0.0.1:8080",
+        help = "LLM Host url with protocol, host, port,  no path"
+    )]
     llm_host: String,
 
     /// LLM Url path
-    #[clap(long, env = "LLM_PATH", default_value = "/v1/chat/completions")]
+    #[clap(
+        long,
+        env = "LLM_PATH",
+        default_value = "/v1/chat/completions",
+        help = "LLM Url path for completions, default is /v1/chat/completions."
+    )]
     llm_path: String,
 
     /// Don't stream output
-    #[clap(long, env = "NO_STREAM", default_value = "false")]
+    #[clap(
+        long,
+        env = "NO_STREAM",
+        default_value = "false",
+        help = "Don't stream output, wait for all completions to be generated before returning. Default is false."
+    )]
     no_stream: bool,
+
+    /// Safety feature for using openai api and confirming you understand the risks
+    #[clap(
+        long,
+        env = "USE_OPENAI",
+        default_value = "false",
+        help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false."
+    )]
+    use_openai: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -212,6 +268,8 @@ async fn stream_completion(
     llm_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
+
+    let start_time = Instant::now();
     let response_result = client
         .post(format!("{}{}", llm_host, llm_path))
         .header("Authorization", format!("Bearer {}", openai_key))
@@ -395,6 +453,15 @@ async fn stream_completion(
     }
     println!();
 
+    let end_time = Instant::now();
+    let duration = end_time.duration_since(start_time);
+    let pretty_time = format!("{:?}", duration);
+    println!(
+        "LLM took {} tokens per second and a total of {} seconds to complete.",
+        token_count / duration.as_secs(),
+        pretty_time
+    );
+
     Ok(())
 }
 
@@ -427,8 +494,13 @@ async fn main() {
     let frequency_penalty = args.frequency_penalty;
     let max_tokens = args.max_tokens;
     let model = args.model;
-    let llm_host = args.llm_host;
+    let mut llm_host = args.llm_host;
     let llm_path = args.llm_path;
+
+    if args.use_openai {
+        // set the llm_host to the openai api
+        llm_host = "https://api.openai.com".to_string();
+    }
 
     // Stream API Completion
     let stream = !args.no_stream;
