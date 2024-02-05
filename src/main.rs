@@ -278,13 +278,18 @@ async fn stream_completion(
                 continue;
             }
             let mut offset = 0;
-            // check if accumulated_response starts with 'data: ' and if so change offset to 6
-            if accumulated_response[0..6] == [100, 97, 116, 97, 58, 32] {
-                offset = 6;
+            // confirm we have a '{' at the start or else walk through and find offset of first '{' character
+            if accumulated_response[offset] != 123 {
+                for (i, byte) in accumulated_response.iter().enumerate() {
+                    if *byte == 123 {
+                        offset = i;
+                        break;
+                    }
+                }
             }
             let removed_data = accumulated_response[offset..].to_vec();
             let response_json = String::from_utf8(removed_data)?;
-            debug!("Chunk #{} response: {}", loop_count, response_json);
+            debug!("Chunk #{} response: '{}'", loop_count, response_json);
 
             match serde_json::from_str::<OpenAIResponse>(&response_json) {
                 Ok(res) => match res.choices.get(0) {
@@ -329,7 +334,7 @@ async fn stream_completion(
                 Err(e) => {
                     // Handle the parse error here
                     error!("Failed to parse response: {}", e);
-                    error!("Response that failed to parse: {}", response_json);
+                    error!("Response that failed to parse: '{}'", response_json);
                 }
             }
         }
