@@ -17,7 +17,7 @@
 
 use chrono::NaiveDateTime;
 use clap::Parser;
-use log::{debug, error};
+use log::{debug, error, info};
 use reqwest::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
@@ -186,6 +186,8 @@ struct OpenAIResponse {
 #[derive(Deserialize)]
 struct Choice {
     finish_reason: Option<String>,
+    logprobs: Option<bool>,
+    system_fingerprint: Option<String>,
     index: i32,
     delta: Delta, // Use Option to handle cases where it might be null or missing
 }
@@ -227,13 +229,27 @@ async fn stream_completion(
     let mut response = response_result.unwrap(); // this is safe due to the check above
     let mut token_count = 0;
     let mut byte_count = 0;
+    let mut loop_count = 0;
 
     println!("\nResponse status: {}\n---\n", response.status());
     debug!("Headers: {:#?}\n---\n", response.headers());
     if !open_ai_request.stream {
         println!("Body: {}\n---\n", response.text().await?);
     } else {
+        // check if we got a response with chunks
+        if response.chunk().await.is_err() {
+            error!("Failed to get response chunks");
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to get response chunks",
+            )));
+        }
+        info!("Response chunks:");
+
+        // loop through the chunks
         while let Ok(Some(chunk)) = response.chunk().await {
+            loop_count += 1;
+            debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
             let mut accumulated_response = Vec::new();
             for byte in &chunk {
                 accumulated_response.push(*byte);
@@ -242,9 +258,13 @@ async fn stream_completion(
             data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0}],"created":1707049435,"id":"chatcmpl-VAvCRGJHvO9SZYJ4ycqgG99tNshaWbgC","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
             data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1707049435,"id":"chatcmpl-mB6KoI6xFxkiDtVovFtPrBh8BD2sgC2G","model":"gpt-3.5-turbo","object":"chat.completion.chunk"}
             */
+            if accumulated_response.len() < 6 {
+                error!("Invalid response chunk {:?}", accumulated_response);
+                continue;
+            }
             let removed_data = accumulated_response[6..].to_vec();
             let response_json = String::from_utf8(removed_data)?;
-            debug!("Final response: {}", response_json);
+            debug!("Chunk #{} response: {}", loop_count, response_json);
 
             match serde_json::from_str::<OpenAIResponse>(&response_json) {
                 Ok(res) => match res.choices.get(0) {
@@ -292,6 +312,8 @@ async fn stream_completion(
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok(); // read .env file
+                           // Initialize logging
+    let _ = env_logger::try_init();
 
     let args = Args::parse();
 

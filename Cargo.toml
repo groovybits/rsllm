@@ -15,3 +15,4 @@ chrono = "0.4.33"
 log = "0.4.20"
 clap = { version = "4.4.11", features = ["derive", "env"] }
 dotenv = "0.15.0"
+env_logger = "0.9"
