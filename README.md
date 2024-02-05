@@ -214,7 +214,8 @@ Tokens 800 Bytes 2964
 
 ## TODO
 
-- use pcap input and use LLM to analyze the network and provide insights.
+- use pcap input and use LLM to analyze the network and provide insights, monitor, report, and alert.
+- analyze system stats to keep track of resources used and throttle our usage, monitor, report, and alert.
 - preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
 - use chroma db to do RAG with documents for augmenting the prompt with relevant information.
 - allow daemon mode to run and listent for requests via zmq input and pass to output.
@@ -232,6 +233,8 @@ Tokens 800 Bytes 2964
 - dynamic code generation of python for new tasks on the fly like video processing? risks?
 - iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
 - use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
+- MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
+- Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
 
 ## License
 
