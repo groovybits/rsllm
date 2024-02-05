@@ -87,8 +87,8 @@ struct Args {
     #[clap(
         long,
         env = "MAX_TOKENS",
-        default_value = "800",
-        help = "Max Tokens, 1 to 4096. Default is 800."
+        default_value = "2000",
+        help = "Max Tokens, 1 to 4096. Default is 2000."
     )]
     max_tokens: i32,
 
