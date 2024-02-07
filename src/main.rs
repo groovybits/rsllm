@@ -20,8 +20,10 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
+use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
+use serde_json::json;
 use std::env;
 use std::io::Write;
 use std::time::Instant;
@@ -146,9 +148,27 @@ struct Args {
         help = "debug inline on output (can mess up the output) as a bool. Default is false."
     )]
     debug_inline: bool,
+
+    // Monitor system stats
+    #[clap(
+        long,
+        env = "AI_OS_STATS",
+        default_value = "false",
+        help = "Monitor system stats, default is false."
+    )]
+    ai_os_stats: bool,
+
+    // run as a daemon monitoring the specified stats
+    #[clap(
+        long,
+        env = "DAEMON",
+        default_value = "false",
+        help = "run as a daemon monitoring the specified stats, default is false."
+    )]
+    daemon: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Message {
     role: String,
     content: String,
@@ -157,7 +177,7 @@ struct Message {
 #[derive(Serialize)]
 struct OpenAIRequest<'a> {
     model: &'a str,
-    messages: &'a [Message],
+    messages: Vec<Message>,
     max_tokens: &'a i32,        // add this field to the request struct
     temperature: &'a f32,       // add this field to the request struct
     top_p: &'a f32,             // add this field to the request struct
@@ -203,8 +223,10 @@ async fn stream_completion(
     llm_host: &str,
     llm_path: &str,
     debug_inline: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
+
+    let mut response_messages = Vec::new(); // Collect messages here
 
     let start_time = Instant::now();
     let mut response = client
@@ -377,6 +399,9 @@ async fn stream_completion(
                                 if let Some(content) = &choice.delta.content {
                                     token_count += 1;
                                     byte_count += content.len();
+                                    etx.send(format!("{}", content))
+                                        .await
+                                        .expect("Failed to send content");
                                     print!("{}", content);
                                     // flush stdout
                                     std::io::stdout().flush().unwrap();
@@ -392,7 +417,7 @@ async fn stream_completion(
                                 error!("\nResponse that failed to parse: '{}'\n", response_json);
                             } else {
                                 // push to etx channel
-                                etx.send(format!("{} - {}", e, response_json))
+                                etx.send(format!("ERROR: {} - {}", e, response_json))
                                     .await
                                     .expect("Failed to send error");
                                 print!("*X*");
@@ -404,10 +429,17 @@ async fn stream_completion(
         });
 
         // Spawn a separate task to collect errors concurrently
+        let answer = String::new();
+        let mut answer_clone = answer.clone();
         let error_collector = tokio::spawn(async move {
             let mut errors = Vec::new();
             while let Some(error_message) = erx.recv().await {
-                errors.push(error_message);
+                // check if message starts with "ERROR:" if not add it onto the answer string
+                if error_message.starts_with("ERROR:") {
+                    errors.push(error_message);
+                } else {
+                    answer_clone += &error_message;
+                }
             }
             errors // Return collected errors from the task
         });
@@ -416,6 +448,11 @@ async fn stream_completion(
         while let Some(chunk) = response.chunk().await? {
             tx.send(chunk).await.expect("Failed to send chunk");
         }
+
+        response_messages.push(Message {
+            role: "assistant".to_string(),
+            content: answer,
+        });
 
         // Close the channel by dropping tx
         drop(tx);
@@ -435,7 +472,8 @@ async fn stream_completion(
         }
     }
 
-    Ok(())
+    // After processing all chunks/responses
+    Ok(response_messages) // Return the collected messages
 }
 
 #[tokio::main]
@@ -456,11 +494,6 @@ async fn main() {
         role: "system".to_string(),
         content: system_prompt.to_string(),
     };
-    let user_message = Message {
-        role: "user".to_string(),
-        content: query.to_string(),
-    };
-    let messages = vec![system_message, user_message];
 
     // add these values to the input for completions endpoint
     let temperature = args.temperature;
@@ -472,33 +505,78 @@ async fn main() {
     let mut llm_host = args.llm_host;
     let llm_path = args.llm_path;
     let debug_inline = args.debug_inline;
+    let ai_os_stats = args.ai_os_stats;
 
     if args.use_openai {
         // set the llm_host to the openai api
         llm_host = "https://api.openai.com".to_string();
     }
 
-    // Stream API Completion
-    let stream = !args.no_stream;
-    let open_ai_request = OpenAIRequest {
-        model: &model,
-        max_tokens: &max_tokens, // add this field to the request struct
-        messages: &messages,
-        temperature: &temperature, // add this field to the request struct
-        top_p: &top_p,             // add this field to the request struct
-        presence_penalty: &presence_penalty, // add this field to the request struct
-        frequency_penalty: &frequency_penalty, // add this field to the request struct
-        stream: &stream,
-    };
+    // Initialize messages with system_message outside the loop
+    let mut messages = vec![system_message];
 
-    // Directly await the future; no need for an explicit runtime block
-    stream_completion(
-        open_ai_request,
-        &openai_key,
-        &llm_host,
-        &llm_path,
-        debug_inline,
-    )
-    .await
-    .unwrap();
+    loop {
+        // OS and Network stats message
+        let system_stats_json = if ai_os_stats {
+            get_stats_as_json(StatsType::System).await
+        } else {
+            // Default input message
+            json!({})
+        };
+
+        // Add the system stats to the messages
+        if ai_os_stats {
+            let system_stats_message = Message {
+                role: "user".to_string(),
+                content: format!("{}: {}", query, system_stats_json.to_string()),
+            };
+            messages.push(system_stats_message.clone());
+        } else {
+            let user_message = Message {
+                role: "user".to_string(),
+                content: query.to_string(),
+            };
+            messages.push(user_message.clone());
+        }
+
+        // Stream API Completion
+        let stream = !args.no_stream;
+        let open_ai_request = OpenAIRequest {
+            model: &model,
+            max_tokens: &max_tokens, // add this field to the request struct
+            messages: messages.clone(),
+            temperature: &temperature, // add this field to the request struct
+            top_p: &top_p,             // add this field to the request struct
+            presence_penalty: &presence_penalty, // add this field to the request struct
+            frequency_penalty: &frequency_penalty, // add this field to the request struct
+            stream: &stream,
+        };
+
+        // Directly await the future; no need for an explicit runtime block
+        let answers = stream_completion(
+            open_ai_request,
+            &openai_key,
+            &llm_host,
+            &llm_path,
+            debug_inline,
+        )
+        .await
+        .unwrap();
+
+        // for each answer in the response
+        for answer in answers {
+            let assistant_message = Message {
+                role: "assistant".to_string(),
+                content: answer.content,
+            };
+
+            // push the message to the open_ai_request
+            messages.push(assistant_message);
+        }
+
+        // break the loop if we are not running as a daemon
+        if !args.daemon {
+            break;
+        }
+    }
 }
