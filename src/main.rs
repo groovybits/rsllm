@@ -15,19 +15,23 @@
  *
 */
 
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::{get_stats_as_json, StatsType};
+use serde::ser::Error;
 use serde_derive::{Deserialize, Serialize};
-use serde_json;
-use serde_json::json;
+use serde_json::{self, json};
 use std::env;
+use std::error::Error as StdError;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self};
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
