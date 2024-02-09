@@ -28,9 +28,9 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
 
 ## Features
 
-- **LLM Client with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
-- **LLM Analysis of OS System Stats.
-- **LLM Analysis of Network Packet Capture (MpegTS support currently).
+- **LLM Client**: with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
+- **LLM Analysis of OS**: System Stats.
+- **LLM Analysis of Network**: Packet Capture (MpegTS support currently).
 - **CLI Support**: Uses the clap crate for an easy command-line interface.
 - **Async Requests**: Built with tokio for efficient non-blocking I/O operations.
 - **Configurable**: Supports environment variables and command-line options for custom requests.
