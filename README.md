@@ -1,6 +1,6 @@
-# rsllm - Rust LLM Network/System Analyzer providing Packet/Stats Analysis with AI
+# Rust LLM - AI System/Network/Stream Analyzer
 
-Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values.
+Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. It is designed to be used with the llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
 
 A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
 
