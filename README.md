@@ -95,9 +95,9 @@ Usage: rsllm [OPTIONS]
 
 Options:
       --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability."]
+          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability.\n        When coding product complete examples of production grade fully ready to run code."]
       --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "Explain the mpegts nals and show a chart for each type with the explanations."]
+          Query to generate completions for [env: QUERY=] [default: "Explain each MpegTS NAL type in a chart format."]
       --temperature <TEMPERATURE>
           Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
@@ -107,7 +107,7 @@ Options:
       --frequency-penalty <FREQUENCY_PENALTY>
           Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: FREQUENCY_PENALTY=] [default: 0.0]
       --max-tokens <MAX_TOKENS>
-          Max Tokens, 1 to 4096. Default is 800. [env: MAX_TOKENS=] [default: 800]
+          Max Tokens, 1 to 4096. Default is 2000. [env: MAX_TOKENS=] [default: 2000]
       --model <MODEL>
           OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-0125-preview]
       --llm-host <LLM_HOST>
@@ -117,7 +117,13 @@ Options:
       --no-stream
           Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
       --use-openai
-          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY in .env, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
+          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
+      --debug-inline
+          debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
+      --ai-os-stats
+          Monitor system stats, default is false. [env: AI_OS_STATS=]
+      --daemon
+          run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
   -h, --help
           Print help
   -V, --version
