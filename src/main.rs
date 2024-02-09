@@ -523,9 +523,9 @@ async fn main() {
 
     let mut network_capture_config = NetworkCapture {
         running: Arc::new(AtomicBool::new(true)),
-        source_ip: Arc::new("192.168.50.1".to_string()),
-        source_protocol: Arc::new("UDP".to_string()),
-        source_device: Arc::new("eth0".to_string()),
+        source_ip: Arc::new("224.0.0.200".to_string()),
+        source_protocol: Arc::new("udp".to_string()),
+        source_device: Arc::new("en0".to_string()),
         source_port: 10000,
         use_wireless: true,
         promiscuous: false,
@@ -550,7 +550,9 @@ async fn main() {
 
     // Initialize the network capture if ai_network_stats is true
     if ai_network_stats {
+        println!("Starting network capture");
         network_capture(&mut network_capture_config);
+        println!("Network capture started");
     }
 
     loop {
@@ -579,10 +581,18 @@ async fn main() {
 
         if ai_network_stats {
             if let Some(prx) = network_capture_config.prx.as_ref() {
+                println!("Capturing network packets...");
+                let mut count = 0;
                 while let Ok(packet) = prx.recv() {
+                    count += 1;
                     // Process the packet here
                     println!("Received packet with size: {} bytes", packet.len());
+                    if count > 10 {
+                        break;
+                    }
                 }
+            } else {
+                println!("Network capture not initialized");
             }
         }
 
