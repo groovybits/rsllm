@@ -13,6 +13,7 @@ use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
+use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 // Define your custom PacketCodec
@@ -249,7 +250,7 @@ fn init_pcap(
     Ok((cap, socket))
 }
 
-struct NetworkCapture {
+pub struct NetworkCapture {
     running: Arc<AtomicBool>,
     source_ip: Arc<String>,
     source_protocol: Arc<String>,
@@ -261,20 +262,18 @@ struct NetworkCapture {
     read_size: i32,
     immediate_mode: bool,
     buffer_size: i64,
-    ptx: mpsc::Sender<Arc<Vec<u8>>>,
+    prx: Option<mpsc::Receiver<Arc<Vec<u8>>>>,
     dpdk: bool,
     pcap_stats: bool,
     debug_on: bool,
+    capture_task: Option<JoinHandle<()>>,
 }
 
-fn network_capture(network_capture: NetworkCapture) {
-    let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>();
+pub fn network_capture(mut network_capture: NetworkCapture) {
+    let (ptx, prx) = mpsc::channel::<Arc<Vec<u8>>>();
 
     let running = Arc::new(AtomicBool::new(true));
     let running_capture = running.clone();
-    let running_decoder = running.clone();
-    let running_demuxer = running.clone();
-    let running_zmq = running.clone();
 
     let use_wireless = network_capture.use_wireless;
     let promiscuous = network_capture.promiscuous;
@@ -425,4 +424,9 @@ fn network_capture(network_capture: NetworkCapture) {
             println!("Interface Dropped: {}", stats.if_dropped);
         })
     };
+
+    network_capture.capture_task = Some(capture_task);
+    network_capture.prx = Some(prx);
+    // store Arc running for use by the caller to stop the capture, clone it
+    network_capture.running = running.clone();
 }
