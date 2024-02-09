@@ -66,7 +66,7 @@ impl StdError for ErrorWrapper {
     }
 }
 
-pub trait Packet: Send {
+trait Packet: Send {
     fn data(&self) -> &[u8];
 }
 
@@ -251,25 +251,25 @@ fn init_pcap(
 }
 
 pub struct NetworkCapture {
-    running: Arc<AtomicBool>,
-    source_ip: Arc<String>,
-    source_protocol: Arc<String>,
-    source_device: Arc<String>,
-    source_port: i32,
-    use_wireless: bool,
-    promiscuous: bool,
-    read_time_out: i32,
-    read_size: i32,
-    immediate_mode: bool,
-    buffer_size: i64,
-    prx: Option<mpsc::Receiver<Arc<Vec<u8>>>>,
-    dpdk: bool,
-    pcap_stats: bool,
-    debug_on: bool,
-    capture_task: Option<JoinHandle<()>>,
+    pub running: Arc<AtomicBool>,
+    pub source_ip: Arc<String>,
+    pub source_protocol: Arc<String>,
+    pub source_device: Arc<String>,
+    pub source_port: i32,
+    pub use_wireless: bool,
+    pub promiscuous: bool,
+    pub read_time_out: i32,
+    pub read_size: i32,
+    pub immediate_mode: bool,
+    pub buffer_size: i64,
+    pub prx: Option<mpsc::Receiver<Arc<Vec<u8>>>>,
+    pub dpdk: bool,
+    pub pcap_stats: bool,
+    pub debug_on: bool,
+    pub capture_task: Option<JoinHandle<()>>,
 }
 
-pub fn network_capture(mut network_capture: NetworkCapture) {
+pub fn network_capture(network_capture: &mut NetworkCapture) {
     let (ptx, prx) = mpsc::channel::<Arc<Vec<u8>>>();
 
     let running = Arc::new(AtomicBool::new(true));
