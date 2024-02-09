@@ -1,14 +1,29 @@
 [package]
 name = "rsllm"
-version = "0.1.0"
+description = "Rust AI based pcap for Analyzing Data like MpegTS and SMPTE2110 UDP/TCP Broadcast Feeds"
+keywords = ["ai", "broadcast", "mpegts", "capture", "pcap", "zeromq"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+license-file = "LICENSE"
+homepage = "https://github.com/groovybits/wiki"
+repository = "https://github.com/groovybits/rsllm"
+authors = ["Chris Kennedy"]
+version = "0.2.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+dpdk_enabled = ["capsule"]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
 [dependencies]
+capsule = { version = "0.1.5", optional = true }
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0.113", features = ["derive"] }
@@ -24,3 +39,8 @@ task = "0.0.1"
 bytes = "1.5.0"
 sysinfo = "0.23.9"
 once_cell = "1.5.2"
+pcap = { version = "1.1.0", features = ["all-features", "capture-stream"] }
+anyhow = "1.0.79"
+lazy_static = "1.4.0"
+rtp-rs = "0.6.0"
+ahash = "0.8.7"

@@ -1,5 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
+pub mod stream_data;
 
+pub mod network_capture;
 pub mod system_stats;
 pub use system_stats::{get_system_stats, SystemStats};
 

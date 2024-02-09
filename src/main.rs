@@ -20,14 +20,18 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
+use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
-use serde_json;
-use serde_json::json;
+use serde_json::{self, json};
 use std::env;
 use std::io::Write;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self};
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
@@ -166,6 +170,15 @@ struct Args {
         help = "run as a daemon monitoring the specified stats, default is false."
     )]
     daemon: bool,
+
+    // AI Network Stats
+    #[clap(
+        long,
+        env = "AI_NETWORK_STATS",
+        default_value = "false",
+        help = "Monitor network stats, default is false."
+    )]
+    ai_network_stats: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -506,6 +519,26 @@ async fn main() {
     let llm_path = args.llm_path;
     let debug_inline = args.debug_inline;
     let ai_os_stats = args.ai_os_stats;
+    let ai_network_stats = args.ai_network_stats;
+
+    let mut network_capture_config = NetworkCapture {
+        running: Arc::new(AtomicBool::new(true)),
+        source_ip: Arc::new("224.0.0.200".to_string()),
+        source_protocol: Arc::new("udp".to_string()),
+        source_device: Arc::new("en0".to_string()),
+        source_port: 10000,
+        use_wireless: true,
+        promiscuous: false,
+        read_time_out: 1000,
+        read_size: 188 * 7,
+        immediate_mode: false,
+        buffer_size: 1024 * 1024,
+        prx: None,
+        dpdk: false,
+        pcap_stats: true,
+        debug_on: false,
+        capture_task: None,
+    };
 
     if args.use_openai {
         // set the llm_host to the openai api
@@ -514,6 +547,13 @@ async fn main() {
 
     // Initialize messages with system_message outside the loop
     let mut messages = vec![system_message];
+
+    // Initialize the network capture if ai_network_stats is true
+    if ai_network_stats {
+        println!("Starting network capture");
+        network_capture(&mut network_capture_config);
+        println!("Network capture started");
+    }
 
     loop {
         // OS and Network stats message
@@ -537,6 +577,23 @@ async fn main() {
                 content: query.to_string(),
             };
             messages.push(user_message.clone());
+        }
+
+        if ai_network_stats {
+            if let Some(prx) = network_capture_config.prx.as_ref() {
+                println!("Capturing network packets...");
+                let mut count = 0;
+                while let Ok(packet) = prx.recv() {
+                    count += 1;
+                    // Process the packet here
+                    println!("Received packet with size: {} bytes", packet.len());
+                    if count > 10 {
+                        break;
+                    }
+                }
+            } else {
+                println!("Network capture not initialized");
+            }
         }
 
         // Stream API Completion
@@ -578,5 +635,12 @@ async fn main() {
         if !args.daemon {
             break;
         }
+    }
+
+    // Close the network capture if ai_network_stats is true
+    if ai_network_stats {
+        network_capture_config
+            .running
+            .store(false, Ordering::SeqCst);
     }
 }
