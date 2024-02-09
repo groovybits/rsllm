@@ -1,8 +1,8 @@
-# rsllm - LLM OpenAI API for chat completions in Rust
+# rsllm - Rust LLM Network/System Analyzer providing Packet/Stats Analysis with AI
 
-Simple rust program that can use an llm using the OpenAI specifications.
+Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values.
 
-A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically.
+A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
 
 I recommend The Dolphin mixtral model is based on Mixtral-8x7b. The base model has 32k context, Dolphin finetuned it with 16k. This Dolphin is really good at coding, They trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as they show in the examples on the main model site on Huggingface.
 
