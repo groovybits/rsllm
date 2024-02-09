@@ -20,6 +20,7 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
+use rsllm::network_capture::{network_capture, NetworkCapture, Packet};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{self, json};
