@@ -125,6 +125,8 @@ Options:
           debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
       --ai-os-stats
           Monitor system stats, default is false. [env: AI_OS_STATS=]
+      --ai-network-stats
+          Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
       --daemon
           run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
   -h, --help
