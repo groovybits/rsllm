@@ -51,7 +51,7 @@ struct Args {
     #[clap(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "You are a network analyzer interface like a textronix who can read hex dumps of mpegts packets and derive the information on the packet."
+        default_value = "you are able to say green or red depending on the mpegts stream health determined from packet analysis."
     )]
     system_prompt: String,
 
@@ -59,7 +59,7 @@ struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "Analyze this set of mpegts packets for anamolies. Report overall the packets types seen and count of each and total packet count + any other interesting information useful in reporting problems.",
+        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of mpegts packet streams.",
         help = "Query to generate completions for"
     )]
     query: String,
