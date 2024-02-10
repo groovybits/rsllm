@@ -21,6 +21,12 @@ use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::network_capture::{network_capture, NetworkCapture};
+use rsllm::stream_data::{
+    identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
+    update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
+};
+use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
+use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{self, json};
@@ -179,6 +185,70 @@ struct Args {
         help = "Monitor network stats, default is false."
     )]
     ai_network_stats: bool,
+
+    /// PCAP output capture stats mode
+    #[clap(long, env = "PCAP_STATS", default_value_t = false)]
+    pcap_stats: bool,
+
+    /// Sets the batch size
+    #[clap(long, env = "PCAP_BATCH_SIZE", default_value_t = 7)]
+    pcap_batch_size: usize,
+
+    /// Sets the payload offset
+    #[clap(long, env = "PAYLOAD_OFFSET", default_value_t = 42)]
+    payload_offset: usize,
+
+    /// Sets the packet size
+    #[clap(long, env = "PACKET_SIZE", default_value_t = 188)]
+    packet_size: usize,
+
+    /// Sets the pcap buffer size
+    #[clap(long, env = "BUFFER_SIZE", default_value_t = 1 * 1_358 * 1_000)]
+    buffer_size: i64,
+
+    /// Sets the read timeout
+    #[clap(long, env = "READ_TIME_OUT", default_value_t = 60_000)]
+    read_time_out: i32,
+
+    /// Sets the source device
+    #[clap(long, env = "SOURCE_DEVICE", default_value = "")]
+    source_device: String,
+
+    /// Sets the source IP
+    #[clap(long, env = "SOURCE_IP", default_value = "224.0.0.200")]
+    source_ip: String,
+
+    /// Sets the source protocol
+    #[clap(long, env = "SOURCE_PROTOCOL", default_value = "udp")]
+    source_protocol: String,
+
+    /// Sets the source port
+    #[clap(long, env = "SOURCE_PORT", default_value_t = 10_000)]
+    source_port: i32,
+
+    /// Sets if wireless is used
+    #[clap(long, env = "USE_WIRELESS", default_value_t = false)]
+    use_wireless: bool,
+
+    /// Use promiscuous mode
+    #[clap(long, env = "PROMISCUOUS", default_value_t = false)]
+    promiscuous: bool,
+
+    /// PCAP immediate mode
+    #[clap(long, env = "IMMEDIATE_MODE", default_value_t = false)]
+    immediate_mode: bool,
+
+    /// Hexdump
+    #[clap(long, env = "HEXDUMP", default_value_t = false)]
+    hexdump: bool,
+
+    /// Show the TR101290 p1, p2 and p3 errors if any
+    #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
+    show_tr101290: bool,
+
+    /// Decode Batch Size
+    #[clap(long, env = "DECODE_BATCH_SIZE", default_value_t = 28)]
+    decode_batch_size: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -520,30 +590,41 @@ async fn main() {
     let debug_inline = args.debug_inline;
     let ai_os_stats = args.ai_os_stats;
     let ai_network_stats = args.ai_network_stats;
-
-    let mut network_capture_config = NetworkCapture {
-        running: Arc::new(AtomicBool::new(true)),
-        source_ip: Arc::new("224.0.0.200".to_string()),
-        source_protocol: Arc::new("udp".to_string()),
-        source_device: Arc::new("en0".to_string()),
-        source_port: 10000,
-        use_wireless: true,
-        promiscuous: false,
-        read_time_out: 1000,
-        read_size: 188 * 7,
-        immediate_mode: false,
-        buffer_size: 1024 * 1024,
-        prx: None,
-        dpdk: false,
-        pcap_stats: true,
-        debug_on: false,
-        capture_task: None,
-    };
+    let pcap_channel_size = 10000;
 
     if args.use_openai {
         // set the llm_host to the openai api
         llm_host = "https://api.openai.com".to_string();
     }
+
+    // start time
+    let start_time = current_unix_timestamp_ms().unwrap_or(0);
+
+    // Perform TR 101 290 checks
+    let mut tr101290_errors = Tr101290Errors::new();
+    // calculate read size based on batch size and packet size
+    let read_size: i32 =
+        (args.packet_size as i32 * args.pcap_batch_size as i32) + args.payload_offset as i32; // pcap read size
+    let mut is_mpegts = true; // Default to true, update based on actual packet type
+
+    let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>(pcap_channel_size);
+    let mut network_capture_config = NetworkCapture {
+        running: Arc::new(AtomicBool::new(true)),
+        dpdk: false,
+        use_wireless: args.use_wireless,
+        promiscuous: args.promiscuous,
+        immediate_mode: args.immediate_mode,
+        source_protocol: Arc::new(args.source_protocol.to_string()),
+        source_device: Arc::new(args.source_device.to_string()),
+        source_ip: Arc::new(args.source_ip.to_string()),
+        source_port: args.source_port,
+        read_time_out: 60_000,
+        read_size,
+        buffer_size: args.buffer_size,
+        pcap_stats: args.pcap_stats,
+        debug_on: args.hexdump,
+        capture_task: None,
+    };
 
     // Initialize messages with system_message outside the loop
     let mut messages = vec![system_message];
@@ -551,9 +632,18 @@ async fn main() {
     // Initialize the network capture if ai_network_stats is true
     if ai_network_stats {
         println!("Starting network capture");
-        network_capture(&mut network_capture_config);
+        network_capture(&mut network_capture_config, ptx);
         println!("Network capture started");
     }
+
+    let mut decode_batch = Vec::new();
+    let mut video_pid: Option<u16> = Some(0xFFFF);
+    let mut video_codec: Option<Codec> = Some(Codec::NONE);
+    let mut current_video_frame = Vec::<StreamData>::new();
+    let mut pmt_info: PmtInfo = PmtInfo {
+        pid: 0xFFFF,
+        packet: Vec::new(),
+    };
 
     loop {
         // OS and Network stats message
@@ -564,36 +654,169 @@ async fn main() {
             json!({})
         };
 
+        if ai_network_stats {
+            println!("Capturing network packets...");
+            let mut count = 0;
+            while let Some(packet) = prx.recv().await {
+                println!("Received packet with size: {} bytes", packet.len());
+
+                // Check if chunk is MPEG-TS or SMPTE 2110
+                let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
+                if chunk_type != 1 {
+                    if chunk_type == 0 {
+                        hexdump(&packet, 0, packet.len());
+                        error!("Not MPEG-TS or SMPTE 2110");
+                    }
+                    is_mpegts = false;
+                }
+
+                // Process the packet here
+                let chunks = if is_mpegts {
+                    process_mpegts_packet(args.payload_offset, packet, args.packet_size, start_time)
+                } else {
+                    process_smpte2110_packet(
+                        args.payload_offset,
+                        packet,
+                        args.packet_size,
+                        start_time,
+                        false,
+                    )
+                };
+
+                // Process each chunk
+                for mut stream_data in chunks {
+                    // check for null packets of the pid 8191 0xFFF1 and skip them
+                    if stream_data.pid == 0xFFF1 {
+                        debug!("Skipping null packet");
+                        continue;
+                    }
+
+                    if args.hexdump {
+                        hexdump(
+                            &stream_data.packet,
+                            stream_data.packet_start,
+                            stream_data.packet_len,
+                        );
+                    }
+
+                    // Extract the necessary slice for PID extraction and parsing
+                    let packet_chunk = &stream_data.packet[stream_data.packet_start
+                        ..stream_data.packet_start + stream_data.packet_len];
+
+                    let mut pid: u16 = 0xFFFF;
+
+                    if is_mpegts {
+                        pid = stream_data.pid;
+                        // Handle PAT and PMT packets
+                        match pid {
+                            PAT_PID => {
+                                debug!("ProcessPacket: PAT packet detected with PID {}", pid);
+                                pmt_info = parse_and_store_pat(&packet_chunk);
+                                // Print TR 101 290 errors
+                                if args.show_tr101290 {
+                                    info!("STATUS::TR101290:ERRORS: {}", tr101290_errors);
+                                }
+                            }
+                            _ => {
+                                // Check if this is a PMT packet
+                                if pid == pmt_info.pid {
+                                    debug!("ProcessPacket: PMT packet detected with PID {}", pid);
+                                    // Update PID_MAP with new stream types
+                                    update_pid_map(&packet_chunk, &pmt_info.packet);
+                                    // Identify the video PID (if not already identified)
+                                    if let Some((new_pid, new_codec)) =
+                                        identify_video_pid(&packet_chunk)
+                                    {
+                                        if video_pid.map_or(true, |vp| vp != new_pid) {
+                                            video_pid = Some(new_pid);
+                                            info!(
+                                                "STATUS::VIDEO_PID:CHANGE: to {}/{} from {}/{}",
+                                                new_pid,
+                                                new_codec.clone(),
+                                                video_pid.unwrap(),
+                                                video_codec.unwrap()
+                                            );
+                                            video_codec = Some(new_codec.clone());
+                                            // Reset video frame as the video stream has changed
+                                            current_video_frame.clear();
+                                        } else if video_codec != Some(new_codec.clone()) {
+                                            info!(
+                                                "STATUS::VIDEO_CODEC:CHANGE: to {} from {}",
+                                                new_codec,
+                                                video_codec.unwrap()
+                                            );
+                                            video_codec = Some(new_codec);
+                                            // Reset video frame as the codec has changed
+                                            current_video_frame.clear();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Check for TR 101 290 errors
+                    process_packet(
+                        &mut stream_data,
+                        &mut tr101290_errors,
+                        is_mpegts,
+                        pmt_info.pid,
+                    );
+                    count += 1;
+
+                    decode_batch.push(stream_data);
+                }
+
+                if count > 10 {
+                    break;
+                }
+            }
+        }
+
         // Add the system stats to the messages
-        if ai_os_stats {
-            let system_stats_message = Message {
-                role: "user".to_string(),
-                content: format!("{}: {}", query, system_stats_json.to_string()),
-            };
-            messages.push(system_stats_message.clone());
-        } else {
+        if !ai_os_stats && !ai_network_stats {
             let user_message = Message {
                 role: "user".to_string(),
                 content: query.to_string(),
             };
             messages.push(user_message.clone());
-        }
+        } else if ai_network_stats {
+            // create nework packet dump message from collected stream_data in decode_batch
+            let mut network_packet_dump: String = String::new();
 
-        if ai_network_stats {
-            if let Some(prx) = network_capture_config.prx.as_ref() {
-                println!("Capturing network packets...");
-                let mut count = 0;
-                while let Ok(packet) = prx.recv() {
-                    count += 1;
-                    // Process the packet here
-                    println!("Received packet with size: {} bytes", packet.len());
-                    if count > 10 {
-                        break;
-                    }
-                }
-            } else {
-                println!("Network capture not initialized");
+            // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
+            for stream_data in &decode_batch {
+                let stream_data_json = serde_json::to_string(&stream_data).unwrap();
+                network_packet_dump.push_str(&stream_data_json);
+                network_packet_dump.push_str("\n");
+
+                // Extract the necessary slice for PID extraction and parsing
+                let packet_chunk = &stream_data.packet
+                    [stream_data.packet_start..stream_data.packet_start + stream_data.packet_len];
+
+                // hex of the packet_chunk with ascii representation after | for each line
+                network_packet_dump.push_str(&hexdump_ascii(
+                    &packet_chunk,
+                    0,
+                    (stream_data.packet_start + stream_data.packet_len) - stream_data.packet_start,
+                ));
+
+                network_packet_dump.push_str("\n");
             }
+            // empty decode_batch
+            decode_batch.clear();
+
+            let network_stats_message = Message {
+                role: "user".to_string(),
+                content: format!("{}: {}", query, network_packet_dump.to_string()),
+            };
+            messages.push(network_stats_message.clone());
+        } else {
+            let system_stats_message = Message {
+                role: "user".to_string(),
+                content: format!("{}: {}", query, system_stats_json.to_string()),
+            };
+            messages.push(system_stats_message.clone());
         }
 
         // Stream API Completion

@@ -1,8 +1,8 @@
-# rsllm - LLM OpenAI API for chat completions in Rust
+# Rust LLM - AI System/Network/Stream Analyzer
 
-Simple rust program that can use an llm using the OpenAI specifications.
+Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. It is designed to be used with the llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
 
-A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically.
+A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
 
 I recommend The Dolphin mixtral model is based on Mixtral-8x7b. The base model has 32k context, Dolphin finetuned it with 16k. This Dolphin is really good at coding, They trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as they show in the examples on the main model site on Huggingface.
 
@@ -28,6 +28,9 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
 
 ## Features
 
+- **LLM Client**: with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
+- **LLM Analysis of OS**: System Stats.
+- **LLM Analysis of Network**: Packet Capture (MpegTS support currently).
 - **CLI Support**: Uses the clap crate for an easy command-line interface.
 - **Async Requests**: Built with tokio for efficient non-blocking I/O operations.
 - **Configurable**: Supports environment variables and command-line options for custom requests.
@@ -95,9 +98,9 @@ Usage: rsllm [OPTIONS]
 
 Options:
       --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability."]
+          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability.\n        When coding product complete examples of production grade fully ready to run code."]
       --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "Explain the mpegts nals and show a chart for each type with the explanations."]
+          Query to generate completions for [env: QUERY=] [default: "Explain each MpegTS NAL type in a chart format."]
       --temperature <TEMPERATURE>
           Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
@@ -107,7 +110,7 @@ Options:
       --frequency-penalty <FREQUENCY_PENALTY>
           Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: FREQUENCY_PENALTY=] [default: 0.0]
       --max-tokens <MAX_TOKENS>
-          Max Tokens, 1 to 4096. Default is 800. [env: MAX_TOKENS=] [default: 800]
+          Max Tokens, 1 to 4096. Default is 2000. [env: MAX_TOKENS=] [default: 2000]
       --model <MODEL>
           OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-0125-preview]
       --llm-host <LLM_HOST>
@@ -117,7 +120,15 @@ Options:
       --no-stream
           Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
       --use-openai
-          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY in .env, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
+          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
+      --debug-inline
+          debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
+      --ai-os-stats
+          Monitor system stats, default is false. [env: AI_OS_STATS=]
+      --ai-network-stats
+          Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
+      --daemon
+          run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
   -h, --help
           Print help
   -V, --version

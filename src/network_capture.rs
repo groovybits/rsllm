@@ -1,3 +1,11 @@
+/*
+ * network_capture.rs
+ * ------------------
+ * Author: Chris Kennedy February @2024
+ *
+ * This file contains the network capture module for RsLLM.
+*/
+
 #[cfg(feature = "dpdk_enabled")]
 use capsule::config::{load_config, DPDKConfig};
 #[cfg(feature = "dpdk_enabled")]
@@ -11,8 +19,8 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::sync::Arc;
+use tokio::sync::mpsc::{self};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -262,16 +270,13 @@ pub struct NetworkCapture {
     pub read_size: i32,
     pub immediate_mode: bool,
     pub buffer_size: i64,
-    pub prx: Option<mpsc::Receiver<Arc<Vec<u8>>>>,
     pub dpdk: bool,
     pub pcap_stats: bool,
     pub debug_on: bool,
     pub capture_task: Option<JoinHandle<()>>,
 }
 
-pub fn network_capture(network_capture: &mut NetworkCapture) {
-    let (ptx, prx) = mpsc::channel::<Arc<Vec<u8>>>();
-
+pub fn network_capture(network_capture: &mut NetworkCapture, ptx: mpsc::Sender<Arc<Vec<u8>>>) {
     let running = Arc::new(AtomicBool::new(true));
     let running_capture = running.clone();
 
@@ -317,7 +322,7 @@ pub fn network_capture(network_capture: &mut NetworkCapture) {
                             let packet_data = Arc::new(data.to_vec());
 
                             // Send packet data to processing channel
-                            ptx.send(packet_data).unwrap();
+                            ptx.send(packet_data).await.unwrap();
 
                             // Here you can implement additional processing such as parsing the packet,
                             // updating statistics, handling specific packet types, etc.
@@ -369,7 +374,7 @@ pub fn network_capture(network_capture: &mut NetworkCapture) {
                         Ok(data) => {
                             count += 1;
                             let packet_data = Arc::new(data.to_vec());
-                            ptx.send(packet_data).unwrap();
+                            ptx.send(packet_data).await.unwrap();
                             if !running_capture.load(Ordering::SeqCst) {
                                 break;
                             }
@@ -426,7 +431,6 @@ pub fn network_capture(network_capture: &mut NetworkCapture) {
     };
 
     network_capture.capture_task = Some(capture_task);
-    network_capture.prx = Some(prx);
     // store Arc running for use by the caller to stop the capture, clone it
     network_capture.running = running.clone();
 }
