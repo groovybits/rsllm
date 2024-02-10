@@ -89,7 +89,7 @@ Use the scripts in the [./scripts](./scripts/) directory.
 ```
 ./scripts/mpeg_analyzer.sh --llm-host http://your.llm.host:8080
 ./scripts/mpeg_poetry.sh --llm-host http://your.llm.host:8080
-./scripts/system_stats.sh --llm-host http://your.llm.host:8080
+./scripts/system_health.sh --llm-host http://your.llm.host:8080
 ```
 
 #### Command-Line Options:
