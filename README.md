@@ -85,9 +85,12 @@ You must alter the -llm-host option to match your server for rsllm to fit your e
 
 ### Usage
 
-Run the client with Cargo, passing your desired prompt and other options as arguments:
-
-`cargo run -- --query "Your prompt here" --use-openai`
+Use the scripts in the [./scripts](./scripts/) directory.
+```
+./scripts/mpeg_analyzer.sh --llm-host http://your.llm.host:8080
+./scripts/mpeg_poetry.sh --llm-host http://your.llm.host:8080
+./scripts/system_stats.sh --llm-host http://your.llm.host:8080
+```
 
 #### Command-Line Options:
 
