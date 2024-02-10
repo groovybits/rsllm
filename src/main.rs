@@ -179,6 +179,19 @@ struct Args {
         help = "Monitor network stats, default is false."
     )]
     ai_network_stats: bool,
+
+    /// PCAP output capture stats mode
+    #[clap(long, env = "PCAP_STATS", default_value_t = false)]
+    pcap_stats: bool,
+
+    /// hexdump packets
+    #[clap(
+        long,
+        env = "HEXDUMP",
+        default_value = "false",
+        help = "hexdump packets, default is false."
+    )]
+    hexdump: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -520,23 +533,24 @@ async fn main() {
     let debug_inline = args.debug_inline;
     let ai_os_stats = args.ai_os_stats;
     let ai_network_stats = args.ai_network_stats;
+    let pcap_channel_size = 10000;
 
+    let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>(pcap_channel_size);
     let mut network_capture_config = NetworkCapture {
         running: Arc::new(AtomicBool::new(true)),
-        source_ip: Arc::new("224.0.0.200".to_string()),
-        source_protocol: Arc::new("udp".to_string()),
-        source_device: Arc::new("en0".to_string()),
-        source_port: 10000,
+        dpdk: false,
         use_wireless: true,
         promiscuous: false,
-        read_time_out: 1000,
-        read_size: 188 * 7,
         immediate_mode: false,
-        buffer_size: 1024 * 1024,
-        prx: None,
-        dpdk: false,
-        pcap_stats: true,
-        debug_on: false,
+        source_protocol: Arc::new("udp".to_string()),
+        source_device: Arc::new("en0".to_string()),
+        source_ip: Arc::new("224.0.0.200".to_string()),
+        source_port: 10000,
+        read_time_out: 60_000,
+        read_size: (188 * 7) + 42,
+        buffer_size: 1_358 * 1_000,
+        pcap_stats: args.pcap_stats,
+        debug_on: args.hexdump,
         capture_task: None,
     };
 
@@ -551,7 +565,7 @@ async fn main() {
     // Initialize the network capture if ai_network_stats is true
     if ai_network_stats {
         println!("Starting network capture");
-        network_capture(&mut network_capture_config);
+        network_capture(&mut network_capture_config, ptx);
         println!("Network capture started");
     }
 
@@ -580,19 +594,15 @@ async fn main() {
         }
 
         if ai_network_stats {
-            if let Some(prx) = network_capture_config.prx.as_ref() {
-                println!("Capturing network packets...");
-                let mut count = 0;
-                while let Ok(packet) = prx.recv() {
-                    count += 1;
-                    // Process the packet here
-                    println!("Received packet with size: {} bytes", packet.len());
-                    if count > 10 {
-                        break;
-                    }
+            println!("Capturing network packets...");
+            let mut count = 0;
+            while let Some(packet) = prx.recv().await {
+                count += 1;
+                // Process the packet here
+                println!("Received packet with size: {} bytes", packet.len());
+                if count > 10 {
+                    break;
                 }
-            } else {
-                println!("Network capture not initialized");
             }
         }
 
