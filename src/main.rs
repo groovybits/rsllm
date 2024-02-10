@@ -38,6 +38,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
+use tokio::time::{sleep, Duration};
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
@@ -283,6 +284,10 @@ struct Args {
     /// DEBUG LLM Message History
     #[clap(long, env = "DEBUG_LLM_HISTORY", default_value_t = false)]
     debug_llm_history: bool,
+
+    /// POLL Interval in ms, default to 60 seconds
+    #[clap(long, env = "POLL_INTERVAL", default_value_t = 60_000)]
+    poll_interval: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -679,15 +684,9 @@ async fn main() {
         packet: Vec::new(),
     };
 
+    let poll_interval = args.poll_interval;
+    let mut poll_start_time = 0;
     loop {
-        // OS and Network stats message
-        let system_stats_json = if ai_os_stats {
-            get_stats_as_json(StatsType::System).await
-        } else {
-            // Default input message
-            json!({})
-        };
-
         if ai_network_stats {
             info!("Capturing network packets...");
             let mut count = 0;
@@ -806,6 +805,30 @@ async fn main() {
                 }
             }
         }
+        // keep track of poll interval ms to wait for the next poll
+        let poll_elapsed_time = current_unix_timestamp_ms().unwrap_or(0) - poll_start_time;
+        if poll_elapsed_time < poll_interval {
+            if !ai_network_stats {
+                // Sleep for the remaining time to reach the poll interval
+                tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
+                // Start the periodic task with the specified interval
+                debug!(
+                    "Running after sleeping {} ms",
+                    poll_interval - poll_elapsed_time
+                );
+            } else {
+                continue;
+            }
+        }
+        poll_start_time = current_unix_timestamp_ms().unwrap_or(0);
+
+        // OS and Network stats message
+        let system_stats_json = if ai_os_stats {
+            get_stats_as_json(StatsType::System).await
+        } else {
+            // Default input message
+            json!({})
+        };
 
         // Add the system stats to the messages
         if !ai_os_stats && !ai_network_stats {
