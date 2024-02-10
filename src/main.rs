@@ -710,8 +710,8 @@ async fn main() {
 
                 // Process each chunk
                 for mut stream_data in chunks {
-                    // check for null packets of the pid 8191 0xFFF1 and skip them
-                    if stream_data.pid == 0xFFF1 {
+                    // check for null packets of the pid 8191 0x1FFF and skip them
+                    if stream_data.pid >= 0x1FFF {
                         debug!("Skipping null packet");
                         continue;
                     }
