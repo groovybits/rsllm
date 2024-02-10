@@ -692,7 +692,7 @@ async fn main() {
             info!("Capturing network packets...");
             let mut count = 0;
             while let Some(packet) = prx.recv().await {
-                debug!("Received packet with size: {} bytes", packet.len());
+                info!("--- Received packet with size: {} bytes", packet.len());
 
                 // Check if chunk is MPEG-TS or SMPTE 2110
                 let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
@@ -862,16 +862,16 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
-            println!("Messages:");
+            info!("Messages:");
             for message in &messages {
-                println!("{}: {}", message.role, message.content);
+                info!("{}: {}", message.role, message.content);
             }
-            println!();
+            info!("");
         }
 
         // measure size of messages in bytes and print it out
         let messages_size = bincode::serialize(&messages).unwrap().len();
-        println!("Initial Messages size: {}", messages_size);
+        info!("Initial Messages size: {}", messages_size);
 
         let llm_history_size_bytes: usize = args.llm_history_size; // Your defined max size in bytes
 
@@ -913,15 +913,25 @@ async fn main() {
             .collect();
 
         let adjusted_messages_size = messages.iter().map(|m| m.content.len()).sum::<usize>();
-        println!(
-            "Adjusted Messages size (bytes of content): {}",
-            adjusted_messages_size
-        );
-        println!("Messages count: {}", messages.len());
+        if messages_size != adjusted_messages_size {
+            debug!(
+                "Messages size (bytes of content) adjusted from {} to {} for {} messages.",
+                messages_size,
+                adjusted_messages_size,
+                messages.len()
+            );
+        } else {
+            debug!(
+                "Messages size {} for {} messages.",
+                messages_size,
+                messages.len()
+            );
+        }
 
         // Debug print to show the content sizes and roles
+        info!("Message History:");
         for (i, message) in messages.iter().enumerate() {
-            println!(
+            info!(
                 "Message {} - Role: {}, Size: {}",
                 i + 1,
                 message.role,

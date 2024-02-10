@@ -385,7 +385,7 @@ pub fn network_capture(network_capture: &mut NetworkCapture, ptx: mpsc::Sender<A
                             {
                                 stats_last_sent_ts = current_ts;
                                 let stats = stream.capture_mut().stats().unwrap();
-                                println!(
+                                info!(
                                 "#{} Current stats: Received: {}, Dropped: {}/{}, Interface Dropped: {} packet_size: {} bytes.",
                                 count, stats.received, stats.dropped - packets_dropped, stats.dropped, stats.if_dropped, data.len(),
                             );
@@ -412,7 +412,7 @@ pub fn network_capture(network_capture: &mut NetworkCapture, ptx: mpsc::Sender<A
                 }
                 if debug_on {
                     let stats = stream.capture_mut().stats().unwrap();
-                    println!(
+                    info!(
                         "Current stats: Received: {}, Dropped: {}, Interface Dropped: {}",
                         stats.received, stats.dropped, stats.if_dropped
                     );
@@ -423,10 +423,10 @@ pub fn network_capture(network_capture: &mut NetworkCapture, ptx: mpsc::Sender<A
             }
 
             let stats = stream.capture_mut().stats().unwrap();
-            println!("Packet capture statistics:");
-            println!("Received: {}", stats.received);
-            println!("Dropped: {}", stats.dropped);
-            println!("Interface Dropped: {}", stats.if_dropped);
+            info!("Packet capture statistics:");
+            info!("Received: {}", stats.received);
+            info!("Dropped: {}", stats.dropped);
+            info!("Interface Dropped: {}", stats.if_dropped);
         })
     };
 
