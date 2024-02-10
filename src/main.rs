@@ -45,8 +45,8 @@ use tokio::time::Duration;
 #[derive(Parser, Debug)]
 #[clap(
     author = "Chris Kennedy",
-    version = "1.0",
-    about = "RsLLM OpenAI API client"
+    version = "1.1",
+    about = "Rust LLM - AI System/Network/Stream Analyzer"
 )]
 struct Args {
     /// System prompt

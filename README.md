@@ -92,8 +92,6 @@ Run the client with Cargo, passing your desired prompt and other options as argu
 #### Command-Line Options:
 
 ```bash
-RsLLM OpenAI API client
-
 Usage: rsllm [OPTIONS]
 
 Options:
