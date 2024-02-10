@@ -51,8 +51,7 @@ struct Args {
     #[clap(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability.
-        When coding product complete examples of production grade fully ready to run code."
+        default_value = "You are a network analyzer interface like a textronix who can read hex dumps of mpegts packets and derive the information on the packet."
     )]
     system_prompt: String,
 
@@ -60,7 +59,7 @@ struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "Explain each MpegTS NAL type in a chart format.",
+        default_value = "Analyze this set of mpegts packets for anamolies. Report overall the packets types seen and count of each and total packet count + any other interesting information useful in reporting problems.",
         help = "Query to generate completions for"
     )]
     query: String,
@@ -186,6 +185,28 @@ struct Args {
     )]
     ai_network_stats: bool,
 
+    // AI Network Full Packet Hex Dump
+    #[clap(
+        long,
+        env = "AI_NETWORK_HEXDUMP",
+        default_value = "false",
+        help = "Monitor network full packet hex dump, default is false."
+    )]
+    ai_network_hexdump: bool,
+
+    // AI Network Metadata Off - turn off ai metadata network packet processing
+    #[clap(
+        long,
+        env = "AI_NETWORK_METADATA_OFF",
+        default_value = "false",
+        help = "Turn off ai metadata network packet processing, only hexdump, default is false."
+    )]
+    ai_network_metadata_off: bool,
+
+    /// AI Network Packet Count
+    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 28)]
+    ai_network_packet_count: usize,
+
     /// PCAP output capture stats mode
     #[clap(long, env = "PCAP_STATS", default_value_t = false)]
     pcap_stats: bool,
@@ -245,10 +266,6 @@ struct Args {
     /// Show the TR101290 p1, p2 and p3 errors if any
     #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
     show_tr101290: bool,
-
-    /// Decode Batch Size
-    #[clap(long, env = "DECODE_BATCH_SIZE", default_value_t = 28)]
-    decode_batch_size: usize,
 
     /// PCAP Channel Size
     #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 10_000_000)]
@@ -519,20 +536,18 @@ async fn stream_completion(
             }
         });
 
-        // Spawn a separate task to collect errors concurrently
-        let answer = String::new();
-        let mut answer_clone = answer.clone();
+        // collect answers from the worker
         let error_collector = tokio::spawn(async move {
             let mut errors = Vec::new();
-            while let Some(error_message) = erx.recv().await {
-                // check if message starts with "ERROR:" if not add it onto the answer string
-                if error_message.starts_with("ERROR:") {
-                    errors.push(error_message);
+            let mut answers = Vec::new();
+            while let Some(message) = erx.recv().await {
+                if message.starts_with("ERROR:") {
+                    errors.push(message);
                 } else {
-                    answer_clone += &error_message;
+                    answers.push(message);
                 }
             }
-            errors // Return collected errors from the task
+            (errors, answers) // Return collected errors and answers from the task
         });
 
         // Main task to send chunks to the worker
@@ -540,27 +555,30 @@ async fn stream_completion(
             tx.send(chunk).await.expect("Failed to send chunk");
         }
 
-        response_messages.push(Message {
-            role: "assistant".to_string(),
-            content: answer,
-        });
-
         // Close the channel by dropping tx
         drop(tx);
 
         // Await the worker task to finish processing
         worker.await?;
 
-        // Await the error collector task to retrieve the collected errors
-        let errors_array = error_collector.await?; // Handle errors from the error collector task
+        // Await the error collector task to retrieve the collected errors and answers
+        let (errors, answers) = error_collector
+            .await
+            .unwrap_or_else(|_| (Vec::new(), Vec::new())); // Handle errors by returning empty vectors
 
-        // Print errors or perform further actions with them
-        if !errors_array.is_empty() {
+        // Print errors
+        if !errors.is_empty() {
             println!("\nErrors:");
-            for error in errors_array.iter() {
+            for error in errors.iter() {
                 println!("{}", error);
             }
         }
+
+        // Store LLM complete answer from the worker task
+        response_messages.push(Message {
+            role: "assistant".to_string(),
+            content: answers.join(""),
+        });
     }
 
     // After processing all chunks/responses
@@ -774,7 +792,7 @@ async fn main() {
                     decode_batch.push(stream_data);
                 }
 
-                if count > 10 {
+                if count > args.ai_network_packet_count {
                     break;
                 }
             }
@@ -794,20 +812,25 @@ async fn main() {
             network_packet_dump.push_str("\n");
             // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
             for stream_data in &decode_batch {
-                let stream_data_json = serde_json::to_string(&stream_data).unwrap();
-                network_packet_dump.push_str(&stream_data_json);
-                network_packet_dump.push_str("\n");
-
-                // Extract the necessary slice for PID extraction and parsing
-                let packet_chunk = &stream_data.packet
-                    [stream_data.packet_start..stream_data.packet_start + stream_data.packet_len];
+                if !args.ai_network_metadata_off || !args.ai_network_hexdump {
+                    let stream_data_json = serde_json::to_string(&stream_data).unwrap();
+                    network_packet_dump.push_str(&stream_data_json);
+                    network_packet_dump.push_str("\n");
+                }
 
                 // hex of the packet_chunk with ascii representation after | for each line
-                network_packet_dump.push_str(&hexdump_ascii(
-                    &packet_chunk,
-                    0,
-                    (stream_data.packet_start + stream_data.packet_len) - stream_data.packet_start,
-                ));
+                if args.ai_network_hexdump || args.ai_network_metadata_off {
+                    // Extract the necessary slice for PID extraction and parsing
+                    let packet_chunk = &stream_data.packet[stream_data.packet_start
+                        ..stream_data.packet_start + stream_data.packet_len];
+
+                    network_packet_dump.push_str(&hexdump_ascii(
+                        &packet_chunk,
+                        0,
+                        (stream_data.packet_start + stream_data.packet_len)
+                            - stream_data.packet_start,
+                    ));
+                }
 
                 network_packet_dump.push_str("\n");
             }
@@ -859,7 +882,7 @@ async fn main() {
             debug_inline,
         )
         .await
-        .unwrap();
+        .unwrap_or_else(|_| Vec::new());
 
         // for each answer in the response
         for answer in answers {
@@ -869,7 +892,7 @@ async fn main() {
             };
 
             // push the message to the open_ai_request
-            messages.push(assistant_message);
+            messages.push(assistant_message.clone());
         }
 
         // break the loop if we are not running as a daemon
