@@ -249,6 +249,14 @@ struct Args {
     /// Decode Batch Size
     #[clap(long, env = "DECODE_BATCH_SIZE", default_value_t = 28)]
     decode_batch_size: usize,
+
+    /// PCAP Channel Size
+    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 10_000_000)]
+    pcap_channel_size: usize,
+
+    /// DEBUG LLM Message History
+    #[clap(long, env = "DEBUG_LLM_HISTORY", default_value_t = false)]
+    debug_llm_history: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -590,7 +598,6 @@ async fn main() {
     let debug_inline = args.debug_inline;
     let ai_os_stats = args.ai_os_stats;
     let ai_network_stats = args.ai_network_stats;
-    let pcap_channel_size = 10000;
 
     if args.use_openai {
         // set the llm_host to the openai api
@@ -607,7 +614,7 @@ async fn main() {
         (args.packet_size as i32 * args.pcap_batch_size as i32) + args.payload_offset as i32; // pcap read size
     let mut is_mpegts = true; // Default to true, update based on actual packet type
 
-    let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>(pcap_channel_size);
+    let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>(args.pcap_channel_size);
     let mut network_capture_config = NetworkCapture {
         running: Arc::new(AtomicBool::new(true)),
         dpdk: false,
@@ -784,6 +791,7 @@ async fn main() {
             // create nework packet dump message from collected stream_data in decode_batch
             let mut network_packet_dump: String = String::new();
 
+            network_packet_dump.push_str("\n");
             // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
             for stream_data in &decode_batch {
                 let stream_data_json = serde_json::to_string(&stream_data).unwrap();
@@ -808,7 +816,7 @@ async fn main() {
 
             let network_stats_message = Message {
                 role: "user".to_string(),
-                content: format!("{}: {}", query, network_packet_dump.to_string()),
+                content: format!("{}\n{}\n", network_packet_dump.to_string(), query),
             };
             messages.push(network_stats_message.clone());
         } else {
@@ -817,6 +825,16 @@ async fn main() {
                 content: format!("{}: {}", query, system_stats_json.to_string()),
             };
             messages.push(system_stats_message.clone());
+        }
+
+        // Debugging LLM history
+        if args.debug_llm_history {
+            // print out the messages to the console
+            println!("Messages:");
+            for message in &messages {
+                println!("{}: {}", message.role, message.content);
+            }
+            println!();
         }
 
         // Stream API Completion
