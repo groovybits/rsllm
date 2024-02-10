@@ -131,6 +131,15 @@ struct Args {
     )]
     llm_path: String,
 
+    /// LLM History size
+    #[clap(
+        long,
+        env = "LLM_HISTORY_SIZE",
+        default_value = "1024",
+        help = "LLM History size, default is 0."
+    )]
+    llm_history_size: usize,
+
     /// Don't stream output
     #[clap(
         long,
@@ -680,10 +689,10 @@ async fn main() {
         };
 
         if ai_network_stats {
-            println!("Capturing network packets...");
+            info!("Capturing network packets...");
             let mut count = 0;
             while let Some(packet) = prx.recv().await {
-                println!("Received packet with size: {} bytes", packet.len());
+                debug!("Received packet with size: {} bytes", packet.len());
 
                 // Check if chunk is MPEG-TS or SMPTE 2110
                 let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
@@ -894,6 +903,47 @@ async fn main() {
             // push the message to the open_ai_request
             messages.push(assistant_message.clone());
         }
+
+        // measure size of messages in bytes and print it out
+        let messages_size = bincode::serialize(&messages).unwrap().len();
+        println!("Messages size: {}", messages_size);
+
+        // use llm_history_size to count up the size of the history starting at the newest message,
+        // when the history size is reached, remove the oldest messages unless they are a system message
+        // also measure the system message to add it to the history size initially.
+        // Calculate the total byte size of the content of all messages
+        let total_content_byte_size: usize =
+            messages.iter().map(|message| message.content.len()).sum();
+
+        // If the total size exceeds the limit, we need to trim messages from the start
+        if total_content_byte_size > args.llm_history_size {
+            let mut trimmed_size = 0;
+            let mut messages_to_keep = 0;
+
+            // Calculate how many messages to keep to stay within the byte size limit
+            for message in messages.iter().rev() {
+                trimmed_size += message.content.len();
+                if trimmed_size > args.llm_history_size {
+                    break;
+                }
+                messages_to_keep += 1;
+            }
+
+            // Keep the last N messages that fit within the limit
+            let keep_from_index = messages.len().saturating_sub(messages_to_keep);
+            messages = messages
+                .into_iter()
+                .skip(keep_from_index)
+                .collect::<Vec<_>>();
+        }
+
+        println!(
+            "Messages trimmed to fit the byte size limit. Remaining messages: {}",
+            messages.len()
+        );
+
+        let messages_size = bincode::serialize(&messages).unwrap().len();
+        println!("New Messages size: {}", messages_size);
 
         // break the loop if we are not running as a daemon
         if !args.daemon {
