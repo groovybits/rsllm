@@ -135,8 +135,8 @@ struct Args {
     #[clap(
         long,
         env = "LLM_HISTORY_SIZE",
-        default_value = "32768",
-        help = "LLM History size, default is 0."
+        default_value = "0",
+        help = "LLM History size, default is 0 (unlimited)."
     )]
     llm_history_size: usize,
 
@@ -213,7 +213,7 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 1024)]
+    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 7)]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
@@ -883,7 +883,7 @@ async fn main() {
             non_system_messages.iter().map(|m| m.content.len()).sum();
 
         // If non-system messages alone exceed the limit, we need to trim
-        if total_non_system_size > llm_history_size_bytes {
+        if llm_history_size_bytes > 0 && total_non_system_size > llm_history_size_bytes {
             let mut excess_size = total_non_system_size - llm_history_size_bytes;
 
             // Reverse iterate to trim from the end
