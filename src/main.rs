@@ -31,6 +31,7 @@ use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{self, json};
 use std::env;
+use std::io;
 use std::io::Write;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -38,7 +39,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
@@ -288,6 +289,10 @@ struct Args {
     /// POLL Interval in ms, default to 60 seconds
     #[clap(long, env = "POLL_INTERVAL", default_value_t = 60_000)]
     poll_interval: u64,
+
+    /// Turn off progress output dots
+    #[clap(long, env = "NO_PROGRESS", default_value_t = false)]
+    no_progress: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -686,12 +691,19 @@ async fn main() {
 
     let poll_interval = args.poll_interval;
     let mut poll_start_time = 0;
+    let mut dot_last_sent_ts = Instant::now();
     loop {
         if ai_network_stats {
-            info!("Capturing network packets...");
+            debug!("Capturing network packets...");
+            if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
+                dot_last_sent_ts = Instant::now();
+                print!(".");
+                // Flush stdout to ensure the progress dots are printed
+                io::stdout().flush().unwrap();
+            }
             let mut count = 0;
             while let Some(packet) = prx.recv().await {
-                info!("--- Received packet with size: {} bytes", packet.len());
+                debug!("--- Received packet with size: {} bytes", packet.len());
 
                 // Check if chunk is MPEG-TS or SMPTE 2110
                 let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
@@ -736,10 +748,8 @@ async fn main() {
                     let packet_chunk = &stream_data.packet[stream_data.packet_start
                         ..stream_data.packet_start + stream_data.packet_len];
 
-                    let mut pid: u16 = 0xFFFF;
-
                     if is_mpegts {
-                        pid = stream_data.pid;
+                        let pid = stream_data.pid;
                         // Handle PAT and PMT packets
                         match pid {
                             PAT_PID => {
