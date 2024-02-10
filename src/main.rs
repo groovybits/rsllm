@@ -99,8 +99,8 @@ struct Args {
     #[clap(
         long,
         env = "MAX_TOKENS",
-        default_value = "2000",
-        help = "Max Tokens, 1 to N. Default is 2000."
+        default_value = "800",
+        help = "Max Tokens, 1 to N. Default is 800."
     )]
     max_tokens: i32,
 
@@ -108,7 +108,7 @@ struct Args {
     #[clap(
         long,
         env = "MODEL",
-        default_value = "gpt-4-0125-preview",
+        default_value = "gpt-4-turbo-preview",
         help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
     )]
     model: String,
@@ -213,7 +213,7 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 28)]
+    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 1024)]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
@@ -276,8 +276,8 @@ struct Args {
     #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
     show_tr101290: bool,
 
-    /// PCAP Channel Size
-    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 10_000_000)]
+    /// PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000
+    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 1_000_000)]
     pcap_channel_size: usize,
 
     /// DEBUG LLM Message History
