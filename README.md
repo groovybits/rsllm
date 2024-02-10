@@ -98,9 +98,9 @@ Usage: rsllm [OPTIONS]
 
 Options:
       --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "You are an assistant who can do anything that is asked of you to help and assist in any way possible. Always be polite and respectful, take ownership and responsibility for the tasks requested of you, and make sure you complete them to the best of your ability.\n        When coding product complete examples of production grade fully ready to run code."]
+          System prompt [env: SYSTEM_PROMPT=] [default: "you are able to say green or red depending on the mpegts stream health determined from packet analysis."]
       --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "Explain each MpegTS NAL type in a chart format."]
+          Query to generate completions for [env: QUERY=] [default: "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of mpegts packet streams."]
       --temperature <TEMPERATURE>
           Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
@@ -110,13 +110,15 @@ Options:
       --frequency-penalty <FREQUENCY_PENALTY>
           Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: FREQUENCY_PENALTY=] [default: 0.0]
       --max-tokens <MAX_TOKENS>
-          Max Tokens, 1 to 4096. Default is 2000. [env: MAX_TOKENS=] [default: 2000]
+          Max Tokens, 1 to N. Default is 800. [env: MAX_TOKENS=] [default: 800]
       --model <MODEL>
-          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-0125-preview]
+          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-turbo-preview]
       --llm-host <LLM_HOST>
           LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://127.0.0.1:8080]
       --llm-path <LLM_PATH>
           LLM Url path for completions, default is /v1/chat/completions. [env: LLM_PATH=] [default: /v1/chat/completions]
+      --llm-history-size <LLM_HISTORY_SIZE>
+          LLM History size, default is 0 (unlimited). [env: LLM_HISTORY_SIZE=] [default: 0]
       --no-stream
           Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
       --use-openai
@@ -125,10 +127,54 @@ Options:
           debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
       --ai-os-stats
           Monitor system stats, default is false. [env: AI_OS_STATS=]
-      --ai-network-stats
-          Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
       --daemon
           run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
+      --ai-network-stats
+          Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
+      --ai-network-hexdump
+          Monitor network full packet hex dump, default is false. [env: AI_NETWORK_HEXDUMP=]
+      --ai-network-metadata-off
+          Turn off ai metadata network packet processing, only hexdump, default is false. [env: AI_NETWORK_METADATA_OFF=]
+      --ai-network-packet-count <AI_NETWORK_PACKET_COUNT>
+          AI Network Packet Count [env: AI_NETWORK_PACKET_COUNT=] [default: 7]
+      --pcap-stats
+          PCAP output capture stats mode [env: PCAP_STATS=]
+      --pcap-batch-size <PCAP_BATCH_SIZE>
+          Sets the batch size [env: PCAP_BATCH_SIZE=] [default: 7]
+      --payload-offset <PAYLOAD_OFFSET>
+          Sets the payload offset [env: PAYLOAD_OFFSET=] [default: 42]
+      --packet-size <PACKET_SIZE>
+          Sets the packet size [env: PACKET_SIZE=] [default: 188]
+      --buffer-size <BUFFER_SIZE>
+          Sets the pcap buffer size [env: BUFFER_SIZE=] [default: 1358000]
+      --read-time-out <READ_TIME_OUT>
+          Sets the read timeout [env: READ_TIME_OUT=] [default: 60000]
+      --source-device <SOURCE_DEVICE>
+          Sets the source device [env: SOURCE_DEVICE=] [default: ]
+      --source-ip <SOURCE_IP>
+          Sets the source IP [env: SOURCE_IP=] [default: 224.0.0.200]
+      --source-protocol <SOURCE_PROTOCOL>
+          Sets the source protocol [env: SOURCE_PROTOCOL=] [default: udp]
+      --source-port <SOURCE_PORT>
+          Sets the source port [env: SOURCE_PORT=] [default: 10000]
+      --use-wireless
+          Sets if wireless is used [env: USE_WIRELESS=]
+      --promiscuous
+          Use promiscuous mode [env: PROMISCUOUS=]
+      --immediate-mode
+          PCAP immediate mode [env: IMMEDIATE_MODE=]
+      --hexdump
+          Hexdump [env: HEXDUMP=]
+      --show-tr101290
+          Show the TR101290 p1, p2 and p3 errors if any [env: SHOW_TR101290=]
+      --pcap-channel-size <PCAP_CHANNEL_SIZE>
+          PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000 [env: PCAP_CHANNEL_SIZE=] [default: 1000000]
+      --debug-llm-history
+          DEBUG LLM Message History [env: DEBUG_LLM_HISTORY=]
+      --poll-interval <POLL_INTERVAL>
+          POLL Interval in ms, default to 60 seconds [env: POLL_INTERVAL=] [default: 60000]
+      --no-progress
+          Turn off progress output dots [env: NO_PROGRESS=]
   -h, --help
           Print help
   -V, --version
