@@ -99,8 +99,8 @@ struct Args {
     #[clap(
         long,
         env = "MAX_TOKENS",
-        default_value = "2000",
-        help = "Max Tokens, 1 to 4096. Default is 2000."
+        default_value = "800",
+        help = "Max Tokens, 1 to N. Default is 800."
     )]
     max_tokens: i32,
 
@@ -108,7 +108,7 @@ struct Args {
     #[clap(
         long,
         env = "MODEL",
-        default_value = "gpt-4-0125-preview",
+        default_value = "gpt-4-turbo-preview",
         help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
     )]
     model: String,
@@ -130,6 +130,15 @@ struct Args {
         help = "LLM Url path for completions, default is /v1/chat/completions."
     )]
     llm_path: String,
+
+    /// LLM History size
+    #[clap(
+        long,
+        env = "LLM_HISTORY_SIZE",
+        default_value = "0",
+        help = "LLM History size, default is 0 (unlimited)."
+    )]
+    llm_history_size: usize,
 
     /// Don't stream output
     #[clap(
@@ -204,7 +213,7 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 28)]
+    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 7)]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
@@ -267,8 +276,8 @@ struct Args {
     #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
     show_tr101290: bool,
 
-    /// PCAP Channel Size
-    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 10_000_000)]
+    /// PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000
+    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 1_000_000)]
     pcap_channel_size: usize,
 
     /// DEBUG LLM Message History
@@ -680,10 +689,10 @@ async fn main() {
         };
 
         if ai_network_stats {
-            println!("Capturing network packets...");
+            info!("Capturing network packets...");
             let mut count = 0;
             while let Some(packet) = prx.recv().await {
-                println!("Received packet with size: {} bytes", packet.len());
+                info!("--- Received packet with size: {} bytes", packet.len());
 
                 // Check if chunk is MPEG-TS or SMPTE 2110
                 let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
@@ -853,11 +862,81 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
-            println!("Messages:");
+            info!("Messages:");
             for message in &messages {
-                println!("{}: {}", message.role, message.content);
+                info!("{}: {}", message.role, message.content);
             }
-            println!();
+            info!("");
+        }
+
+        // measure size of messages in bytes and print it out
+        let messages_size = bincode::serialize(&messages).unwrap().len();
+        info!("Initial Messages size: {}", messages_size);
+
+        let llm_history_size_bytes: usize = args.llm_history_size; // Your defined max size in bytes
+
+        // Separate system messages to preserve them
+        let (system_messages, mut non_system_messages): (Vec<_>, Vec<_>) =
+            messages.into_iter().partition(|m| m.role == "system");
+
+        let total_non_system_size: usize =
+            non_system_messages.iter().map(|m| m.content.len()).sum();
+
+        // If non-system messages alone exceed the limit, we need to trim
+        if llm_history_size_bytes > 0 && total_non_system_size > llm_history_size_bytes {
+            let mut excess_size = total_non_system_size - llm_history_size_bytes;
+
+            // Reverse iterate to trim from the end
+            for message in non_system_messages.iter_mut().rev() {
+                let message_size = message.content.len();
+                if excess_size == 0 {
+                    break;
+                }
+
+                if message_size <= excess_size {
+                    // Remove the whole message content if it's smaller than or equal to the excess
+                    excess_size -= message_size;
+                    message.content.clear();
+                } else {
+                    // Truncate the message content to fit within the limit
+                    let new_size = message_size - excess_size;
+                    message.content = message.content.chars().take(new_size).collect();
+                    break; // After truncation, we should be within the limit
+                }
+            }
+        }
+
+        // Reassemble messages, ensuring system messages are preserved at their original position
+        messages = system_messages
+            .into_iter()
+            .chain(non_system_messages.into_iter())
+            .collect();
+
+        let adjusted_messages_size = messages.iter().map(|m| m.content.len()).sum::<usize>();
+        if messages_size != adjusted_messages_size {
+            debug!(
+                "Messages size (bytes of content) adjusted from {} to {} for {} messages.",
+                messages_size,
+                adjusted_messages_size,
+                messages.len()
+            );
+        } else {
+            debug!(
+                "Messages size {} for {} messages.",
+                messages_size,
+                messages.len()
+            );
+        }
+
+        // Debug print to show the content sizes and roles
+        info!("Message History:");
+        for (i, message) in messages.iter().enumerate() {
+            info!(
+                "Message {} - Role: {}, Size: {}",
+                i + 1,
+                message.role,
+                message.content.len()
+            );
         }
 
         // Stream API Completion
