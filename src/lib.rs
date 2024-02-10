@@ -1,11 +1,20 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-pub mod stream_data;
+/*
+ * lib.rs
+ * ------
+ * Author: Chris Kennedy February @2024
+ *
+ * This file contains the main library for the stats and network capture modules
+ * for RsLLM.
+*/
 
+pub mod mpegts;
 pub mod network_capture;
+pub mod stream_data;
 pub mod system_stats;
-pub use system_stats::{get_system_stats, SystemStats};
-
 use serde_json::{json, Value};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+pub use system_stats::{get_system_stats, SystemStats};
 
 /// Enum to determine the type of stats to fetch.
 pub enum StatsType {
@@ -28,4 +37,21 @@ pub fn current_unix_timestamp_ms() -> Result<u64, &'static str> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .map_err(|_| "System time is before the UNIX epoch")
+}
+
+// Print a hexdump of the packet
+pub fn hexdump(packet_arc: &Arc<Vec<u8>>, packet_offset: usize, packet_len: usize) {
+    let packet = &packet_arc[packet_offset..packet_offset + packet_len];
+    // print in rows of 16 bytes
+    let mut packet_dump = String::new();
+    for (i, chunk) in packet.iter().take(packet_len).enumerate() {
+        if i % 16 == 0 {
+            packet_dump.push_str(&format!("\n{:04x}: ", i));
+        }
+        packet_dump.push_str(&format!("{:02x} ", chunk));
+    }
+    println!(
+        "--- Packet Offset {} Packet Length {} ---\n{}\n---",
+        packet_offset, packet_len, packet_dump
+    );
 }

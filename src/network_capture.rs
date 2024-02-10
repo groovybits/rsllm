@@ -1,3 +1,11 @@
+/*
+ * network_capture.rs
+ * ------------------
+ * Author: Chris Kennedy February @2024
+ *
+ * This file contains the network capture module for RsLLM.
+*/
+
 #[cfg(feature = "dpdk_enabled")]
 use capsule::config::{load_config, DPDKConfig};
 #[cfg(feature = "dpdk_enabled")]
