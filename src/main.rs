@@ -905,9 +905,7 @@ async fn main() {
 
     // Initialize the network capture if ai_network_stats is true
     if ai_network_stats {
-        println!("Starting network capture");
         network_capture(&mut network_capture_config, ptx);
-        println!("Network capture started");
     }
 
     let processing_handle = tokio::spawn(async move {
