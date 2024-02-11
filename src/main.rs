@@ -866,6 +866,7 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let mut poll_start_time = 0;
     loop {
+        info!("Polling for stats");
         // keep track of poll interval ms to wait for the next poll
         let poll_elapsed_time = current_unix_timestamp_ms().unwrap_or(0) - poll_start_time;
         if poll_interval > 0 && poll_elapsed_time < poll_interval {
@@ -878,6 +879,7 @@ async fn main() {
             );
         }
         poll_start_time = current_unix_timestamp_ms().unwrap_or(0);
+        info!("Starting probing for stats");
 
         // OS and Network stats message
         let system_stats_json = if ai_os_stats {
@@ -897,13 +899,20 @@ async fn main() {
         } else if ai_network_stats {
             // create nework packet dump message from collected stream_data in decode_batch
             // Try to receive new packet batches if available
+            let mut msg_count = 0;
+            info!("Polling for network packet dump");
             while let Ok(decode_batch) = batch_rx.try_recv() {
+                msg_count += 1;
+                info!("Received network packet dump message: {}", decode_batch);
                 // Handle the received decode_batch here...
                 let network_stats_message = Message {
                     role: "user".to_string(),
                     content: format!("{}\n{}\n", decode_batch, query),
                 };
                 messages.push(network_stats_message.clone());
+                if msg_count >= 1 {
+                    break;
+                }
             }
         } else {
             let system_stats_message = Message {
