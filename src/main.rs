@@ -448,6 +448,42 @@ struct Delta {
     content: Option<String>,
 }
 
+// Function to process and print content tokens.
+fn process_and_print_token(token: &str, current_line_length: &mut usize, break_line_length: usize) {
+    let token_length = token.chars().count();
+
+    // Check if adding this token exceeds the line length limit.
+    if *current_line_length + token_length > break_line_length {
+        // Find an opportune break point in the token if it's too long by itself.
+        if token_length > break_line_length {
+            let mut last_break_point = 0;
+            for (i, c) in token.char_indices() {
+                if c.is_ascii_punctuation() || c.is_whitespace() {
+                    last_break_point = i;
+                }
+                // Break the token at the last break point if exceeding the line length.
+                if i - last_break_point > break_line_length {
+                    println!("{}", &token[last_break_point..i]);
+                    *current_line_length = 0; // Reset the line length after printing.
+                    last_break_point = i; // Update the last break point.
+                }
+            }
+            // Print the remaining part of the token.
+            print!("{}", &token[last_break_point..]);
+            *current_line_length = token_length - last_break_point;
+        } else {
+            // If the current token doesn't exceed the limit by itself, just break the line before printing it.
+            println!(); // Print a newline to break the line.
+            print!("{}", token); // Print the current token at the start of a new line.
+            *current_line_length = token_length; // Reset the line length to the current token's length.
+        }
+    } else {
+        // If adding the token doesn't exceed the limit, just print it.
+        print!("{}", token);
+        *current_line_length += token_length; // Update the current line length.
+    }
+}
+
 /*
  * {"choices":[{"finish_reason":"stop","index":0,"message":{"content":"The Los Angeles Dodgers won
  * the World Series in 2020. They defeated the Tampa Bay Rays in six
@@ -491,7 +527,7 @@ async fn stream_completion(
 
     let mut token_count = 0;
     let mut byte_count = 0;
-    let mut line_breaks = 0;
+    let mut current_line_length = 0;
     let mut loop_count = 0;
     // errors are strings
 
@@ -661,34 +697,12 @@ async fn stream_completion(
                                     etx.send(format!("{}", content))
                                         .await
                                         .expect("Failed to send content");
-                                    // check if last character of the content is a period, comma, exclamation mark or question mark or space
-                                    if (byte_count - line_breaks >= break_line_length)
-                                        && (content.contains(|c: char| {
-                                            c.is_ascii_punctuation() || c.is_ascii_whitespace()
-                                        }) && !content.contains("\n"))
-                                    {
-                                        // split on ascii punctuation or whitespace and add in a newline to break up the token
-                                        let break_pos = content
-                                            .char_indices()
-                                            .filter(|(_, c)| {
-                                                c.is_ascii_punctuation() || c.is_ascii_whitespace()
-                                            })
-                                            .map(|(i, _)| i)
-                                            .last()
-                                            .unwrap_or_else(|| break_line_length);
 
-                                        // split the content at the break position
-                                        let (first, second) = content.split_at(break_pos);
-                                        print!("{}\n", first);
-                                        print!("{}", second);
-
-                                        line_breaks += break_line_length;
-                                    } else {
-                                        if content.contains("\n") {
-                                            line_breaks += break_line_length;
-                                        }
-                                        print!("{}", content);
-                                    }
+                                    process_and_print_token(
+                                        content,
+                                        &mut current_line_length,
+                                        break_line_length,
+                                    );
 
                                     // flush stdout
                                     std::io::stdout().flush().unwrap();
