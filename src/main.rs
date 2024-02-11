@@ -666,8 +666,13 @@ async fn stream_completion(
                                 // check if we have a finish reason
                                 if let Some(reason) = &choice.finish_reason {
                                     let end_time = Instant::now();
-                                    let duration = end_time.duration_since(start_time);
+                                    let mut duration = end_time.duration_since(start_time);
                                     let pretty_time = format!("{:?}", duration);
+
+                                    // Ensure the duration is at least 1 second
+                                    if duration < std::time::Duration::new(1, 0) {
+                                        duration = std::time::Duration::new(1, 0);
+                                    }
 
                                     println!(
                                         "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",

@@ -6,6 +6,7 @@ sudo target/release/rsllm \
     --model "gpt-3.5-turbo" \
     --ai-network-stats \
     --pcap-stats \
-    --poll-interval 120 \
+    --llm-history-size 3500 \
+    --poll-interval 120000 \
     --ai-network-hexdump $@
 
