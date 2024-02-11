@@ -31,7 +31,6 @@ use rsllm::{get_stats_as_json, StatsType};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::{self, json};
 use std::env;
-use std::io;
 use std::io::Write;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -1108,7 +1107,6 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
-    let mut dot_last_sent_ts = Instant::now();
     info!(
         "Starting up RsLLM with poll intervale of {} seconds...",
         poll_interval_duration.as_secs()
@@ -1137,12 +1135,6 @@ async fn main() {
             // Try to receive new packet batches if available
             let mut msg_count = 0;
             while let Ok(decode_batch) = batch_rx.try_recv() {
-                if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
-                    dot_last_sent_ts = Instant::now();
-                    print!("*");
-                    // Flush stdout to ensure the progress dots are printed
-                    io::stdout().flush().unwrap();
-                }
                 msg_count += 1;
                 //debug!("Received network packet dump message: {}", decode_batch);
                 // Handle the received decode_batch here...
