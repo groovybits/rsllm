@@ -394,6 +394,15 @@ struct Args {
         help = "Turn off progress output dots, default is false."
     )]
     no_progress: bool,
+
+    /// Break Line Length - line length for breaking lines from LLM messages, default is 120
+    #[clap(
+        long,
+        env = "BREAK_LINE_LENGTH",
+        default_value_t = 120,
+        help = "Break Line Length - line length for breaking lines from LLM messages, default is 120."
+    )]
+    break_line_length: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -451,6 +460,7 @@ async fn stream_completion(
     llm_host: &str,
     llm_path: &str,
     debug_inline: bool,
+    break_line_length: usize,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -481,8 +491,8 @@ async fn stream_completion(
 
     let mut token_count = 0;
     let mut byte_count = 0;
+    let mut line_breaks = 0;
     let mut loop_count = 0;
-    let break_line_length = 80;
     // errors are strings
 
     if !open_ai_request.stream {
@@ -651,16 +661,21 @@ async fn stream_completion(
                                     etx.send(format!("{}", content))
                                         .await
                                         .expect("Failed to send content");
-                                    // check if the last character of the content is a period, comma, exclamation mark or question mark or space
-                                    if byte_count >= break_line_length
-                                        && content.ends_with(|c: char| {
+                                    // check if last character of the content is a period, comma, exclamation mark or question mark or space
+                                    if (byte_count - line_breaks >= break_line_length)
+                                        && (content.ends_with(|c: char| {
                                             c.is_ascii_punctuation() || c.is_ascii_whitespace()
-                                        })
+                                        }) && !content.contains("\n"))
                                     {
                                         print!("{}\n", content);
+                                        line_breaks += break_line_length;
                                     } else {
+                                        if content.contains("\n") {
+                                            line_breaks += break_line_length;
+                                        }
                                         print!("{}", content);
                                     }
+
                                     // flush stdout
                                     std::io::stdout().flush().unwrap();
                                 }
@@ -1213,6 +1228,7 @@ async fn main() {
             &llm_host,
             &llm_path,
             debug_inline,
+            args.break_line_length,
         )
         .await
         .unwrap_or_else(|_| Vec::new());
