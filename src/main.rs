@@ -404,6 +404,15 @@ struct Args {
     )]
     no_progress: bool,
 
+    /// Loglevel, control rust log level
+    #[clap(
+        long,
+        env = "LOGLEVEL",
+        default_value = "",
+        help = "Loglevel, control rust log level, default is info."
+    )]
+    loglevel: String,
+
     /// Break Line Length - line length for breaking lines from LLM messages, default is 120
     #[clap(
         long,
@@ -803,9 +812,38 @@ async fn main() {
 
     let args = Args::parse();
 
+    // set Rust log level with --loglevel if it is set
+    let loglevel = args.loglevel.to_lowercase();
+    match loglevel.as_str() {
+        "error" => {
+            log::set_max_level(log::LevelFilter::Error);
+        }
+        "warn" => {
+            log::set_max_level(log::LevelFilter::Warn);
+        }
+        "info" => {
+            log::set_max_level(log::LevelFilter::Info);
+        }
+        "debug" => {
+            log::set_max_level(log::LevelFilter::Debug);
+        }
+        "trace" => {
+            log::set_max_level(log::LevelFilter::Trace);
+        }
+        _ => {
+            log::set_max_level(log::LevelFilter::Info);
+        }
+    }
+
     let openai_key = env::var("OPENAI_API_KEY")
         .ok()
         .unwrap_or_else(|| "NO_API_KEY".to_string());
+
+    if args.use_openai && openai_key == "NO_API_KEY" {
+        error!("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.");
+        std::process::exit(1);
+    }
+
     let system_prompt = args.system_prompt;
     let query = args.query;
 
