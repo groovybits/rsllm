@@ -116,7 +116,7 @@ struct Args {
     #[clap(
         long,
         env = "MODEL",
-        default_value = "",
+        default_value = "no-model-specified",
         help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
     )]
     model: String,
