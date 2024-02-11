@@ -682,7 +682,7 @@ async fn stream_completion(
                                         duration = std::time::Duration::new(1, 0);
                                     }
 
-                                    println!(
+                                    info!(
                                         "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
                                         choice.index,
                                         id,
