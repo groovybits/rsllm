@@ -7,3 +7,4 @@ target/release/rsllm \
     --system-prompt "you are able to say green or red depending on the system health determined from system stats analysis. you can draw tables of system metrics." \
     --ai-os-stats \
     $@
+

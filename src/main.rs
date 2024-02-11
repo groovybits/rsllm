@@ -22,7 +22,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::stream_data::{
-    identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
+    get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
@@ -53,7 +53,8 @@ struct Args {
     #[clap(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "you are able to say green or red depending on the mpegts stream health determined from packet analysis."
+        default_value = "You will recieve data in the prompt to analzye. You are able to say green or red depending on the data streams health determined from various forms of analysis as needed. The data is either system os stats or mpegts packets, you will know by the format and content which it is.",
+        help = "System prompt"
     )]
     system_prompt: String,
 
@@ -61,7 +62,7 @@ struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of mpegts packet streams.",
+        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of the stream of data shown above. It will be in older to newer order per sample period shown by the timestamps per period.",
         help = "Query to generate completions for"
     )]
     query: String,
@@ -76,7 +77,12 @@ struct Args {
     temperature: f32,
 
     /// Top P
-    #[clap(long, env = "TOP_P", default_value = "1.0", help = "Top P")]
+    #[clap(
+        long,
+        env = "TOP_P",
+        default_value = "1.0",
+        help = "Top P sampling, 0.0 to 1.0. Default is 1.0."
+    )]
     top_p: f32,
 
     /// Presence Penalty
@@ -110,7 +116,7 @@ struct Args {
     #[clap(
         long,
         env = "MODEL",
-        default_value = "gpt-4-turbo-preview",
+        default_value = "no-model-specified",
         help = "OpenAI LLM Model (N/A with local Llama2 based LLM)"
     )]
     model: String,
@@ -137,8 +143,8 @@ struct Args {
     #[clap(
         long,
         env = "LLM_HISTORY_SIZE",
-        default_value = "0",
-        help = "LLM History size, default is 0 (unlimited)."
+        default_value = "16768",
+        help = "LLM History size, default is 16768 (0 is unlimited)."
     )]
     llm_history_size: usize,
 
@@ -215,84 +221,188 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 7)]
+    #[clap(
+        long,
+        env = "AI_NETWORK_PACKET_COUNT",
+        default_value_t = 100,
+        help = "AI Network Packet Count, default is 100."
+    )]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
-    #[clap(long, env = "PCAP_STATS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "PCAP_STATS",
+        default_value_t = false,
+        help = "PCAP output capture stats mode, default is false."
+    )]
     pcap_stats: bool,
 
     /// Sets the batch size
-    #[clap(long, env = "PCAP_BATCH_SIZE", default_value_t = 7)]
+    #[clap(
+        long,
+        env = "PCAP_BATCH_SIZE",
+        default_value_t = 7,
+        help = "Sets the batch size, default is 7."
+    )]
     pcap_batch_size: usize,
 
     /// Sets the payload offset
-    #[clap(long, env = "PAYLOAD_OFFSET", default_value_t = 42)]
+    #[clap(
+        long,
+        env = "PAYLOAD_OFFSET",
+        default_value_t = 42,
+        help = "Sets the payload offset, default is 42."
+    )]
     payload_offset: usize,
 
     /// Sets the packet size
-    #[clap(long, env = "PACKET_SIZE", default_value_t = 188)]
+    #[clap(
+        long,
+        env = "PACKET_SIZE",
+        default_value_t = 188,
+        help = "Sets the packet size, default is 188."
+    )]
     packet_size: usize,
 
     /// Sets the pcap buffer size
-    #[clap(long, env = "BUFFER_SIZE", default_value_t = 1 * 1_358 * 1_000)]
+    #[clap(long, env = "BUFFER_SIZE", default_value_t = 1 * 1_358 * 1_000, help = "Sets the pcap buffer size, default is 1 * 1_358 * 1_000.")]
     buffer_size: i64,
 
     /// Sets the read timeout
-    #[clap(long, env = "READ_TIME_OUT", default_value_t = 60_000)]
+    #[clap(
+        long,
+        env = "READ_TIME_OUT",
+        default_value_t = 300_000,
+        help = "Sets the read timeout, default is 60_000."
+    )]
     read_time_out: i32,
 
     /// Sets the source device
-    #[clap(long, env = "SOURCE_DEVICE", default_value = "")]
+    #[clap(
+        long,
+        env = "SOURCE_DEVICE",
+        default_value = "",
+        help = "Sets the source device for pcap capture."
+    )]
     source_device: String,
 
     /// Sets the source IP
-    #[clap(long, env = "SOURCE_IP", default_value = "224.0.0.200")]
+    #[clap(
+        long,
+        env = "SOURCE_IP",
+        default_value = "224.0.0.200",
+        help = "Sets the source IP to capture for pcap."
+    )]
     source_ip: String,
 
     /// Sets the source protocol
-    #[clap(long, env = "SOURCE_PROTOCOL", default_value = "udp")]
+    #[clap(
+        long,
+        env = "SOURCE_PROTOCOL",
+        default_value = "udp",
+        help = "Sets the source protocol to capture for pcap."
+    )]
     source_protocol: String,
 
     /// Sets the source port
-    #[clap(long, env = "SOURCE_PORT", default_value_t = 10_000)]
+    #[clap(
+        long,
+        env = "SOURCE_PORT",
+        default_value_t = 10_000,
+        help = "Sets the source port to capture for pcap, default is 10000."
+    )]
     source_port: i32,
 
     /// Sets if wireless is used
-    #[clap(long, env = "USE_WIRELESS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "USE_WIRELESS",
+        default_value_t = false,
+        help = "Sets if wireless is used, default is false."
+    )]
     use_wireless: bool,
 
     /// Use promiscuous mode
-    #[clap(long, env = "PROMISCUOUS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "PROMISCUOUS",
+        default_value_t = false,
+        help = "Use promiscuous mode for network capture, default is false."
+    )]
     promiscuous: bool,
 
     /// PCAP immediate mode
-    #[clap(long, env = "IMMEDIATE_MODE", default_value_t = false)]
+    #[clap(
+        long,
+        env = "IMMEDIATE_MODE",
+        default_value_t = false,
+        help = "PCAP immediate mode, default is false."
+    )]
     immediate_mode: bool,
 
     /// Hexdump
-    #[clap(long, env = "HEXDUMP", default_value_t = false)]
+    #[clap(
+        long,
+        env = "HEXDUMP",
+        default_value_t = false,
+        help = "Hexdump mpegTS packets, default is false."
+    )]
     hexdump: bool,
 
     /// Show the TR101290 p1, p2 and p3 errors if any
-    #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
+    #[clap(
+        long,
+        env = "SHOW_TR101290",
+        default_value_t = false,
+        help = "Show the TR101290 p1, p2 and p3 errors if any, default is false."
+    )]
     show_tr101290: bool,
 
     /// PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000
-    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 1_000_000)]
+    #[clap(
+        long,
+        env = "PCAP_CHANNEL_SIZE",
+        default_value_t = 1_000_000,
+        help = "PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000."
+    )]
     pcap_channel_size: usize,
 
     /// DEBUG LLM Message History
-    #[clap(long, env = "DEBUG_LLM_HISTORY", default_value_t = false)]
+    #[clap(
+        long,
+        env = "DEBUG_LLM_HISTORY",
+        default_value_t = false,
+        help = "DEBUG LLM Message History, default is false."
+    )]
     debug_llm_history: bool,
 
     /// POLL Interval in ms, default to 60 seconds
-    #[clap(long, env = "POLL_INTERVAL", default_value_t = 60_000)]
+    #[clap(
+        long,
+        env = "POLL_INTERVAL",
+        default_value_t = 60_000,
+        help = "POLL Interval in ms, default to 60 seconds."
+    )]
     poll_interval: u64,
 
     /// Turn off progress output dots
-    #[clap(long, env = "NO_PROGRESS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "NO_PROGRESS",
+        default_value_t = false,
+        help = "Turn off progress output dots, default is false."
+    )]
     no_progress: bool,
+
+    /// Break Line Length - line length for breaking lines from LLM messages, default is 120
+    #[clap(
+        long,
+        env = "BREAK_LINE_LENGTH",
+        default_value_t = 120,
+        help = "Break Line Length - line length for breaking lines from LLM messages, default is 120."
+    )]
+    break_line_length: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -338,6 +448,42 @@ struct Delta {
     content: Option<String>,
 }
 
+// Function to process and print content tokens.
+fn process_and_print_token(token: &str, current_line_length: &mut usize, break_line_length: usize) {
+    let token_length = token.chars().count();
+
+    // Check if adding this token exceeds the line length limit.
+    if *current_line_length + token_length > break_line_length {
+        // Find an opportune break point in the token if it's too long by itself.
+        if token_length > break_line_length {
+            let mut last_break_point = 0;
+            for (i, c) in token.char_indices() {
+                if c.is_ascii_punctuation() || c.is_whitespace() {
+                    last_break_point = i;
+                }
+                // Break the token at the last break point if exceeding the line length.
+                if i - last_break_point > break_line_length {
+                    println!("{}", &token[last_break_point..i]);
+                    *current_line_length = 0; // Reset the line length after printing.
+                    last_break_point = i; // Update the last break point.
+                }
+            }
+            // Print the remaining part of the token.
+            print!("{}", &token[last_break_point..]);
+            *current_line_length = token_length - last_break_point;
+        } else {
+            // If the current token doesn't exceed the limit by itself, just break the line before printing it.
+            println!(); // Print a newline to break the line.
+            print!("{}", token); // Print the current token at the start of a new line.
+            *current_line_length = token_length; // Reset the line length to the current token's length.
+        }
+    } else {
+        // If adding the token doesn't exceed the limit, just print it.
+        print!("{}", token);
+        *current_line_length += token_length; // Update the current line length.
+    }
+}
+
 /*
  * {"choices":[{"finish_reason":"stop","index":0,"message":{"content":"The Los Angeles Dodgers won
  * the World Series in 2020. They defeated the Tampa Bay Rays in six
@@ -350,8 +496,15 @@ async fn stream_completion(
     llm_host: &str,
     llm_path: &str,
     debug_inline: bool,
+    break_line_length: usize,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
+
+    // measure messages member size of the content member of each pair of the messages array
+    let mut prompt_token_count = 0;
+    for message in &open_ai_request.messages {
+        prompt_token_count += message.content.split_whitespace().count();
+    }
 
     let mut response_messages = Vec::new(); // Collect messages here
 
@@ -374,23 +527,36 @@ async fn stream_completion(
 
     let mut token_count = 0;
     let mut byte_count = 0;
+    let mut current_line_length = 0;
     let mut loop_count = 0;
     // errors are strings
 
-    println!("\nResponse status: {}\n---\n", response.status());
-    debug!("Headers: {:#?}\n---\n", response.headers());
     if !open_ai_request.stream {
-        println!("Body: {}\n---\n", response.text().await?);
+        info!("Response status: {}", response.status());
+        info!("Headers: {:#?}", response.headers());
+        println!("\nLLM Response:\n  {}\n---\n", response.text().await?);
     } else {
         // Create an mpsc channel
         let (tx, mut rx) = mpsc::channel::<Bytes>(32);
         let (etx, mut erx) = mpsc::channel::<String>(32);
 
+        let headers = response.headers().clone(); // Clone the headers
+        let status = response.status(); // Copy the status as well since it's Copy
+
         // loop through the chunks
         // Spawn a new task for each chunk to process it asynchronously
         let worker = tokio::spawn(async move {
+            let mut first_run = true;
             while let Some(chunk) = rx.recv().await {
                 loop_count += 1;
+
+                if first_run {
+                    // print headers properly without causing a borrow error
+                    info!("Headers: {:#?}", headers);
+                    info!("Response status: {}", status);
+                }
+
+                first_run = false;
 
                 debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
                 let chunk_vec = Vec::from(chunk.as_ref());
@@ -494,7 +660,7 @@ async fn stream_completion(
                                     let pretty_time = format!("{:?}", duration);
 
                                     println!(
-                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {} at {} tokens per second and {} seconds to complete.\n--\n",
+                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
                                         choice.index,
                                         id,
                                         object,
@@ -502,9 +668,11 @@ async fn stream_completion(
                                         role,
                                         created_date,
                                         reason,
+                                        token_count + prompt_token_count,
+                                        prompt_token_count,
                                         token_count,
                                         byte_count,
-                                        token_count / duration.as_secs(),
+                                        token_count as u64 / duration.as_secs(),
                                         pretty_time
                                     );
 
@@ -529,7 +697,13 @@ async fn stream_completion(
                                     etx.send(format!("{}", content))
                                         .await
                                         .expect("Failed to send content");
-                                    print!("{}", content);
+
+                                    process_and_print_token(
+                                        content,
+                                        &mut current_line_length,
+                                        break_line_length,
+                                    );
+
                                     // flush stdout
                                     std::io::stdout().flush().unwrap();
                                 }
@@ -652,6 +826,7 @@ async fn main() {
     let mut is_mpegts = true; // Default to true, update based on actual packet type
 
     let (ptx, mut prx) = mpsc::channel::<Arc<Vec<u8>>>(args.pcap_channel_size);
+    let (batch_tx, mut batch_rx) = mpsc::channel::<String>(args.pcap_channel_size); // Channel for passing processed packets to main logic
     let mut network_capture_config = NetworkCapture {
         running: Arc::new(AtomicBool::new(true)),
         dpdk: false,
@@ -680,157 +855,235 @@ async fn main() {
         println!("Network capture started");
     }
 
-    let mut decode_batch = Vec::new();
-    let mut video_pid: Option<u16> = Some(0xFFFF);
-    let mut video_codec: Option<Codec> = Some(Codec::NONE);
-    let mut current_video_frame = Vec::<StreamData>::new();
-    let mut pmt_info: PmtInfo = PmtInfo {
-        pid: 0xFFFF,
-        packet: Vec::new(),
-    };
+    let processing_handle = tokio::spawn(async move {
+        let mut decode_batch = Vec::new();
+        let mut video_pid: Option<u16> = Some(0xFFFF);
+        let mut video_codec: Option<Codec> = Some(Codec::NONE);
+        let mut current_video_frame = Vec::<StreamData>::new();
+        let mut pmt_info: PmtInfo = PmtInfo {
+            pid: 0xFFFF,
+            packet: Vec::new(),
+        };
 
-    let poll_interval = args.poll_interval;
-    let mut poll_start_time = 0;
-    let mut dot_last_sent_ts = Instant::now();
-    loop {
-        if ai_network_stats {
-            debug!("Capturing network packets...");
-            if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
-                dot_last_sent_ts = Instant::now();
-                print!(".");
-                // Flush stdout to ensure the progress dots are printed
-                io::stdout().flush().unwrap();
-            }
-            let mut count = 0;
-            while let Some(packet) = prx.recv().await {
-                debug!("--- Received packet with size: {} bytes", packet.len());
+        let mut packet_last_sent_ts = Instant::now();
+        let mut count = 0;
+        loop {
+            if ai_network_stats {
+                debug!("Capturing network packets...");
+                while let Some(packet) = prx.recv().await {
+                    count += 1;
+                    debug!(
+                        "#{} --- Received packet with size: {} bytes",
+                        count,
+                        packet.len()
+                    );
 
-                // Check if chunk is MPEG-TS or SMPTE 2110
-                let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
-                if chunk_type != 1 {
-                    if chunk_type == 0 {
-                        hexdump(&packet, 0, packet.len());
-                        error!("Not MPEG-TS or SMPTE 2110");
-                    }
-                    is_mpegts = false;
-                }
-
-                // Process the packet here
-                let chunks = if is_mpegts {
-                    process_mpegts_packet(args.payload_offset, packet, args.packet_size, start_time)
-                } else {
-                    process_smpte2110_packet(
-                        args.payload_offset,
-                        packet,
-                        args.packet_size,
-                        start_time,
-                        false,
-                    )
-                };
-
-                // Process each chunk
-                for mut stream_data in chunks {
-                    // check for null packets of the pid 8191 0x1FFF and skip them
-                    if stream_data.pid >= 0x1FFF {
-                        debug!("Skipping null packet");
-                        continue;
+                    // Check if chunk is MPEG-TS or SMPTE 2110
+                    let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
+                    if chunk_type != 1 {
+                        if chunk_type == 0 {
+                            hexdump(&packet, 0, packet.len());
+                            error!("Not MPEG-TS or SMPTE 2110");
+                        }
+                        is_mpegts = false;
                     }
 
-                    if args.hexdump {
-                        hexdump(
-                            &stream_data.packet,
-                            stream_data.packet_start,
-                            stream_data.packet_len,
-                        );
-                    }
+                    // Process the packet here
+                    let chunks = if is_mpegts {
+                        process_mpegts_packet(
+                            args.payload_offset,
+                            packet,
+                            args.packet_size,
+                            start_time,
+                        )
+                    } else {
+                        process_smpte2110_packet(
+                            args.payload_offset,
+                            packet,
+                            args.packet_size,
+                            start_time,
+                            false,
+                        )
+                    };
 
-                    // Extract the necessary slice for PID extraction and parsing
-                    let packet_chunk = &stream_data.packet[stream_data.packet_start
-                        ..stream_data.packet_start + stream_data.packet_len];
+                    // Process each chunk
+                    for mut stream_data in chunks {
+                        // check for null packets of the pid 8191 0x1FFF and skip them
+                        if stream_data.pid >= 0x1FFF {
+                            debug!("Skipping null packet");
+                            continue;
+                        }
 
-                    if is_mpegts {
-                        let pid = stream_data.pid;
-                        // Handle PAT and PMT packets
-                        match pid {
-                            PAT_PID => {
-                                debug!("ProcessPacket: PAT packet detected with PID {}", pid);
-                                pmt_info = parse_and_store_pat(&packet_chunk);
-                                // Print TR 101 290 errors
-                                if args.show_tr101290 {
-                                    info!("STATUS::TR101290:ERRORS: {}", tr101290_errors);
+                        if args.hexdump {
+                            hexdump(
+                                &stream_data.packet,
+                                stream_data.packet_start,
+                                stream_data.packet_len,
+                            );
+                        }
+
+                        // Extract the necessary slice for PID extraction and parsing
+                        let packet_chunk = &stream_data.packet[stream_data.packet_start
+                            ..stream_data.packet_start + stream_data.packet_len];
+
+                        if is_mpegts {
+                            let pid = stream_data.pid;
+                            // Handle PAT and PMT packets
+                            match pid {
+                                PAT_PID => {
+                                    debug!("ProcessPacket: PAT packet detected with PID {}", pid);
+                                    pmt_info = parse_and_store_pat(&packet_chunk);
+                                    // Print TR 101 290 errors
+                                    if args.show_tr101290 {
+                                        info!("STATUS::TR101290:ERRORS: {}", tr101290_errors);
+                                    }
                                 }
-                            }
-                            _ => {
-                                // Check if this is a PMT packet
-                                if pid == pmt_info.pid {
-                                    debug!("ProcessPacket: PMT packet detected with PID {}", pid);
-                                    // Update PID_MAP with new stream types
-                                    update_pid_map(&packet_chunk, &pmt_info.packet);
-                                    // Identify the video PID (if not already identified)
-                                    if let Some((new_pid, new_codec)) =
-                                        identify_video_pid(&packet_chunk)
-                                    {
-                                        if video_pid.map_or(true, |vp| vp != new_pid) {
-                                            video_pid = Some(new_pid);
-                                            info!(
-                                                "STATUS::VIDEO_PID:CHANGE: to {}/{} from {}/{}",
-                                                new_pid,
-                                                new_codec.clone(),
-                                                video_pid.unwrap(),
-                                                video_codec.unwrap()
-                                            );
-                                            video_codec = Some(new_codec.clone());
-                                            // Reset video frame as the video stream has changed
-                                            current_video_frame.clear();
-                                        } else if video_codec != Some(new_codec.clone()) {
-                                            info!(
-                                                "STATUS::VIDEO_CODEC:CHANGE: to {} from {}",
-                                                new_codec,
-                                                video_codec.unwrap()
-                                            );
-                                            video_codec = Some(new_codec);
-                                            // Reset video frame as the codec has changed
-                                            current_video_frame.clear();
+                                _ => {
+                                    // Check if this is a PMT packet
+                                    if pid == pmt_info.pid {
+                                        debug!(
+                                            "ProcessPacket: PMT packet detected with PID {}",
+                                            pid
+                                        );
+                                        // Update PID_MAP with new stream types
+                                        update_pid_map(&packet_chunk, &pmt_info.packet);
+                                        // Identify the video PID (if not already identified)
+                                        if let Some((new_pid, new_codec)) =
+                                            identify_video_pid(&packet_chunk)
+                                        {
+                                            if video_pid.map_or(true, |vp| vp != new_pid) {
+                                                video_pid = Some(new_pid);
+                                                info!(
+                                                    "STATUS::VIDEO_PID:CHANGE: to {}/{} from {}/{}",
+                                                    new_pid,
+                                                    new_codec.clone(),
+                                                    video_pid.unwrap(),
+                                                    video_codec.unwrap()
+                                                );
+                                                video_codec = Some(new_codec.clone());
+                                                // Reset video frame as the video stream has changed
+                                                current_video_frame.clear();
+                                            } else if video_codec != Some(new_codec.clone()) {
+                                                info!(
+                                                    "STATUS::VIDEO_CODEC:CHANGE: to {} from {}",
+                                                    new_codec,
+                                                    video_codec.unwrap()
+                                                );
+                                                video_codec = Some(new_codec);
+                                                // Reset video frame as the codec has changed
+                                                current_video_frame.clear();
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+
+                        // Check for TR 101 290 errors
+                        process_packet(
+                            &mut stream_data,
+                            &mut tr101290_errors,
+                            is_mpegts,
+                            pmt_info.pid,
+                        );
+                        count += 1;
+
+                        decode_batch.push(stream_data);
                     }
 
-                    // Check for TR 101 290 errors
-                    process_packet(
-                        &mut stream_data,
-                        &mut tr101290_errors,
-                        is_mpegts,
-                        pmt_info.pid,
-                    );
-                    count += 1;
+                    // check if it is 60 seconds since the last packet was sent
+                    let last_packet_sent = packet_last_sent_ts.elapsed().as_secs();
 
-                    decode_batch.push(stream_data);
-                }
+                    // If the batch is full, process it
+                    if args.poll_interval == 0
+                        || (last_packet_sent > (args.poll_interval / 1000)
+                            && decode_batch.len() > args.ai_network_packet_count)
+                    {
+                        let mut network_packet_dump: String = String::new();
+                        packet_last_sent_ts = Instant::now();
 
-                if count > args.ai_network_packet_count {
-                    break;
+                        network_packet_dump.push_str("\n");
+                        // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
+                        for stream_data in &decode_batch {
+                            if !args.ai_network_metadata_off || !args.ai_network_hexdump {
+                                let stream_data_json = serde_json::to_string(&stream_data).unwrap();
+                                network_packet_dump.push_str(&stream_data_json);
+                                network_packet_dump.push_str("\n");
+                            }
+
+                            // hex of the packet_chunk with ascii representation after | for each line
+                            if args.ai_network_hexdump || args.ai_network_metadata_off {
+                                // Extract the necessary slice for PID extraction and parsing
+                                let packet_chunk = &stream_data.packet[stream_data.packet_start
+                                    ..stream_data.packet_start + stream_data.packet_len];
+
+                                network_packet_dump.push_str(&hexdump_ascii(
+                                    &packet_chunk,
+                                    0,
+                                    (stream_data.packet_start + stream_data.packet_len)
+                                        - stream_data.packet_start,
+                                ));
+                            }
+
+                            network_packet_dump.push_str("\n");
+                        }
+                        // get PID_MAP and each stream data in json format and send it to the main thread
+                        // get pretty date and time
+                        let pretty_date_time = format!(
+                            "#{}: {}",
+                            count,
+                            chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+                        );
+                        let pid_map = format!("{}: {}", pretty_date_time, get_pid_map());
+                        //debug!("PID_MAP: {}", pid_map);
+                        network_packet_dump.push_str(&pid_map);
+
+                        // Send the network packet dump to the Main thread
+                        if let Err(e) = batch_tx.send(network_packet_dump.clone()).await {
+                            eprintln!("Failed to send decode batch: {}", e);
+                        }
+
+                        // empty decode_batch
+                        decode_batch.clear();
+                    }
                 }
+            } else {
+                // sleep for a while to avoid busy loop
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
+    });
+
+    let poll_interval = args.poll_interval;
+    let mut poll_start_time = 0;
+    let mut dot_last_sent_ts = Instant::now();
+    let mut count = 0;
+    loop {
         // keep track of poll interval ms to wait for the next poll
         let poll_elapsed_time = current_unix_timestamp_ms().unwrap_or(0) - poll_start_time;
-        if poll_elapsed_time < poll_interval {
-            if !ai_network_stats {
-                // Sleep for the remaining time to reach the poll interval
-                tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
-                // Start the periodic task with the specified interval
-                debug!(
-                    "Running after sleeping {} ms",
-                    poll_interval - poll_elapsed_time
-                );
-            } else {
-                continue;
+        if poll_interval > 0 && poll_elapsed_time < poll_interval {
+            // Sleep for the remaining time to reach the poll interval
+            info!("Sleeping for {} ms", poll_interval - poll_elapsed_time);
+            let time_to_wait = poll_interval - poll_elapsed_time;
+            while dot_last_sent_ts.elapsed().as_millis() < time_to_wait as u128 {
+                // show a spinner to indicate the process is running
+                print!("|");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                print!("\r");
+                print!("__");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                print!("\r");
             }
+            //tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
+            // Start the periodic task with the specified interval
+            info!(
+                "Running after sleeping {} ms",
+                poll_interval - poll_elapsed_time
+            );
         }
         poll_start_time = current_unix_timestamp_ms().unwrap_or(0);
+
+        count += 1;
 
         // OS and Network stats message
         let system_stats_json = if ai_os_stats {
@@ -849,45 +1102,53 @@ async fn main() {
             messages.push(user_message.clone());
         } else if ai_network_stats {
             // create nework packet dump message from collected stream_data in decode_batch
-            let mut network_packet_dump: String = String::new();
-
-            network_packet_dump.push_str("\n");
-            // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
-            for stream_data in &decode_batch {
-                if !args.ai_network_metadata_off || !args.ai_network_hexdump {
-                    let stream_data_json = serde_json::to_string(&stream_data).unwrap();
-                    network_packet_dump.push_str(&stream_data_json);
-                    network_packet_dump.push_str("\n");
+            // Try to receive new packet batches if available
+            let mut msg_count = 0;
+            while let Ok(decode_batch) = batch_rx.try_recv() {
+                if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
+                    dot_last_sent_ts = Instant::now();
+                    print!("*");
+                    // Flush stdout to ensure the progress dots are printed
+                    io::stdout().flush().unwrap();
                 }
-
-                // hex of the packet_chunk with ascii representation after | for each line
-                if args.ai_network_hexdump || args.ai_network_metadata_off {
-                    // Extract the necessary slice for PID extraction and parsing
-                    let packet_chunk = &stream_data.packet[stream_data.packet_start
-                        ..stream_data.packet_start + stream_data.packet_len];
-
-                    network_packet_dump.push_str(&hexdump_ascii(
-                        &packet_chunk,
-                        0,
-                        (stream_data.packet_start + stream_data.packet_len)
-                            - stream_data.packet_start,
-                    ));
+                msg_count += 1;
+                //debug!("Received network packet dump message: {}", decode_batch);
+                // Handle the received decode_batch here...
+                // get current pretty date and time
+                let pretty_date_time = format!(
+                    "#{}: {} -",
+                    count,
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+                );
+                let network_stats_message = Message {
+                    role: "user".to_string(),
+                    content: format!(
+                        "{} System Stats: {}\nPackets: {}\nInstructions: {}\n",
+                        pretty_date_time,
+                        system_stats_json.to_string(),
+                        decode_batch,
+                        query
+                    ),
+                };
+                messages.push(network_stats_message.clone());
+                if msg_count >= 1 {
+                    break;
                 }
-
-                network_packet_dump.push_str("\n");
             }
-            // empty decode_batch
-            decode_batch.clear();
-
-            let network_stats_message = Message {
-                role: "user".to_string(),
-                content: format!("{}\n{}\n", network_packet_dump.to_string(), query),
-            };
-            messages.push(network_stats_message.clone());
-        } else {
+        } else if ai_os_stats {
+            let pretty_date_time = format!(
+                "#{}: {} - ",
+                count,
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+            );
             let system_stats_message = Message {
                 role: "user".to_string(),
-                content: format!("{}: {}", query, system_stats_json.to_string()),
+                content: format!(
+                    "{} System Stats: {}\nInstructions: {}",
+                    pretty_date_time,
+                    system_stats_json.to_string(),
+                    query
+                ),
             };
             messages.push(system_stats_message.clone());
         }
@@ -895,11 +1156,12 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
+            info!("---");
             info!("Messages:");
             for message in &messages {
                 info!("{}: {}", message.role, message.content);
             }
-            info!("");
+            info!("---");
         }
 
         // measure size of messages in bytes and print it out
@@ -962,14 +1224,16 @@ async fn main() {
         }
 
         // Debug print to show the content sizes and roles
-        info!("Message History:");
-        for (i, message) in messages.iter().enumerate() {
-            info!(
-                "Message {} - Role: {}, Size: {}",
-                i + 1,
-                message.role,
-                message.content.len()
-            );
+        if args.debug_llm_history {
+            debug!("Message History:");
+            for (i, message) in messages.iter().enumerate() {
+                debug!(
+                    "Message {} - Role: {}, Size: {}",
+                    i + 1,
+                    message.role,
+                    message.content.len()
+                );
+            }
         }
 
         // Stream API Completion
@@ -992,6 +1256,7 @@ async fn main() {
             &llm_host,
             &llm_path,
             debug_inline,
+            args.break_line_length,
         )
         .await
         .unwrap_or_else(|_| Vec::new());
@@ -1019,4 +1284,7 @@ async fn main() {
             .running
             .store(false, Ordering::SeqCst);
     }
+
+    // Await the completion of background tasks
+    let _ = processing_handle.await;
 }
