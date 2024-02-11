@@ -1059,29 +1059,12 @@ async fn main() {
     let mut poll_start_time = Instant::now();
     let mut dot_last_sent_ts = Instant::now();
     info!(
-        "Starting up: waiting for poll interval of {} seconds till we start analyzing...",
+        "Starting up RsLLM with poll intervale of {} seconds...",
         poll_interval_duration.as_secs()
     );
     let mut count = 0;
     loop {
         count += 1;
-
-        // Calculate elapsed time since last start
-        let elapsed = poll_start_time.elapsed();
-
-        // Sleep only if the elapsed time is less than the poll interval
-        if elapsed < poll_interval_duration {
-            // Sleep only if the elapsed time is less than the poll interval
-            info!(
-                "Sleeping for {} ms...",
-                poll_interval_duration.as_millis() - elapsed.as_millis()
-            );
-            tokio::time::sleep(poll_interval_duration - elapsed).await;
-            info!("Running after sleeping...");
-        }
-
-        // Update start time for the next iteration
-        poll_start_time = Instant::now();
 
         // OS and Network stats message
         let system_stats_json = if ai_os_stats {
@@ -1274,6 +1257,23 @@ async fn main() {
         if !args.daemon {
             break;
         }
+
+        // Calculate elapsed time since last start
+        let elapsed = poll_start_time.elapsed();
+
+        // Sleep only if the elapsed time is less than the poll interval
+        if elapsed < poll_interval_duration {
+            // Sleep only if the elapsed time is less than the poll interval
+            info!(
+                "Sleeping for {} ms...",
+                poll_interval_duration.as_millis() - elapsed.as_millis()
+            );
+            tokio::time::sleep(poll_interval_duration - elapsed).await;
+            info!("Running after sleeping...");
+        }
+
+        // Update start time for the next iteration
+        poll_start_time = Instant::now();
     }
 
     // Close the network capture if ai_network_stats is true
