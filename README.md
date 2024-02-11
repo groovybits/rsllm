@@ -95,17 +95,19 @@ Use the scripts in the [./scripts](./scripts/) directory.
 #### Command-Line Options:
 
 ```bash
+Rust LLM - AI System/Network/Stream Analyzer
+
 Usage: rsllm [OPTIONS]
 
 Options:
       --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "you are able to say green or red depending on the mpegts stream health determined from packet analysis."]
+          System prompt [env: SYSTEM_PROMPT=] [default: "You will recieve data in the prompt to analzye. You are able to say green or red depending on the data streams health determined from various forms of analysis as needed. The data is either system os stats or mpegts packets, you will know by the format and content which it is."]
       --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of mpegts packet streams."]
+          Query to generate completions for [env: QUERY=] [default: "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of the stream of data shown above. It will be in older to newer order per sample period shown by the timestamps per period."]
       --temperature <TEMPERATURE>
           Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
       --top-p <TOP_P>
-          Top P [env: TOP_P=] [default: 1.0]
+          Top P sampling, 0.0 to 1.0. Default is 1.0. [env: TOP_P=] [default: 1.0]
       --presence-penalty <PRESENCE_PENALTY>
           Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: PRESENCE_PENALTY=] [default: 0.0]
       --frequency-penalty <FREQUENCY_PENALTY>
@@ -119,7 +121,7 @@ Options:
       --llm-path <LLM_PATH>
           LLM Url path for completions, default is /v1/chat/completions. [env: LLM_PATH=] [default: /v1/chat/completions]
       --llm-history-size <LLM_HISTORY_SIZE>
-          LLM History size, default is 0 (unlimited). [env: LLM_HISTORY_SIZE=] [default: 0]
+          LLM History size, default is 16768 (0 is unlimited). [env: LLM_HISTORY_SIZE=] [default: 16768]
       --no-stream
           Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
       --use-openai
@@ -137,45 +139,45 @@ Options:
       --ai-network-metadata-off
           Turn off ai metadata network packet processing, only hexdump, default is false. [env: AI_NETWORK_METADATA_OFF=]
       --ai-network-packet-count <AI_NETWORK_PACKET_COUNT>
-          AI Network Packet Count [env: AI_NETWORK_PACKET_COUNT=] [default: 7]
+          AI Network Packet Count, default is 100. [env: AI_NETWORK_PACKET_COUNT=] [default: 100]
       --pcap-stats
-          PCAP output capture stats mode [env: PCAP_STATS=]
+          PCAP output capture stats mode, default is false. [env: PCAP_STATS=]
       --pcap-batch-size <PCAP_BATCH_SIZE>
-          Sets the batch size [env: PCAP_BATCH_SIZE=] [default: 7]
+          Sets the batch size, default is 7. [env: PCAP_BATCH_SIZE=] [default: 7]
       --payload-offset <PAYLOAD_OFFSET>
-          Sets the payload offset [env: PAYLOAD_OFFSET=] [default: 42]
+          Sets the payload offset, default is 42. [env: PAYLOAD_OFFSET=] [default: 42]
       --packet-size <PACKET_SIZE>
-          Sets the packet size [env: PACKET_SIZE=] [default: 188]
+          Sets the packet size, default is 188. [env: PACKET_SIZE=] [default: 188]
       --buffer-size <BUFFER_SIZE>
-          Sets the pcap buffer size [env: BUFFER_SIZE=] [default: 1358000]
+          Sets the pcap buffer size, default is 1 * 1_358 * 1_000. [env: BUFFER_SIZE=] [default: 1358000]
       --read-time-out <READ_TIME_OUT>
-          Sets the read timeout [env: READ_TIME_OUT=] [default: 60000]
+          Sets the read timeout, default is 60_000. [env: READ_TIME_OUT=] [default: 300000]
       --source-device <SOURCE_DEVICE>
-          Sets the source device [env: SOURCE_DEVICE=] [default: ]
+          Sets the source device for pcap capture. [env: SOURCE_DEVICE=] [default: ]
       --source-ip <SOURCE_IP>
-          Sets the source IP [env: SOURCE_IP=] [default: 224.0.0.200]
+          Sets the source IP to capture for pcap. [env: SOURCE_IP=] [default: 224.0.0.200]
       --source-protocol <SOURCE_PROTOCOL>
-          Sets the source protocol [env: SOURCE_PROTOCOL=] [default: udp]
+          Sets the source protocol to capture for pcap. [env: SOURCE_PROTOCOL=] [default: udp]
       --source-port <SOURCE_PORT>
-          Sets the source port [env: SOURCE_PORT=] [default: 10000]
+          Sets the source port to capture for pcap, default is 10000. [env: SOURCE_PORT=] [default: 10000]
       --use-wireless
-          Sets if wireless is used [env: USE_WIRELESS=]
+          Sets if wireless is used, default is false. [env: USE_WIRELESS=]
       --promiscuous
-          Use promiscuous mode [env: PROMISCUOUS=]
+          Use promiscuous mode for network capture, default is false. [env: PROMISCUOUS=]
       --immediate-mode
-          PCAP immediate mode [env: IMMEDIATE_MODE=]
+          PCAP immediate mode, default is false. [env: IMMEDIATE_MODE=]
       --hexdump
-          Hexdump [env: HEXDUMP=]
+          Hexdump mpegTS packets, default is false. [env: HEXDUMP=]
       --show-tr101290
-          Show the TR101290 p1, p2 and p3 errors if any [env: SHOW_TR101290=]
+          Show the TR101290 p1, p2 and p3 errors if any, default is false. [env: SHOW_TR101290=]
       --pcap-channel-size <PCAP_CHANNEL_SIZE>
-          PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000 [env: PCAP_CHANNEL_SIZE=] [default: 1000000]
+          PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000. [env: PCAP_CHANNEL_SIZE=] [default: 1000000]
       --debug-llm-history
-          DEBUG LLM Message History [env: DEBUG_LLM_HISTORY=]
+          DEBUG LLM Message History, default is false. [env: DEBUG_LLM_HISTORY=]
       --poll-interval <POLL_INTERVAL>
-          POLL Interval in ms, default to 60 seconds [env: POLL_INTERVAL=] [default: 60000]
+          POLL Interval in ms, default to 60 seconds. [env: POLL_INTERVAL=] [default: 60000]
       --no-progress
-          Turn off progress output dots [env: NO_PROGRESS=]
+          Turn off progress output dots, default is false. [env: NO_PROGRESS=]
   -h, --help
           Print help
   -V, --version

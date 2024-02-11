@@ -53,7 +53,8 @@ struct Args {
     #[clap(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "you are able to say green or red depending on the mpegts stream health determined from packet analysis."
+        default_value = "You will recieve data in the prompt to analzye. You are able to say green or red depending on the data streams health determined from various forms of analysis as needed. The data is either system os stats or mpegts packets, you will know by the format and content which it is.",
+        help = "System prompt"
     )]
     system_prompt: String,
 
@@ -61,7 +62,7 @@ struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of mpegts packet streams.",
+        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of the stream of data shown above. It will be in older to newer order per sample period shown by the timestamps per period.",
         help = "Query to generate completions for"
     )]
     query: String,
@@ -76,7 +77,12 @@ struct Args {
     temperature: f32,
 
     /// Top P
-    #[clap(long, env = "TOP_P", default_value = "1.0", help = "Top P")]
+    #[clap(
+        long,
+        env = "TOP_P",
+        default_value = "1.0",
+        help = "Top P sampling, 0.0 to 1.0. Default is 1.0."
+    )]
     top_p: f32,
 
     /// Presence Penalty
@@ -137,8 +143,8 @@ struct Args {
     #[clap(
         long,
         env = "LLM_HISTORY_SIZE",
-        default_value = "0",
-        help = "LLM History size, default is 0 (unlimited)."
+        default_value = "16768",
+        help = "LLM History size, default is 16768 (0 is unlimited)."
     )]
     llm_history_size: usize,
 
@@ -215,83 +221,178 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 100)]
+    #[clap(
+        long,
+        env = "AI_NETWORK_PACKET_COUNT",
+        default_value_t = 100,
+        help = "AI Network Packet Count, default is 100."
+    )]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
-    #[clap(long, env = "PCAP_STATS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "PCAP_STATS",
+        default_value_t = false,
+        help = "PCAP output capture stats mode, default is false."
+    )]
     pcap_stats: bool,
 
     /// Sets the batch size
-    #[clap(long, env = "PCAP_BATCH_SIZE", default_value_t = 7)]
+    #[clap(
+        long,
+        env = "PCAP_BATCH_SIZE",
+        default_value_t = 7,
+        help = "Sets the batch size, default is 7."
+    )]
     pcap_batch_size: usize,
 
     /// Sets the payload offset
-    #[clap(long, env = "PAYLOAD_OFFSET", default_value_t = 42)]
+    #[clap(
+        long,
+        env = "PAYLOAD_OFFSET",
+        default_value_t = 42,
+        help = "Sets the payload offset, default is 42."
+    )]
     payload_offset: usize,
 
     /// Sets the packet size
-    #[clap(long, env = "PACKET_SIZE", default_value_t = 188)]
+    #[clap(
+        long,
+        env = "PACKET_SIZE",
+        default_value_t = 188,
+        help = "Sets the packet size, default is 188."
+    )]
     packet_size: usize,
 
     /// Sets the pcap buffer size
-    #[clap(long, env = "BUFFER_SIZE", default_value_t = 1 * 1_358 * 1_000)]
+    #[clap(long, env = "BUFFER_SIZE", default_value_t = 1 * 1_358 * 1_000, help = "Sets the pcap buffer size, default is 1 * 1_358 * 1_000.")]
     buffer_size: i64,
 
     /// Sets the read timeout
-    #[clap(long, env = "READ_TIME_OUT", default_value_t = 60_000)]
+    #[clap(
+        long,
+        env = "READ_TIME_OUT",
+        default_value_t = 300_000,
+        help = "Sets the read timeout, default is 60_000."
+    )]
     read_time_out: i32,
 
     /// Sets the source device
-    #[clap(long, env = "SOURCE_DEVICE", default_value = "")]
+    #[clap(
+        long,
+        env = "SOURCE_DEVICE",
+        default_value = "",
+        help = "Sets the source device for pcap capture."
+    )]
     source_device: String,
 
     /// Sets the source IP
-    #[clap(long, env = "SOURCE_IP", default_value = "224.0.0.200")]
+    #[clap(
+        long,
+        env = "SOURCE_IP",
+        default_value = "224.0.0.200",
+        help = "Sets the source IP to capture for pcap."
+    )]
     source_ip: String,
 
     /// Sets the source protocol
-    #[clap(long, env = "SOURCE_PROTOCOL", default_value = "udp")]
+    #[clap(
+        long,
+        env = "SOURCE_PROTOCOL",
+        default_value = "udp",
+        help = "Sets the source protocol to capture for pcap."
+    )]
     source_protocol: String,
 
     /// Sets the source port
-    #[clap(long, env = "SOURCE_PORT", default_value_t = 10_000)]
+    #[clap(
+        long,
+        env = "SOURCE_PORT",
+        default_value_t = 10_000,
+        help = "Sets the source port to capture for pcap, default is 10000."
+    )]
     source_port: i32,
 
     /// Sets if wireless is used
-    #[clap(long, env = "USE_WIRELESS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "USE_WIRELESS",
+        default_value_t = false,
+        help = "Sets if wireless is used, default is false."
+    )]
     use_wireless: bool,
 
     /// Use promiscuous mode
-    #[clap(long, env = "PROMISCUOUS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "PROMISCUOUS",
+        default_value_t = false,
+        help = "Use promiscuous mode for network capture, default is false."
+    )]
     promiscuous: bool,
 
     /// PCAP immediate mode
-    #[clap(long, env = "IMMEDIATE_MODE", default_value_t = false)]
+    #[clap(
+        long,
+        env = "IMMEDIATE_MODE",
+        default_value_t = false,
+        help = "PCAP immediate mode, default is false."
+    )]
     immediate_mode: bool,
 
     /// Hexdump
-    #[clap(long, env = "HEXDUMP", default_value_t = false)]
+    #[clap(
+        long,
+        env = "HEXDUMP",
+        default_value_t = false,
+        help = "Hexdump mpegTS packets, default is false."
+    )]
     hexdump: bool,
 
     /// Show the TR101290 p1, p2 and p3 errors if any
-    #[clap(long, env = "SHOW_TR101290", default_value_t = false)]
+    #[clap(
+        long,
+        env = "SHOW_TR101290",
+        default_value_t = false,
+        help = "Show the TR101290 p1, p2 and p3 errors if any, default is false."
+    )]
     show_tr101290: bool,
 
     /// PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000
-    #[clap(long, env = "PCAP_CHANNEL_SIZE", default_value_t = 1_000_000)]
+    #[clap(
+        long,
+        env = "PCAP_CHANNEL_SIZE",
+        default_value_t = 1_000_000,
+        help = "PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000."
+    )]
     pcap_channel_size: usize,
 
     /// DEBUG LLM Message History
-    #[clap(long, env = "DEBUG_LLM_HISTORY", default_value_t = false)]
+    #[clap(
+        long,
+        env = "DEBUG_LLM_HISTORY",
+        default_value_t = false,
+        help = "DEBUG LLM Message History, default is false."
+    )]
     debug_llm_history: bool,
 
     /// POLL Interval in ms, default to 60 seconds
-    #[clap(long, env = "POLL_INTERVAL", default_value_t = 60)]
+    #[clap(
+        long,
+        env = "POLL_INTERVAL",
+        default_value_t = 60_000,
+        help = "POLL Interval in ms, default to 60 seconds."
+    )]
     poll_interval: u64,
 
     /// Turn off progress output dots
-    #[clap(long, env = "NO_PROGRESS", default_value_t = false)]
+    #[clap(
+        long,
+        env = "NO_PROGRESS",
+        default_value_t = false,
+        help = "Turn off progress output dots, default is false."
+    )]
     no_progress: bool,
 }
 
@@ -353,6 +454,12 @@ async fn stream_completion(
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
+    // measure messages member size of the content member of each pair of the messages array
+    let mut prompt_token_count = 0;
+    for message in &open_ai_request.messages {
+        prompt_token_count += message.content.split_whitespace().count();
+    }
+
     let mut response_messages = Vec::new(); // Collect messages here
 
     let start_time = Instant::now();
@@ -377,20 +484,32 @@ async fn stream_completion(
     let mut loop_count = 0;
     // errors are strings
 
-    println!("\nResponse status: {}\n---\n", response.status());
-    debug!("Headers: {:#?}\n---\n", response.headers());
     if !open_ai_request.stream {
-        println!("Body: {}\n---\n", response.text().await?);
+        info!("Response status: {}", response.status());
+        info!("Headers: {:#?}", response.headers());
+        println!("\nLLM Response:\n  {}\n---\n", response.text().await?);
     } else {
         // Create an mpsc channel
         let (tx, mut rx) = mpsc::channel::<Bytes>(32);
         let (etx, mut erx) = mpsc::channel::<String>(32);
 
+        let headers = response.headers().clone(); // Clone the headers
+        let status = response.status(); // Copy the status as well since it's Copy
+
         // loop through the chunks
         // Spawn a new task for each chunk to process it asynchronously
         let worker = tokio::spawn(async move {
+            let mut first_run = true;
             while let Some(chunk) = rx.recv().await {
                 loop_count += 1;
+
+                if first_run {
+                    // print headers properly without causing a borrow error
+                    info!("Headers: {:#?}", headers);
+                    info!("Response status: {}", status);
+                }
+
+                first_run = false;
 
                 debug!("#{} LLM Result Chunk: {:#?}\n", loop_count, chunk);
                 let chunk_vec = Vec::from(chunk.as_ref());
@@ -494,7 +613,7 @@ async fn stream_completion(
                                     let pretty_time = format!("{:?}", duration);
 
                                     println!(
-                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\nTokens {} Bytes {} at {} tokens per second and {} seconds to complete.\n--\n",
+                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
                                         choice.index,
                                         id,
                                         object,
@@ -502,9 +621,11 @@ async fn stream_completion(
                                         role,
                                         created_date,
                                         reason,
+                                        token_count + prompt_token_count,
+                                        prompt_token_count,
                                         token_count,
                                         byte_count,
-                                        token_count / duration.as_secs(),
+                                        token_count as u64 / duration.as_secs(),
                                         pretty_time
                                     );
 
@@ -524,6 +645,10 @@ async fn stream_completion(
 
                                 // check if we have content in the delta
                                 if let Some(content) = &choice.delta.content {
+                                    if first_run {
+                                        println!("\nLLM Response:\n  ");
+                                    }
+
                                     token_count += 1;
                                     byte_count += content.len();
                                     etx.send(format!("{}", content))
@@ -821,8 +946,9 @@ async fn main() {
                     let last_packet_sent = packet_last_sent_ts.elapsed().as_secs();
 
                     // If the batch is full, process it
-                    if last_packet_sent > (args.poll_interval / 1000)
-                        && decode_batch.len() > args.ai_network_packet_count
+                    if args.poll_interval == 0
+                        || (last_packet_sent > (args.poll_interval / 1000)
+                            && decode_batch.len() > args.ai_network_packet_count)
                     {
                         let mut network_packet_dump: String = String::new();
                         packet_last_sent_ts = Instant::now();
@@ -853,7 +979,13 @@ async fn main() {
                             network_packet_dump.push_str("\n");
                         }
                         // get PID_MAP and each stream data in json format and send it to the main thread
-                        let pid_map = get_pid_map();
+                        // get pretty date and time
+                        let pretty_date_time = format!(
+                            "#{}: {}",
+                            count,
+                            chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+                        );
+                        let pid_map = format!("{}: {}", pretty_date_time, get_pid_map());
                         //debug!("PID_MAP: {}", pid_map);
                         network_packet_dump.push_str(&pid_map);
 
@@ -876,6 +1008,7 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let mut poll_start_time = 0;
     let mut dot_last_sent_ts = Instant::now();
+    let mut count = 0;
     loop {
         // keep track of poll interval ms to wait for the next poll
         let poll_elapsed_time = current_unix_timestamp_ms().unwrap_or(0) - poll_start_time;
@@ -892,6 +1025,7 @@ async fn main() {
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 print!("\r");
             }
+            //tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
             // Start the periodic task with the specified interval
             info!(
                 "Running after sleeping {} ms",
@@ -899,6 +1033,8 @@ async fn main() {
             );
         }
         poll_start_time = current_unix_timestamp_ms().unwrap_or(0);
+
+        count += 1;
 
         // OS and Network stats message
         let system_stats_json = if ai_os_stats {
@@ -929,19 +1065,41 @@ async fn main() {
                 msg_count += 1;
                 //debug!("Received network packet dump message: {}", decode_batch);
                 // Handle the received decode_batch here...
+                // get current pretty date and time
+                let pretty_date_time = format!(
+                    "#{}: {} -",
+                    count,
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+                );
                 let network_stats_message = Message {
                     role: "user".to_string(),
-                    content: format!("{}\n{}\n", decode_batch, query),
+                    content: format!(
+                        "{} System Stats: {}\nPackets: {}\nInstructions: {}\n",
+                        pretty_date_time,
+                        system_stats_json.to_string(),
+                        decode_batch,
+                        query
+                    ),
                 };
                 messages.push(network_stats_message.clone());
                 if msg_count >= 1 {
                     break;
                 }
             }
-        } else {
+        } else if ai_os_stats {
+            let pretty_date_time = format!(
+                "#{}: {} - ",
+                count,
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+            );
             let system_stats_message = Message {
                 role: "user".to_string(),
-                content: format!("{}: {}", query, system_stats_json.to_string()),
+                content: format!(
+                    "{} System Stats: {}\nInstructions: {}",
+                    pretty_date_time,
+                    system_stats_json.to_string(),
+                    query
+                ),
             };
             messages.push(system_stats_message.clone());
         }
