@@ -377,12 +377,12 @@ struct Args {
     )]
     debug_llm_history: bool,
 
-    /// POLL Interval in ms, default to 60 seconds
+    /// POLL Interval in ms, default to 300 seconds
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 60_000,
-        help = "POLL Interval in ms, default to 60 seconds."
+        default_value_t = 300_000,
+        help = "POLL Interval in ms, default to 5 minutes or 300 seconds."
     )]
     poll_interval: u64,
 
@@ -1064,17 +1064,7 @@ async fn main() {
         if poll_interval > 0 && poll_elapsed_time < poll_interval {
             // Sleep for the remaining time to reach the poll interval
             info!("Sleeping for {} ms", poll_interval - poll_elapsed_time);
-            let time_to_wait = poll_interval - poll_elapsed_time;
-            while dot_last_sent_ts.elapsed().as_millis() < time_to_wait as u128 {
-                // show a spinner to indicate the process is running
-                print!("|");
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                print!("\r");
-                print!("__");
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                print!("\r");
-            }
-            //tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
+            tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
             // Start the periodic task with the specified interval
             info!(
                 "Running after sleeping {} ms",
