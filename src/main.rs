@@ -663,11 +663,25 @@ async fn stream_completion(
                                         .expect("Failed to send content");
                                     // check if last character of the content is a period, comma, exclamation mark or question mark or space
                                     if (byte_count - line_breaks >= break_line_length)
-                                        && (content.ends_with(|c: char| {
+                                        && (content.contains(|c: char| {
                                             c.is_ascii_punctuation() || c.is_ascii_whitespace()
                                         }) && !content.contains("\n"))
                                     {
-                                        print!("{}\n", content);
+                                        // split on ascii punctuation or whitespace and add in a newline to break up the token
+                                        let break_pos = content
+                                            .char_indices()
+                                            .filter(|(_, c)| {
+                                                c.is_ascii_punctuation() || c.is_ascii_whitespace()
+                                            })
+                                            .map(|(i, _)| i)
+                                            .last()
+                                            .unwrap_or_else(|| break_line_length);
+
+                                        // split the content at the break position
+                                        let (first, second) = content.split_at(break_pos);
+                                        print!("{}\n", first);
+                                        print!("{}", second);
+
                                         line_breaks += break_line_length;
                                     } else {
                                         if content.contains("\n") {
