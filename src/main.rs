@@ -533,7 +533,7 @@ async fn stream_completion(
 
     if !open_ai_request.stream {
         info!("Response status: {}", response.status());
-        info!("Headers: {:#?}", response.headers());
+        debug!("Headers: {:#?}", response.headers());
         println!("\nLLM Response:\n  {}\n---\n", response.text().await?);
     } else {
         // Create an mpsc channel
@@ -552,7 +552,7 @@ async fn stream_completion(
 
                 if first_run {
                     // print headers properly without causing a borrow error
-                    info!("Headers: {:#?}", headers);
+                    debug!("Headers: {:#?}", headers);
                     info!("Response status: {}", status);
                 }
 
