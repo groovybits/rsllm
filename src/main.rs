@@ -211,6 +211,15 @@ struct Args {
     )]
     ai_network_stats: bool,
 
+    /// AI Network Packets - also send all the packets not jsut the pidmap stats
+    #[clap(
+        long,
+        env = "AI_NETWORK_PACKETS",
+        default_value = "false",
+        help = "Monitor network packets, default is false."
+    )]
+    ai_network_packets: bool,
+
     /// AI Network Full Packet Hex Dump
     #[clap(
         long,
@@ -219,15 +228,6 @@ struct Args {
         help = "Monitor network full packet hex dump, default is false."
     )]
     ai_network_hexdump: bool,
-
-    // AI Network Metadata Off - turn off ai metadata network packet processing
-    #[clap(
-        long,
-        env = "AI_NETWORK_METADATA_OFF",
-        default_value = "false",
-        help = "Turn off ai metadata network packet processing, only hexdump, default is false."
-    )]
-    ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
     #[clap(
@@ -1060,14 +1060,14 @@ async fn main() {
                         network_packet_dump.push_str("\n");
                         // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
                         for stream_data in &decode_batch {
-                            if !args.ai_network_metadata_off || !args.ai_network_hexdump {
+                            if args.ai_network_packets {
                                 let stream_data_json = serde_json::to_string(&stream_data).unwrap();
                                 network_packet_dump.push_str(&stream_data_json);
                                 network_packet_dump.push_str("\n");
                             }
 
                             // hex of the packet_chunk with ascii representation after | for each line
-                            if args.ai_network_hexdump || args.ai_network_metadata_off {
+                            if args.ai_network_hexdump {
                                 // Extract the necessary slice for PID extraction and parsing
                                 let packet_chunk = &stream_data.packet[stream_data.packet_start
                                     ..stream_data.packet_start + stream_data.packet_len];
@@ -1078,9 +1078,8 @@ async fn main() {
                                     (stream_data.packet_start + stream_data.packet_len)
                                         - stream_data.packet_start,
                                 ));
+                                network_packet_dump.push_str("\n");
                             }
-
-                            network_packet_dump.push_str("\n");
                         }
                         // get PID_MAP and each stream data in json format and send it to the main thread
                         // get pretty date and time
@@ -1090,7 +1089,6 @@ async fn main() {
                             chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
                         );
                         let pid_map = format!("{}: {}", pretty_date_time, get_pid_map());
-                        //debug!("PID_MAP: {}", pid_map);
                         network_packet_dump.push_str(&pid_map);
 
                         // Send the network packet dump to the Main thread
