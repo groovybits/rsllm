@@ -22,7 +22,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::stream_data::{
-    identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
+    get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
@@ -215,7 +215,7 @@ struct Args {
     ai_network_metadata_off: bool,
 
     /// AI Network Packet Count
-    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 7)]
+    #[clap(long, env = "AI_NETWORK_PACKET_COUNT", default_value_t = 100)]
     ai_network_packet_count: usize,
 
     /// PCAP output capture stats mode
@@ -287,7 +287,7 @@ struct Args {
     debug_llm_history: bool,
 
     /// POLL Interval in ms, default to 60 seconds
-    #[clap(long, env = "POLL_INTERVAL", default_value_t = 0)]
+    #[clap(long, env = "POLL_INTERVAL", default_value_t = 60)]
     poll_interval: u64,
 
     /// Turn off progress output dots
@@ -691,19 +691,18 @@ async fn main() {
             packet: Vec::new(),
         };
 
-        let mut dot_last_sent_ts = Instant::now();
+        let mut packet_last_sent_ts = Instant::now();
+        let mut count = 0;
         loop {
             if ai_network_stats {
                 debug!("Capturing network packets...");
-                if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
-                    dot_last_sent_ts = Instant::now();
-                    print!("*");
-                    // Flush stdout to ensure the progress dots are printed
-                    io::stdout().flush().unwrap();
-                }
-                let mut count = 0;
                 while let Some(packet) = prx.recv().await {
-                    debug!("--- Received packet with size: {} bytes", packet.len());
+                    count += 1;
+                    debug!(
+                        "#{} --- Received packet with size: {} bytes",
+                        count,
+                        packet.len()
+                    );
 
                     // Check if chunk is MPEG-TS or SMPTE 2110
                     let chunk_type = is_mpegts_or_smpte2110(&packet[args.payload_offset..]);
@@ -818,43 +817,54 @@ async fn main() {
                         decode_batch.push(stream_data);
                     }
 
-                    if count > args.ai_network_packet_count {
-                        break;
-                    }
-                    let mut network_packet_dump: String = String::new();
+                    // check if it is 60 seconds since the last packet was sent
+                    let last_packet_sent = packet_last_sent_ts.elapsed().as_secs();
 
-                    network_packet_dump.push_str("\n");
-                    // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
-                    for stream_data in &decode_batch {
-                        if !args.ai_network_metadata_off || !args.ai_network_hexdump {
-                            let stream_data_json = serde_json::to_string(&stream_data).unwrap();
-                            network_packet_dump.push_str(&stream_data_json);
-                            network_packet_dump.push_str("\n");
-                        }
-
-                        // hex of the packet_chunk with ascii representation after | for each line
-                        if args.ai_network_hexdump || args.ai_network_metadata_off {
-                            // Extract the necessary slice for PID extraction and parsing
-                            let packet_chunk = &stream_data.packet[stream_data.packet_start
-                                ..stream_data.packet_start + stream_data.packet_len];
-
-                            network_packet_dump.push_str(&hexdump_ascii(
-                                &packet_chunk,
-                                0,
-                                (stream_data.packet_start + stream_data.packet_len)
-                                    - stream_data.packet_start,
-                            ));
-                        }
+                    // If the batch is full, process it
+                    if last_packet_sent > (args.poll_interval / 1000)
+                        && decode_batch.len() > args.ai_network_packet_count
+                    {
+                        let mut network_packet_dump: String = String::new();
+                        packet_last_sent_ts = Instant::now();
 
                         network_packet_dump.push_str("\n");
-                    }
-                    // Send the network packet dump to the Main thread
-                    if let Err(e) = batch_tx.send(network_packet_dump.clone()).await {
-                        eprintln!("Failed to send decode batch: {}", e);
-                    }
+                        // fill network_packet_dump with the json of each stream_data plus hexdump of the packet payload
+                        for stream_data in &decode_batch {
+                            if !args.ai_network_metadata_off || !args.ai_network_hexdump {
+                                let stream_data_json = serde_json::to_string(&stream_data).unwrap();
+                                network_packet_dump.push_str(&stream_data_json);
+                                network_packet_dump.push_str("\n");
+                            }
 
-                    // empty decode_batch
-                    decode_batch.clear();
+                            // hex of the packet_chunk with ascii representation after | for each line
+                            if args.ai_network_hexdump || args.ai_network_metadata_off {
+                                // Extract the necessary slice for PID extraction and parsing
+                                let packet_chunk = &stream_data.packet[stream_data.packet_start
+                                    ..stream_data.packet_start + stream_data.packet_len];
+
+                                network_packet_dump.push_str(&hexdump_ascii(
+                                    &packet_chunk,
+                                    0,
+                                    (stream_data.packet_start + stream_data.packet_len)
+                                        - stream_data.packet_start,
+                                ));
+                            }
+
+                            network_packet_dump.push_str("\n");
+                        }
+                        // get PID_MAP and each stream data in json format and send it to the main thread
+                        let pid_map = get_pid_map();
+                        //debug!("PID_MAP: {}", pid_map);
+                        network_packet_dump.push_str(&pid_map);
+
+                        // Send the network packet dump to the Main thread
+                        if let Err(e) = batch_tx.send(network_packet_dump.clone()).await {
+                            eprintln!("Failed to send decode batch: {}", e);
+                        }
+
+                        // empty decode_batch
+                        decode_batch.clear();
+                    }
                 }
             } else {
                 // sleep for a while to avoid busy loop
@@ -865,21 +875,30 @@ async fn main() {
 
     let poll_interval = args.poll_interval;
     let mut poll_start_time = 0;
+    let mut dot_last_sent_ts = Instant::now();
     loop {
-        info!("Polling for stats");
         // keep track of poll interval ms to wait for the next poll
         let poll_elapsed_time = current_unix_timestamp_ms().unwrap_or(0) - poll_start_time;
         if poll_interval > 0 && poll_elapsed_time < poll_interval {
             // Sleep for the remaining time to reach the poll interval
-            tokio::time::sleep(Duration::from_millis(poll_interval - poll_elapsed_time)).await;
+            info!("Sleeping for {} ms", poll_interval - poll_elapsed_time);
+            let time_to_wait = poll_interval - poll_elapsed_time;
+            while dot_last_sent_ts.elapsed().as_millis() < time_to_wait as u128 {
+                // show a spinner to indicate the process is running
+                print!("|");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                print!("\r");
+                print!("__");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                print!("\r");
+            }
             // Start the periodic task with the specified interval
-            debug!(
+            info!(
                 "Running after sleeping {} ms",
                 poll_interval - poll_elapsed_time
             );
         }
         poll_start_time = current_unix_timestamp_ms().unwrap_or(0);
-        info!("Starting probing for stats");
 
         // OS and Network stats message
         let system_stats_json = if ai_os_stats {
@@ -900,10 +919,15 @@ async fn main() {
             // create nework packet dump message from collected stream_data in decode_batch
             // Try to receive new packet batches if available
             let mut msg_count = 0;
-            info!("Polling for network packet dump");
             while let Ok(decode_batch) = batch_rx.try_recv() {
+                if !args.no_progress && dot_last_sent_ts.elapsed().as_secs() >= 1 {
+                    dot_last_sent_ts = Instant::now();
+                    print!("*");
+                    // Flush stdout to ensure the progress dots are printed
+                    io::stdout().flush().unwrap();
+                }
                 msg_count += 1;
-                info!("Received network packet dump message: {}", decode_batch);
+                //debug!("Received network packet dump message: {}", decode_batch);
                 // Handle the received decode_batch here...
                 let network_stats_message = Message {
                     role: "user".to_string(),
