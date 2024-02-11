@@ -482,6 +482,7 @@ async fn stream_completion(
     let mut token_count = 0;
     let mut byte_count = 0;
     let mut loop_count = 0;
+    let break_line_length = 80;
     // errors are strings
 
     if !open_ai_request.stream {
@@ -645,16 +646,21 @@ async fn stream_completion(
 
                                 // check if we have content in the delta
                                 if let Some(content) = &choice.delta.content {
-                                    if first_run {
-                                        println!("\nLLM Response:\n  ");
-                                    }
-
                                     token_count += 1;
                                     byte_count += content.len();
                                     etx.send(format!("{}", content))
                                         .await
                                         .expect("Failed to send content");
-                                    print!("{}", content);
+                                    // check if the last character of the content is a period, comma, exclamation mark or question mark or space
+                                    if byte_count >= break_line_length
+                                        && content.ends_with(|c: char| {
+                                            c.is_ascii_punctuation() || c.is_ascii_whitespace()
+                                        })
+                                    {
+                                        print!("{}\n", content);
+                                    } else {
+                                        print!("{}", content);
+                                    }
                                     // flush stdout
                                     std::io::stdout().flush().unwrap();
                                 }
