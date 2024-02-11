@@ -175,7 +175,16 @@ struct Args {
     )]
     debug_inline: bool,
 
-    // Monitor system stats
+    /// Show output errors
+    #[clap(
+        long,
+        env = "SHOW_OUTPUT_ERRORS",
+        default_value = "false",
+        help = "Show LLM output errors which may mess up the output and niceness if packet loss occurs, default is false."
+    )]
+    show_output_errors: bool,
+
+    /// Monitor system stats
     #[clap(
         long,
         env = "AI_OS_STATS",
@@ -184,7 +193,7 @@ struct Args {
     )]
     ai_os_stats: bool,
 
-    // run as a daemon monitoring the specified stats
+    /// run as a daemon monitoring the specified stats
     #[clap(
         long,
         env = "DAEMON",
@@ -193,7 +202,7 @@ struct Args {
     )]
     daemon: bool,
 
-    // AI Network Stats
+    /// AI Network Stats
     #[clap(
         long,
         env = "AI_NETWORK_STATS",
@@ -202,7 +211,7 @@ struct Args {
     )]
     ai_network_stats: bool,
 
-    // AI Network Full Packet Hex Dump
+    /// AI Network Full Packet Hex Dump
     #[clap(
         long,
         env = "AI_NETWORK_HEXDUMP",
@@ -496,6 +505,7 @@ async fn stream_completion(
     llm_host: &str,
     llm_path: &str,
     debug_inline: bool,
+    show_output_errors: bool,
     break_line_length: usize,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
@@ -718,10 +728,12 @@ async fn stream_completion(
                                 error!("\nResponse that failed to parse: '{}'\n", response_json);
                             } else {
                                 // push to etx channel
-                                etx.send(format!("ERROR: {} - {}", e, response_json))
-                                    .await
-                                    .expect("Failed to send error");
-                                print!("*X*");
+                                if show_output_errors {
+                                    etx.send(format!("ERROR: {} - {}", e, response_json))
+                                        .await
+                                        .expect("Failed to send error");
+                                    print!(".X.");
+                                }
                             }
                         }
                     }
@@ -1237,6 +1249,7 @@ async fn main() {
             &llm_host,
             &llm_path,
             debug_inline,
+            args.show_output_errors,
             args.break_line_length,
         )
         .await
