@@ -412,12 +412,12 @@ struct Args {
     )]
     loglevel: String,
 
-    /// Break Line Length - line length for breaking lines from LLM messages, default is 120
+    /// Break Line Length - line length for breaking lines from LLM messages, default is 80
     #[clap(
         long,
         env = "BREAK_LINE_LENGTH",
-        default_value_t = 120,
-        help = "Break Line Length - line length for breaking lines from LLM messages, default is 120."
+        default_value_t = 80,
+        help = "Break Line Length - line length for breaking lines from LLM messages, default is 80."
     )]
     break_line_length: usize,
 }
