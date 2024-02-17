@@ -8,95 +8,7 @@ use candle_transformers::models::stable_diffusion;
 
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
-use clap::Parser;
 use tokenizers::Tokenizer;
-
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// The prompt to be used for image generation.
-    #[arg(
-        long,
-        default_value = "A very realistic photo of a rusty robot walking on a sandy beach"
-    )]
-    prompt: String,
-
-    #[arg(long, default_value = "")]
-    uncond_prompt: String,
-
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
-
-    /// Enable tracing (generates a trace-timestamp.json file).
-    #[arg(long)]
-    tracing: bool,
-
-    /// The height in pixels of the generated image.
-    #[arg(long)]
-    height: Option<usize>,
-
-    /// The width in pixels of the generated image.
-    #[arg(long)]
-    width: Option<usize>,
-
-    /// The UNet weight file, in .safetensors format.
-    #[arg(long, value_name = "FILE")]
-    unet_weights: Option<String>,
-
-    /// The CLIP weight file, in .safetensors format.
-    #[arg(long, value_name = "FILE")]
-    clip_weights: Option<String>,
-
-    /// The VAE weight file, in .safetensors format.
-    #[arg(long, value_name = "FILE")]
-    vae_weights: Option<String>,
-
-    #[arg(long, value_name = "FILE")]
-    /// The file specifying the tokenizer to used for tokenization.
-    tokenizer: Option<String>,
-
-    /// The size of the sliced attention or 0 for automatic slicing (disabled by default)
-    #[arg(long)]
-    sliced_attention_size: Option<usize>,
-
-    /// The number of steps to run the diffusion for.
-    #[arg(long)]
-    n_steps: Option<usize>,
-
-    /// The number of samples to generate.
-    #[arg(long, default_value_t = 1)]
-    num_samples: usize,
-
-    /// The name of the final image to generate.
-    //#[arg(long, value_name = "FILE", default_value = "sd_final.png")]
-    //final_image: String,
-
-    #[arg(long, value_enum, default_value = "v2-1")]
-    sd_version: StableDiffusionVersion,
-
-    /// Generate intermediary images at each step.
-    #[arg(long, action)]
-    intermediary_images: bool,
-
-    #[arg(long)]
-    use_flash_attn: bool,
-
-    #[arg(long)]
-    use_f16: bool,
-
-    #[arg(long)]
-    guidance_scale: Option<f64>,
-
-    #[arg(long, value_name = "FILE")]
-    img2img: Option<String>,
-
-    /// The strength, indicates how much to transform the initial image. The
-    /// value must be between 0 and 1, a value of 1 discards the initial image
-    /// information.
-    #[arg(long, default_value_t = 0.8)]
-    img2img_strength: f64,
-}
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
 enum StableDiffusionVersion {
@@ -349,41 +261,69 @@ fn image_preprocess<T: AsRef<std::path::Path>>(path: T) -> anyhow::Result<Tensor
     Ok(img)
 }
 
-pub fn sd() -> Result<Vec<Tensor>> {
-    let args = Args::parse();
+pub struct SDConfig {
+    pub prompt: String,
+    pub uncond_prompt: String,
+    pub cpu: bool,
+    pub tracing: bool,
+    pub height: Option<usize>,
+    pub width: Option<usize>,
+    pub unet_weights: Option<String>,
+    pub clip_weights: Option<String>,
+    pub vae_weights: Option<String>,
+    pub tokenizer: Option<String>,
+    pub sliced_attention_size: Option<usize>,
+    pub n_steps: Option<usize>,
+    pub num_samples: usize,
+    pub sd_version: StableDiffusionVersion,
+    pub intermediary_images: bool,
+    pub use_flash_attn: bool,
+    pub use_f16: bool,
+    pub guidance_scale: Option<f64>,
+    pub img2img: Option<String>,
+    pub img2img_strength: f64,
+}
 
+impl SDConfig {
+    // Providing a method to create a new SDConfig with default values
+    pub fn new() -> Self {
+        SDConfig {
+            prompt: "A very realistic photo of a rusty robot walking on a sandy beach".into(),
+            uncond_prompt: "".into(),
+            cpu: true,
+            tracing: false,
+            height: Some(512),
+            width: Some(512),
+            unet_weights: None,
+            clip_weights: None,
+            vae_weights: None,
+            tokenizer: None,
+            sliced_attention_size: None,
+            n_steps: Some(50),
+            num_samples: 1,
+            sd_version: StableDiffusionVersion::V2_1,
+            intermediary_images: false,
+            use_flash_attn: false,
+            use_f16: false,
+            guidance_scale: Some(7.5),
+            img2img: None,
+            img2img_strength: 0.8,
+        }
+    }
+}
+
+pub fn sd(config: SDConfig) -> Result<Vec<Tensor>> {
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
 
-    let Args {
-        prompt,
-        uncond_prompt,
-        cpu,
-        height,
-        width,
-        n_steps,
-        tokenizer,
-        //final_image,
-        sliced_attention_size,
-        num_samples,
-        sd_version,
-        clip_weights,
-        vae_weights,
-        unet_weights,
-        tracing,
-        use_f16,
-        guidance_scale,
-        use_flash_attn,
-        img2img,
-        img2img_strength,
-        ..
-    } = args;
-
-    if !(0. ..=1.).contains(&img2img_strength) {
-        anyhow::bail!("img2img-strength should be between 0 and 1, got {img2img_strength}")
+    if !(0. ..=1.).contains(&config.img2img_strength) {
+        anyhow::bail!(
+            "img2img-strength should be between 0 and 1, got {0}",
+            config.img2img_strength
+        )
     }
 
-    let _guard = if tracing {
+    let _guard = if config.tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
         tracing_subscriber::registry().with(chrome_layer).init();
         Some(guard)
@@ -391,47 +331,57 @@ pub fn sd() -> Result<Vec<Tensor>> {
         None
     };
 
-    let guidance_scale = match guidance_scale {
+    let guidance_scale = match config.guidance_scale {
         Some(guidance_scale) => guidance_scale,
-        None => match sd_version {
+        None => match config.sd_version {
             StableDiffusionVersion::V1_5
             | StableDiffusionVersion::V2_1
             | StableDiffusionVersion::Xl => 7.5,
             StableDiffusionVersion::Turbo => 0.,
         },
     };
-    let n_steps = match n_steps {
+    let n_steps = match config.n_steps {
         Some(n_steps) => n_steps,
-        None => match sd_version {
+        None => match config.sd_version {
             StableDiffusionVersion::V1_5
             | StableDiffusionVersion::V2_1
             | StableDiffusionVersion::Xl => 30,
             StableDiffusionVersion::Turbo => 1,
         },
     };
-    let dtype = if use_f16 { DType::F16 } else { DType::F32 };
-    let sd_config = match sd_version {
-        StableDiffusionVersion::V1_5 => {
-            stable_diffusion::StableDiffusionConfig::v1_5(sliced_attention_size, height, width)
-        }
-        StableDiffusionVersion::V2_1 => {
-            stable_diffusion::StableDiffusionConfig::v2_1(sliced_attention_size, height, width)
-        }
-        StableDiffusionVersion::Xl => {
-            stable_diffusion::StableDiffusionConfig::sdxl(sliced_attention_size, height, width)
-        }
+    let dtype = if config.use_f16 {
+        DType::F16
+    } else {
+        DType::F32
+    };
+    let sd_config = match config.sd_version {
+        StableDiffusionVersion::V1_5 => stable_diffusion::StableDiffusionConfig::v1_5(
+            config.sliced_attention_size,
+            config.height,
+            config.width,
+        ),
+        StableDiffusionVersion::V2_1 => stable_diffusion::StableDiffusionConfig::v2_1(
+            config.sliced_attention_size,
+            config.height,
+            config.width,
+        ),
+        StableDiffusionVersion::Xl => stable_diffusion::StableDiffusionConfig::sdxl(
+            config.sliced_attention_size,
+            config.height,
+            config.width,
+        ),
         StableDiffusionVersion::Turbo => stable_diffusion::StableDiffusionConfig::sdxl_turbo(
-            sliced_attention_size,
-            height,
-            width,
+            config.sliced_attention_size,
+            config.height,
+            config.width,
         ),
     };
 
     let scheduler = sd_config.build_scheduler(n_steps)?;
-    let device = candle_examples::device(cpu)?;
+    let device = candle_examples::device(config.cpu)?;
     let use_guide_scale = guidance_scale > 1.0;
 
-    let which = match sd_version {
+    let which = match config.sd_version {
         StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo => vec![true, false],
         _ => vec![true],
     };
@@ -439,13 +389,13 @@ pub fn sd() -> Result<Vec<Tensor>> {
         .iter()
         .map(|first| {
             text_embeddings(
-                &prompt,
-                &uncond_prompt,
-                tokenizer.clone(),
-                clip_weights.clone(),
-                sd_version,
+                &config.prompt,
+                &config.uncond_prompt,
+                config.tokenizer.clone(),
+                config.clip_weights.clone(),
+                config.sd_version,
                 &sd_config,
-                use_f16,
+                config.use_f16,
                 &device,
                 dtype,
                 use_guide_scale,
@@ -458,9 +408,9 @@ pub fn sd() -> Result<Vec<Tensor>> {
     println!("{text_embeddings:?}");
 
     println!("Building the autoencoder.");
-    let vae_weights = ModelFile::Vae.get(vae_weights, sd_version, use_f16)?;
+    let vae_weights = ModelFile::Vae.get(config.vae_weights, config.sd_version, config.use_f16)?;
     let vae = sd_config.build_vae(vae_weights, &device, dtype)?;
-    let init_latent_dist = match &img2img {
+    let init_latent_dist = match &config.img2img {
         None => None,
         Some(image_buf) => {
             let image_buf = image_preprocess(image_buf)?.to_device(&device)?;
@@ -468,17 +418,18 @@ pub fn sd() -> Result<Vec<Tensor>> {
         }
     };
     println!("Building the unet.");
-    let unet_weights = ModelFile::Unet.get(unet_weights, sd_version, use_f16)?;
-    let unet = sd_config.build_unet(unet_weights, &device, 4, use_flash_attn, dtype)?;
+    let unet_weights =
+        ModelFile::Unet.get(config.unet_weights, config.sd_version, config.use_f16)?;
+    let unet = sd_config.build_unet(unet_weights, &device, 4, config.use_flash_attn, dtype)?;
 
-    let t_start = if img2img.is_some() {
-        n_steps - (n_steps as f64 * img2img_strength) as usize
+    let t_start = if config.img2img.is_some() {
+        n_steps - (n_steps as f64 * config.img2img_strength) as usize
     } else {
         0
     };
     let bsize = 1;
 
-    let vae_scale = match sd_version {
+    let vae_scale = match config.sd_version {
         StableDiffusionVersion::V1_5
         | StableDiffusionVersion::V2_1
         | StableDiffusionVersion::Xl => 0.18215,
@@ -486,9 +437,9 @@ pub fn sd() -> Result<Vec<Tensor>> {
     };
 
     // array of image buffers to gather the results
-    let mut images = Vec::with_capacity(num_samples);
+    let mut images = Vec::with_capacity(config.num_samples);
 
-    for idx in 0..num_samples {
+    for idx in 0..config.num_samples {
         let timesteps = scheduler.timesteps();
         let latents = match &init_latent_dist {
             Some(init_latent_dist) => {
@@ -542,7 +493,7 @@ pub fn sd() -> Result<Vec<Tensor>> {
             let dt = start_time.elapsed().as_secs_f32();
             println!("step {}/{n_steps} done, {:.2}s", timestep_index + 1, dt);
 
-            if args.intermediary_images {
+            if config.intermediary_images {
                 let image_buf = vae.decode(&(&latents / vae_scale)?)?;
                 let image_buf = ((image_buf / 2.)? + 0.5)?.to_device(&Device::Cpu)?;
                 let image_buf = (image_buf * 255.)?.to_dtype(DType::U8)?.i(0)?;
@@ -556,7 +507,7 @@ pub fn sd() -> Result<Vec<Tensor>> {
         println!(
             "Generating the final image for sample {}/{}.",
             idx + 1,
-            num_samples
+            config.num_samples
         );
         let image_buf = vae.decode(&(&latents / vae_scale)?)?;
         let image_buf = ((image_buf / 2.)? + 0.5)?.to_device(&Device::Cpu)?;

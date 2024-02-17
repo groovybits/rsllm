@@ -21,6 +21,7 @@ use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::network_capture::{network_capture, NetworkCapture};
+use rsllm::stable_diffusion::sd;
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
