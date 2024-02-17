@@ -9,6 +9,7 @@
 
 pub mod mpegts;
 pub mod network_capture;
+pub mod stable_diffusion;
 pub mod stream_data;
 pub mod system_stats;
 use serde_json::{json, Value};
