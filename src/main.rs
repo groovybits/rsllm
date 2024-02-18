@@ -774,6 +774,10 @@ async fn stream_completion(
                     errors.push(message);
                 } else {
                     answers.push(message);
+                    // check if there is a period at the end of the message
+                    if message.ends_with('.') {
+                        // send to stable diffusion as a separate thread to avoid blocking
+                    }
                 }
             }
             (errors, answers) // Return collected errors and answers from the task
