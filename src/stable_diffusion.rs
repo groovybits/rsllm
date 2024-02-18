@@ -8,10 +8,11 @@ use candle_transformers::models::stable_diffusion;
 
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
+use image::ImageBuffer;
 use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
-enum StableDiffusionVersion {
+pub enum StableDiffusionVersion {
     V1_5,
     V2_1,
     Xl,
@@ -141,33 +142,6 @@ impl ModelFile {
         }
     }
 }
-
-/*fn output_filename(
-    basename: &str,
-    sample_idx: i64,
-    num_samples: i64,
-    timestep_idx: Option<usize>,
-) -> String {
-    let filename = if num_samples > 1 {
-        match basename.rsplit_once('.') {
-            None => format!("{basename}.{sample_idx}.png"),
-            Some((filename_no_extension, extension)) => {
-                format!("{filename_no_extension}.{sample_idx}.{extension}")
-            }
-        }
-    } else {
-        basename.to_string()
-    };
-    match timestep_idx {
-        None => filename,
-        Some(timestep_idx) => match filename.rsplit_once('.') {
-            None => format!("{filename}-{timestep_idx}.png"),
-            Some((filename_no_extension, extension)) => {
-                format!("{filename_no_extension}-{timestep_idx}.{extension}")
-            }
-        },
-    }
-}*/
 
 #[allow(clippy::too_many_arguments)]
 fn text_embeddings(
@@ -301,7 +275,7 @@ impl SDConfig {
             sliced_attention_size: None,
             n_steps: Some(50),
             num_samples: 1,
-            sd_version: StableDiffusionVersion::V2_1,
+            sd_version: StableDiffusionVersion::Turbo,
             intermediary_images: false,
             use_flash_attn: false,
             use_f16: false,
@@ -312,7 +286,7 @@ impl SDConfig {
     }
 }
 
-pub fn sd(config: SDConfig) -> Result<Vec<Tensor>> {
+pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>> {
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
 
@@ -497,10 +471,19 @@ pub fn sd(config: SDConfig) -> Result<Vec<Tensor>> {
                 let image_buf = vae.decode(&(&latents / vae_scale)?)?;
                 let image_buf = ((image_buf / 2.)? + 0.5)?.to_device(&Device::Cpu)?;
                 let image_buf = (image_buf * 255.)?.to_dtype(DType::U8)?.i(0)?;
-                //let image_filename =
-                //    output_filename(&final_image, idx + 1, num_samples, Some(timestep_index + 1));
-                //candle_examples::save_image(&image_buf, image_filename)?
-                images.push(image_buf);
+                let (channel, height, width) = image_buf.dims3()?;
+                if channel != 3 {
+                    anyhow::bail!("save_image expects an input of shape (3, height, width)")
+                }
+                let img = image_buf.permute((1, 2, 0))?.flatten_all()?;
+                let pixels = img.to_vec1::<u8>()?;
+                let image_u8: image::ImageBuffer<image::Rgb<u8>, Vec<u8>> =
+                    match image::ImageBuffer::from_raw(width as u32, height as u32, pixels) {
+                        Some(image_u8) => image_u8,
+                        None => anyhow::bail!("error saving image"),
+                    };
+
+                images.push(image_u8);
             }
         }
 
@@ -514,9 +497,20 @@ pub fn sd(config: SDConfig) -> Result<Vec<Tensor>> {
         let image_buf = (image_buf.clamp(0f32, 1.)? * 255.)?
             .to_dtype(DType::U8)?
             .i(0)?;
-        //let image_filename = output_filename(&final_image, idx + 1, num_samples, None);
-        //candle_examples::save_image(&image_buf, image_filename)?
-        images.push(image_buf);
+
+        let (channel, height, width) = image_buf.dims3()?;
+        if channel != 3 {
+            anyhow::bail!("save_image expects an input of shape (3, height, width)")
+        }
+        let img = image_buf.permute((1, 2, 0))?.flatten_all()?;
+        let pixels = img.to_vec1::<u8>()?;
+        let image_u8: image::ImageBuffer<image::Rgb<u8>, Vec<u8>> =
+            match image::ImageBuffer::from_raw(width as u32, height as u32, pixels) {
+                Some(image_u8) => image_u8,
+                None => anyhow::bail!("error saving image"),
+            };
+
+        images.push(image_u8);
     }
 
     // Convert Tensor images to RgbaImage

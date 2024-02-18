@@ -17,6 +17,7 @@ path = "src/lib.rs"
 [features]
 default = []
 dpdk_enabled = ["capsule"]
+metal = ["candle-core/metal", "candle-nn/metal"]
 
 [profile.release-with-debug]
 inherits = "release"

@@ -21,7 +21,7 @@ use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
 use rsllm::network_capture::{network_capture, NetworkCapture};
-use rsllm::stable_diffusion::sd;
+use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -421,6 +421,15 @@ struct Args {
         help = "Break Line Length - line length for breaking lines from LLM messages, default is 80."
     )]
     break_line_length: usize,
+
+    /// SD Image - create an SD image from the LLM messages
+    #[clap(
+        long,
+        env = "SD_IMAGE",
+        default_value_t = false,
+        help = "SD Image - create an SD image from the LLM messages, default is false."
+    )]
+    sd_image: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -516,6 +525,7 @@ async fn stream_completion(
     debug_inline: bool,
     show_output_errors: bool,
     break_line_length: usize,
+    sd_image: bool,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -798,6 +808,29 @@ async fn stream_completion(
             role: "assistant".to_string(),
             content: answers.join(""),
         });
+
+        // Assuming `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
+        if sd_image {
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = answers.join("");
+            sd_config.height = Some(512);
+            sd_config.width = Some(512);
+
+            let images_result = sd(sd_config); // This call now returns `Result<Vec<Vec<u8>>>`
+
+            match images_result {
+                Ok(images) => {
+                    for (index, image_bytes) in images.iter().enumerate() {
+                        println!("Image {} data in hex:", index + 1);
+                        for byte in image_bytes.as_raw().iter() {
+                            print!("{:02x}", byte);
+                        }
+                        println!("\n"); // New line for readability
+                    }
+                }
+                Err(e) => eprintln!("Error generating images: {:?}", e),
+            }
+        }
     }
 
     // After processing all chunks/responses
@@ -1283,6 +1316,7 @@ async fn main() {
             debug_inline,
             args.show_output_errors,
             args.break_line_length,
+            args.sd_image,
         )
         .await
         .unwrap_or_else(|_| Vec::new());
