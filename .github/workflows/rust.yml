@@ -18,7 +18,7 @@ jobs:
     - name: Install dependencies
       run: |
         brew update
-        brew install libpcap zmq capnproto
+        brew install libpcap zmq capnp
     - name: Build
       run: cargo build --verbose
     - name: Run tests
