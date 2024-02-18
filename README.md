@@ -28,6 +28,7 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
 
 ## Features
 
+- **Stable Diffusion**: Generates images based on output with Candle pure rust SD directly using any of the main diffusion models which are auto-loaded.
 - **LLM Client**: with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
 - **LLM Analysis of OS**: System Stats.
 - **LLM Analysis of Network**: Packet Capture (MpegTS support currently).
