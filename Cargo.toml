@@ -1,14 +1,23 @@
 [package]
 name = "rsllm"
-description = "Rust AI based pcap for Analyzing Data like MpegTS and SMPTE2110 UDP/TCP Broadcast Feeds"
-keywords = ["ai", "broadcast", "mpegts", "capture", "pcap", "zeromq"]
+description = "MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer"
+keywords = [
+    "ai",
+    "broadcast",
+    "mpegts",
+    "capture",
+    "pcap",
+    "zeromq",
+    "stable-diffusion",
+    "llm",
+]
 categories = ["command-line-utilities"]
 readme = "README.md"
 license-file = "LICENSE"
-homepage = "https://github.com/groovybits/wiki"
+homepage = "https://github.com/groovybits/rsllm/wiki"
 repository = "https://github.com/groovybits/rsllm"
 authors = ["Chris Kennedy"]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]

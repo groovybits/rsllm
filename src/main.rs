@@ -45,8 +45,8 @@ use tokio::time::Duration;
 #[derive(Parser, Debug)]
 #[clap(
     author = "Chris Kennedy",
-    version = "1.1",
-    about = "Rust LLM - AI System/Network/Stream Analyzer"
+    version = "2.1",
+    about = "MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer"
 )]
 struct Args {
     /// System prompt
@@ -773,11 +773,11 @@ async fn stream_completion(
                 if message.starts_with("ERROR:") {
                     errors.push(message);
                 } else {
-                    answers.push(message);
                     // check if there is a period at the end of the message
                     if message.ends_with('.') {
                         // send to stable diffusion as a separate thread to avoid blocking
                     }
+                    answers.push(message);
                 }
             }
             (errors, answers) // Return collected errors and answers from the task
