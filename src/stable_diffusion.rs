@@ -513,20 +513,5 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         images.push(image_u8);
     }
 
-    // Convert Tensor images to RgbaImage
-    /*let mut rgba_images = Vec::new();
-    for tensor in images {
-        // Assuming the tensor shape is [C, H, W] and C=4 for RGBA
-        let tensor = tensor.to_device(&Device::Cpu)?.to_dtype(DType::U8)?;
-        let tensor_data = tensor.contiguous()?.view(-1)?.to_vec::<u8>()?;
-        let height = args.height;
-        let width = args.width;
-
-        let img = image::RgbaImage::from_raw(width as u32, height as u32, tensor_data)
-            .ok_or_else(|| anyhow::Error::msg("Failed to create RgbaImage from tensor data"))?;
-        rgba_images.push(img);
-    }
-
-    Ok(rgba_images)*/
     Ok(images)
 }

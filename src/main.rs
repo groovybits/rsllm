@@ -821,11 +821,9 @@ async fn stream_completion(
             match images_result {
                 Ok(images) => {
                     for (index, image_bytes) in images.iter().enumerate() {
-                        println!("Image {} data in hex:", index + 1);
-                        for byte in image_bytes.as_raw().iter() {
-                            print!("{:02x}", byte);
-                        }
-                        println!("\n"); // New line for readability
+                        let image_file = format!("{}.png", index);
+                        println!("Image {} saving to {}", index + 1, image_file);
+                        image_bytes.save(image_file).map_err(candle_core::Error::wrap)?;
                     }
                 }
                 Err(e) => eprintln!("Error generating images: {:?}", e),
