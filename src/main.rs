@@ -823,7 +823,9 @@ async fn stream_completion(
                     for (index, image_bytes) in images.iter().enumerate() {
                         let image_file = format!("{}.png", index);
                         println!("Image {} saving to {}", index + 1, image_file);
-                        image_bytes.save(image_file).map_err(candle_core::Error::wrap)?;
+                        image_bytes
+                            .save(image_file)
+                            .map_err(candle_core::Error::wrap)?;
                     }
                 }
                 Err(e) => eprintln!("Error generating images: {:?}", e),
