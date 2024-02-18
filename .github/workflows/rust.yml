@@ -18,7 +18,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libpcap-dev libzmq3-dev capnproto
+        sudo apt-get install -y libpcap-dev libzmq3-dev capnproto gobjc
     - name: Build
       run: cargo build --verbose
     - name: Run tests
