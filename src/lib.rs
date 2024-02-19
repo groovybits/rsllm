@@ -8,6 +8,7 @@
 */
 
 pub mod mpegts;
+#[cfg(feature = "ndi")]
 pub mod ndi;
 pub mod network_capture;
 pub mod stable_diffusion;
