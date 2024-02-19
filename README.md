@@ -33,7 +33,7 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
 Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too. Add --features metal to the cargo build command for MacOS GPU usage. `cargo build --features=metal,ndi`
 
 NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command. This is what needs to be done too: <https://digitaldrummerj.me/obs29-ndi-apple-silicon/> basically get <https://ndi.video/tools/ndi-core-suite/> and move the libndi.dynlib into /usr/local/lib so it can be found. like `sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"`
- Then use `export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH` at runtime. It's unfortunate NDI sdk libs aren't easier to deal with.
+ Then use `export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH` at runtime. It's unfortunate NDI sdk libs aren't easier to deal with. Also logging into Huggingface Hub with the cli fixes some warnings you will get otherwise... `huggingface-cli login`.
 
 ## MetaVoice TTS Text to Speech Speaking (TODO)
 Candle will support MetaVoice soon (PR a WIP is in the Candle project `https://github.com/huggingface/candle/compare/main...metavoice` which will allow pure Rust based LLM + TTI + TTS with Candle and Metal GPU.

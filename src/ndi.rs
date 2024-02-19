@@ -1,17 +1,32 @@
 use image::{ImageBuffer, Rgb};
+use lazy_static::lazy_static;
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
+use once_cell::sync::Lazy;
 use std::io::Result;
+use std::sync::Mutex;
+
+// Use Mutex to ensure thread-safety for NDIInstance and SendInstance
+#[cfg(feature = "ndi")]
+static NDI_INSTANCE: Lazy<Mutex<NDIInstance>> = Lazy::new(|| {
+    let instance = ndi_sdk::load().expect("Failed to construct NDI instance");
+    Mutex::new(instance)
+});
+
+#[cfg(feature = "ndi")]
+static NDI_SENDER: Lazy<Mutex<SendInstance>> = Lazy::new(|| {
+    let instance = NDI_INSTANCE.lock().unwrap();
+    let mut sender = instance
+        .create_send_instance("RsLLM".to_string(), false, false)
+        .expect("Expected sender instance to be created");
+    Mutex::new(sender)
+});
 
 #[cfg(feature = "ndi")]
 pub fn send_images_over_ndi(images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> Result<()> {
-    let instance: NDIInstance = ndi_sdk::load().expect("Failed to construct NDI instance");
-
-    let mut sender = instance
-        .create_send_instance("Rust NDI Image Stream".to_string(), false, false)
-        .expect("Expected sender instance to be created");
+    let mut sender = NDI_SENDER.lock().unwrap();
 
     for image_buffer in images {
         let width = image_buffer.width();
