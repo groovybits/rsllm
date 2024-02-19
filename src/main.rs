@@ -20,6 +20,8 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
+#[cfg(feature = "ndi")]
+use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
@@ -430,6 +432,15 @@ struct Args {
         help = "SD Image - create an SD image from the LLM messages, default is false."
     )]
     sd_image: bool,
+
+    /// NDI output
+    #[clap(
+        long,
+        env = "NDI_IMAGES",
+        default_value_t = false,
+        help = "NDI Images output, default is false. (use --features ndi to enable NDI)"
+    )]
+    ndi_images: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -526,6 +537,7 @@ async fn stream_completion(
     show_output_errors: bool,
     break_line_length: usize,
     sd_image: bool,
+    ndi_images: bool,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -824,6 +836,13 @@ async fn stream_completion(
 
             match images_result {
                 Ok(images) => {
+                    // Send images over NDI
+                    #[cfg(feature = "ndi")]
+                    if ndi_images {
+                        send_images_over_ndi(images.clone())?;
+                    }
+
+                    // Save images to disk
                     for (index, image_bytes) in images.iter().enumerate() {
                         let image_file = format!("{}.png", index);
                         println!("Image {} saving to {}", index + 1, image_file);
@@ -1321,6 +1340,7 @@ async fn main() {
             args.show_output_errors,
             args.break_line_length,
             args.sd_image,
+            args.ndi_images,
         )
         .await
         .unwrap_or_else(|_| Vec::new());
