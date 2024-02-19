@@ -11,14 +11,14 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest  # Changed from ubuntu-latest to macos-latest
 
     steps:
     - uses: actions/checkout@v3
     - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libpcap-dev libzmq3-dev capnproto
+        brew update
+        brew install libpcap zmq capnp
     - name: Build
       run: cargo build --verbose
     - name: Run tests

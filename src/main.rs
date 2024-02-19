@@ -20,7 +20,10 @@ use chrono::NaiveDateTime;
 use clap::Parser;
 use log::{debug, error, info};
 use reqwest::Client;
+#[cfg(feature = "ndi")]
+use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
+use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -44,8 +47,8 @@ use tokio::time::Duration;
 #[derive(Parser, Debug)]
 #[clap(
     author = "Chris Kennedy",
-    version = "1.1",
-    about = "Rust LLM - AI System/Network/Stream Analyzer"
+    version = "2.1",
+    about = "MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer"
 )]
 struct Args {
     /// System prompt
@@ -385,12 +388,12 @@ struct Args {
     )]
     debug_llm_history: bool,
 
-    /// POLL Interval in ms, default to 300 seconds
+    /// POLL Interval in ms
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 300_000,
-        help = "POLL Interval in ms, default to 5 minutes or 300 seconds."
+        default_value_t = 0_000,
+        help = "POLL Interval in ms."
     )]
     poll_interval: u64,
 
@@ -420,6 +423,33 @@ struct Args {
         help = "Break Line Length - line length for breaking lines from LLM messages, default is 80."
     )]
     break_line_length: usize,
+
+    /// SD Image - create an SD image from the LLM messages
+    #[clap(
+        long,
+        env = "SD_IMAGE",
+        default_value_t = false,
+        help = "SD Image - create an SD image from the LLM messages, default is false."
+    )]
+    sd_image: bool,
+
+    /// NDI output
+    #[clap(
+        long,
+        env = "NDI_IMAGES",
+        default_value_t = false,
+        help = "NDI Images output, default is false. (use --features ndi to enable NDI)"
+    )]
+    ndi_images: bool,
+
+    /// Max Iterations
+    #[clap(
+        long,
+        env = "MAX_ITERATIONS",
+        default_value_t = 1,
+        help = "Max Iterations, default is 1."
+    )]
+    max_iterations: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -515,6 +545,8 @@ async fn stream_completion(
     debug_inline: bool,
     show_output_errors: bool,
     break_line_length: usize,
+    sd_image: bool,
+    ndi_images: bool,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -762,6 +794,10 @@ async fn stream_completion(
                 if message.starts_with("ERROR:") {
                     errors.push(message);
                 } else {
+                    // check if there is a period at the end of the message
+                    if message.ends_with('.') {
+                        // send to stable diffusion as a separate thread to avoid blocking
+                    }
                     answers.push(message);
                 }
             }
@@ -797,6 +833,36 @@ async fn stream_completion(
             role: "assistant".to_string(),
             content: answers.join(""),
         });
+
+        // Assuming `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
+        if sd_image {
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = answers.join("");
+            sd_config.height = Some(512);
+            sd_config.width = Some(512);
+
+            let images_result = sd(sd_config); // This call now returns `Result<Vec<Vec<u8>>>`
+
+            match images_result {
+                Ok(images) => {
+                    // Send images over NDI
+                    #[cfg(feature = "ndi")]
+                    if ndi_images {
+                        send_images_over_ndi(images.clone())?;
+                    }
+
+                    // Save images to disk
+                    for (index, image_bytes) in images.iter().enumerate() {
+                        let image_file = format!("{}.png", index);
+                        println!("Image {} saving to {}", index + 1, image_file);
+                        image_bytes
+                            .save(image_file)
+                            .map_err(candle_core::Error::wrap)?;
+                    }
+                }
+                Err(e) => eprintln!("Error generating images: {:?}", e),
+            }
+        }
     }
 
     // After processing all chunks/responses
@@ -907,6 +973,9 @@ async fn main() {
         network_capture(&mut network_capture_config, ptx);
     }
 
+    let running_processor = Arc::new(AtomicBool::new(true));
+    let running_processor_clone = running_processor.clone();
+
     let processing_handle = tokio::spawn(async move {
         let mut decode_batch = Vec::new();
         let mut video_pid: Option<u16> = Some(0xFFFF);
@@ -919,7 +988,7 @@ async fn main() {
 
         let mut packet_last_sent_ts = Instant::now();
         let mut count = 0;
-        loop {
+        while running_processor_clone.load(Ordering::SeqCst) {
             if ai_network_stats {
                 debug!("Capturing network packets...");
                 while let Some(packet) = prx.recv().await {
@@ -1282,6 +1351,8 @@ async fn main() {
             debug_inline,
             args.show_output_errors,
             args.break_line_length,
+            args.sd_image,
+            args.ndi_images,
         )
         .await
         .unwrap_or_else(|_| Vec::new());
@@ -1297,8 +1368,23 @@ async fn main() {
             messages.push(assistant_message.clone());
         }
 
-        // break the loop if we are not running as a daemon
-        if !args.daemon {
+        // break the loop if we are not running as a daemon or hit max iterations
+        if (!args.daemon && args.max_iterations <= 1)
+            || (args.max_iterations > 1 && args.max_iterations == count)
+        {
+            // stop the running threads
+            if ai_network_stats {
+                network_capture_config
+                    .running
+                    .store(false, Ordering::SeqCst);
+            }
+
+            // stop the running threads
+            running_processor.store(false, Ordering::SeqCst);
+
+            // Await the completion of background tasks
+            let _ = processing_handle.await;
+
             break;
         }
 
@@ -1319,14 +1405,4 @@ async fn main() {
         // Update start time for the next iteration
         poll_start_time = Instant::now();
     }
-
-    // Close the network capture if ai_network_stats is true
-    if ai_network_stats {
-        network_capture_config
-            .running
-            .store(false, Ordering::SeqCst);
-    }
-
-    // Await the completion of background tasks
-    let _ = processing_handle.await;
 }
