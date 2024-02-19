@@ -388,12 +388,12 @@ struct Args {
     )]
     debug_llm_history: bool,
 
-    /// POLL Interval in ms, default to 300 seconds
+    /// POLL Interval in ms
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 300_000,
-        help = "POLL Interval in ms, default to 5 minutes or 300 seconds."
+        default_value_t = 0_000,
+        help = "POLL Interval in ms."
     )]
     poll_interval: u64,
 
