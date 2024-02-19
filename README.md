@@ -3,11 +3,9 @@
 This is focused on a MacOS M1/M2/M3 ARM GPU since that is what I have to test with.
 If CPU/Nvidia are needed please help test and contribute the configuration to allow this easier.
 
-Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too.
+Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too. Add --features metal to the cargo build command for MacOS GPU usage.
 
-NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this.
-
-<https://ndi.video/download-ndi-sdk/>
+NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command.
 
 Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. It is designed to be used with the llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
 
