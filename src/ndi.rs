@@ -1,8 +1,11 @@
 use image::{ImageBuffer, Rgb};
+#[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
+#[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
 use std::io::Result;
 
+#[cfg(feature = "ndi")]
 pub fn send_images_over_ndi(images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> Result<()> {
     let instance: NDIInstance = ndi_sdk::load().expect("Failed to construct NDI instance");
 
@@ -33,6 +36,7 @@ pub fn send_images_over_ndi(images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> Resul
     Ok(())
 }
 
+#[cfg(feature = "ndi")]
 fn convert_rgb_to_rgba(image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Vec<u8> {
     image_buffer
         .pixels()
