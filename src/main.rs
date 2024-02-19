@@ -441,6 +441,15 @@ struct Args {
         help = "NDI Images output, default is false. (use --features ndi to enable NDI)"
     )]
     ndi_images: bool,
+
+    /// Max Iterations
+    #[clap(
+        long,
+        env = "MAX_ITERATIONS",
+        default_value_t = 1,
+        help = "Max Iterations, default is 1."
+    )]
+    max_iterations: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -964,6 +973,9 @@ async fn main() {
         network_capture(&mut network_capture_config, ptx);
     }
 
+    let running_processor = Arc::new(AtomicBool::new(true));
+    let running_processor_clone = running_processor.clone();
+
     let processing_handle = tokio::spawn(async move {
         let mut decode_batch = Vec::new();
         let mut video_pid: Option<u16> = Some(0xFFFF);
@@ -976,7 +988,7 @@ async fn main() {
 
         let mut packet_last_sent_ts = Instant::now();
         let mut count = 0;
-        loop {
+        while running_processor_clone.load(Ordering::SeqCst) {
             if ai_network_stats {
                 debug!("Capturing network packets...");
                 while let Some(packet) = prx.recv().await {
@@ -1356,8 +1368,23 @@ async fn main() {
             messages.push(assistant_message.clone());
         }
 
-        // break the loop if we are not running as a daemon
-        if !args.daemon {
+        // break the loop if we are not running as a daemon or hit max iterations
+        if (!args.daemon && args.max_iterations <= 1)
+            || (args.max_iterations > 1 && args.max_iterations == count)
+        {
+            // stop the running threads
+            if ai_network_stats {
+                network_capture_config
+                    .running
+                    .store(false, Ordering::SeqCst);
+            }
+
+            // stop the running threads
+            running_processor.store(false, Ordering::SeqCst);
+
+            // Await the completion of background tasks
+            let _ = processing_handle.await;
+
             break;
         }
 
@@ -1378,14 +1405,4 @@ async fn main() {
         // Update start time for the next iteration
         poll_start_time = Instant::now();
     }
-
-    // Close the network capture if ai_network_stats is true
-    if ai_network_stats {
-        network_capture_config
-            .running
-            .store(false, Ordering::SeqCst);
-    }
-
-    // Await the completion of background tasks
-    let _ = processing_handle.await;
 }
