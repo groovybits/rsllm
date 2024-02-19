@@ -3,10 +3,6 @@
 This is focused on a MacOS M1/M2/M3 ARM GPU since that is what I have to test with.
 If CPU/Nvidia are needed please help test and contribute the configuration to allow this easier.
 
-Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too. Add --features metal to the cargo build command for MacOS GPU usage. `cargo build --features=metal,ndi`
-
-NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command. This is what needs to be done too: <https://digitaldrummerj.me/obs29-ndi-apple-silicon/> basically get <https://ndi.video/tools/ndi-core-suite/> and move the libndi.dynlib into /usr/local/lib so it can be found. like `sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"`
-
 Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. It is designed to be used with the llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
 
 A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
@@ -32,6 +28,15 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
     -t 24 \
     --host 127.0.0.1
 ```
+
+## Stable Diffusion and NDI output of images (WIP)
+Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too. Add --features metal to the cargo build command for MacOS GPU usage. `cargo build --features=metal,ndi`
+
+NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command. This is what needs to be done too: <https://digitaldrummerj.me/obs29-ndi-apple-silicon/> basically get <https://ndi.video/tools/ndi-core-suite/> and move the libndi.dynlib into /usr/local/lib so it can be found. like `sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"`
+ Then use `export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH` at runtime. It's unfortunate NDI sdk libs aren't easier to deal with.
+
+## MetaVoice TTS Text to Speech Speaking (TODO)
+Candle will support MetaVoice soon (PR a WIP is in the Candle project `https://github.com/huggingface/candle/compare/main...metavoice` which will allow pure Rust based LLM + TTI + TTS with Candle and Metal GPU.
 
 ## Features
 
