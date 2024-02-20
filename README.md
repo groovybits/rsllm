@@ -1,4 +1,4 @@
-# MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer
+# MacOS Metal GPU Rust TextGen/ImageGen/SpeechGen - AI System/Network/Stream Analyzer
 
 This is focused on a MacOS M1/M2/M3 ARM GPU since that is what I have to test with.
 If CPU/Nvidia are needed please help test and contribute the configuration to allow this easier.
