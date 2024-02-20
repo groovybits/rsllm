@@ -1,6 +1,4 @@
 use image::{ImageBuffer, Rgb};
-use ndi_sdk::send::NDISendAudioFrame;
-use ndi_sdk::send::NDISendAudioFrameBuilder;
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
