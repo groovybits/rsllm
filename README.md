@@ -210,7 +210,9 @@ Options:
 
 ```
 
-### Example (default payload query is an mpegts nal packet to parse and analyze)
+### Example:
+
+- using an mpegts packet payload with nal's to to parse and analyze from network capture
 
 ```bash
 $ cargo run
@@ -291,10 +293,10 @@ Analyzing the provided MPEG-TS NAL (Network Abstraction Layer) dumps requires br
 
 This would typically involve a time-based graph showing packet intervals, PID distribution, bitrate fluctuations, and possibly packet losses or errors, which is not feasible to accurately depict in text form here. A professional MPEG-TS analyzer would provide a graphical representation of these elements, offering insights
 --
-Index 0 ID chatcmpl-8olUak4ptUT1A3icM4w7flHRiC5zN
-Object chat.completion.chunk by Model gpt-4-0125-preview User unknown
-Created on 2024-02-05 05:07:32 Finish reason: length
-Tokens 800 Bytes 2964
+Index 0 ID chatcmpl-1mtdhIYmAGJpfJRU7rkiOxN7zZ3tPTUW
+Object chat.completion.chunk by Model no-model-specified User unknown
+Created on 2024-02-20 08:09:05 Finish reason: stop
+ 106/65/41 Tokens/Prompt/Response 198 Bytes at 10 tokens per second and 4.224651541s seconds to complete.
 --
 ```
 
