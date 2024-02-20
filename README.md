@@ -108,7 +108,7 @@ Use the scripts in the [./scripts](./scripts/) directory.
 #### Command-Line Options:
 
 ```bash
-Rust LLM - AI System/Network/Stream Analyzer
+MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer
 
 Usage: rsllm [OPTIONS]
 
@@ -128,7 +128,7 @@ Options:
       --max-tokens <MAX_TOKENS>
           Max Tokens, 1 to N. Default is 800. [env: MAX_TOKENS=] [default: 800]
       --model <MODEL>
-          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: gpt-4-turbo-preview]
+          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: no-model-specified]
       --llm-host <LLM_HOST>
           LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://127.0.0.1:8080]
       --llm-path <LLM_PATH>
@@ -141,16 +141,18 @@ Options:
           Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
       --debug-inline
           debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
+      --show-output-errors
+          Show LLM output errors which may mess up the output and niceness if packet loss occurs, default is false. [env: SHOW_OUTPUT_ERRORS=]
       --ai-os-stats
           Monitor system stats, default is false. [env: AI_OS_STATS=]
       --daemon
           run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
       --ai-network-stats
           Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
+      --ai-network-packets
+          Monitor network packets, default is false. [env: AI_NETWORK_PACKETS=]
       --ai-network-hexdump
           Monitor network full packet hex dump, default is false. [env: AI_NETWORK_HEXDUMP=]
-      --ai-network-metadata-off
-          Turn off ai metadata network packet processing, only hexdump, default is false. [env: AI_NETWORK_METADATA_OFF=]
       --ai-network-packet-count <AI_NETWORK_PACKET_COUNT>
           AI Network Packet Count, default is 100. [env: AI_NETWORK_PACKET_COUNT=] [default: 100]
       --pcap-stats
@@ -188,13 +190,24 @@ Options:
       --debug-llm-history
           DEBUG LLM Message History, default is false. [env: DEBUG_LLM_HISTORY=]
       --poll-interval <POLL_INTERVAL>
-          POLL Interval in ms, default to 60 seconds. [env: POLL_INTERVAL=] [default: 60000]
+          POLL Interval in ms. [env: POLL_INTERVAL=] [default: 0]
       --no-progress
           Turn off progress output dots, default is false. [env: NO_PROGRESS=]
+      --loglevel <LOGLEVEL>
+          Loglevel, control rust log level, default is info. [env: LOGLEVEL=] [default: ]
+      --break-line-length <BREAK_LINE_LENGTH>
+          Break Line Length - line length for breaking lines from LLM messages, default is 80. [env: BREAK_LINE_LENGTH=] [default: 80]
+      --sd-image
+          SD Image - create an SD image from the LLM messages, default is false. [env: SD_IMAGE=]
+      --ndi-images
+          NDI Images output, default is false. (use --features ndi to enable NDI) [env: NDI_IMAGES=]
+      --max-iterations <MAX_ITERATIONS>
+          Max Iterations, default is 1. [env: MAX_ITERATIONS=] [default: 1]
   -h, --help
           Print help
   -V, --version
           Print version
+
 ```
 
 ### Example (default payload query is an mpegts nal packet to parse and analyze)
