@@ -5,7 +5,6 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use clap::Parser;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 use tracing_chrome::ChromeLayerBuilder;
@@ -126,70 +125,22 @@ impl TextGeneration {
     }
 }
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
+pub fn mistral(prompt: String, sample_len: usize, external_sender: Sender<String>) -> Result<()> {
+    let cpu = false;
+    let tracing = false;
+    let use_flash_attn = false;
+    let temperature = 0.8;
+    let top_p = 0.9;
+    let seed = 299792458;
+    let model_id: Option<String> = None;
+    let revision: String = "main".to_string();
+    let tokenizer_file: Option<String> = None;
+    let weight_files: Option<String> = None;
+    let quantized = true;
+    let repeat_penalty = 1.1;
+    let repeat_last_n = 64;
 
-    /// Enable tracing (generates a trace-timestamp.json file).
-    #[arg(long)]
-    tracing: bool,
-
-    #[arg(long)]
-    use_flash_attn: bool,
-
-    #[arg(long)]
-    prompt: String,
-
-    /// The temperature used to generate samples.
-    #[arg(long)]
-    temperature: Option<f64>,
-
-    /// Nucleus sampling probability cutoff.
-    #[arg(long)]
-    top_p: Option<f64>,
-
-    /// The seed to use when generating random samples.
-    #[arg(long, default_value_t = 299792458)]
-    seed: u64,
-
-    /// The length of the sample to generate (in tokens).
-    #[arg(long, short = 'n', default_value_t = 10000)]
-    sample_len: usize,
-
-    #[arg(long)]
-    model_id: Option<String>,
-
-    #[arg(long, default_value = "main")]
-    revision: String,
-
-    #[arg(long)]
-    tokenizer_file: Option<String>,
-
-    #[arg(long)]
-    weight_files: Option<String>,
-
-    #[arg(long)]
-    quantized: bool,
-
-    /// Penalty to be applied for repeating tokens, 1. means no penalty.
-    #[arg(long, default_value_t = 1.1)]
-    repeat_penalty: f32,
-
-    /// The context size to consider for the repeat penalty.
-    #[arg(long, default_value_t = 64)]
-    repeat_last_n: usize,
-}
-
-pub fn mistral(
-    external_sender: Sender<String>,
-    _external_receiver: mpsc::Receiver<String>,
-) -> Result<()> {
-    let args = Args::parse();
-
-    let _guard = if args.tracing {
+    let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
         tracing_subscriber::registry().with(chrome_layer).init();
         Some(guard)
@@ -205,39 +156,33 @@ pub fn mistral(
     );
     println!(
         "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
-        args.temperature.unwrap_or(0.),
-        args.repeat_penalty,
-        args.repeat_last_n
+        temperature, repeat_penalty, repeat_last_n
     );
 
     let start = std::time::Instant::now();
     let api = Api::new()?;
-    let model_id = match args.model_id {
+    let model_id = match model_id {
         Some(model_id) => model_id,
         None => {
-            if args.quantized {
+            if quantized {
                 "lmz/candle-mistral".to_string()
             } else {
                 "mistralai/Mistral-7B-v0.1".to_string()
             }
         }
     };
-    let repo = api.repo(Repo::with_revision(
-        model_id,
-        RepoType::Model,
-        args.revision,
-    ));
-    let tokenizer_filename = match args.tokenizer_file {
+    let repo = api.repo(Repo::with_revision(model_id, RepoType::Model, revision));
+    let tokenizer_filename = match tokenizer_file {
         Some(file) => std::path::PathBuf::from(file),
         None => repo.get("tokenizer.json")?,
     };
-    let filenames = match args.weight_files {
+    let filenames = match weight_files {
         Some(files) => files
             .split(',')
             .map(std::path::PathBuf::from)
             .collect::<Vec<_>>(),
         None => {
-            if args.quantized {
+            if quantized {
                 vec![repo.get("model-q4k.gguf")?]
             } else {
                 candle_examples::hub_load_safetensors(&repo, "model.safetensors.index.json")?
@@ -248,9 +193,9 @@ pub fn mistral(
     let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
     let start = std::time::Instant::now();
-    let config = Config::config_7b_v0_1(args.use_flash_attn);
-    let device = candle_examples::device(args.cpu)?;
-    let (model, device) = if args.quantized {
+    let config = Config::config_7b_v0_1(use_flash_attn);
+    let device = candle_examples::device(cpu)?;
+    let (model, device) = if quantized {
         let filename = &filenames[0];
         let vb =
             candle_transformers::quantized_var_builder::VarBuilder::from_gguf(filename, &device)?;
@@ -288,7 +233,7 @@ pub fn mistral(
     // Start the text generation in a separate thread
     thread::spawn(move || {
         pipeline
-            .run(&args.prompt, args.sample_len)
+            .run(&prompt, sample_len)
             .expect("Failed to run the pipeline");
     });
 
