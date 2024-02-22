@@ -19,7 +19,7 @@ use clap::Parser;
 use log::{debug, error, info};
 use rsllm::candle_mistral::mistral;
 use rsllm::network_capture::{network_capture, NetworkCapture};
-use rsllm::openai_api::{stream_completion, Message, OpenAIRequest};
+use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -778,8 +778,6 @@ async fn main() {
             json!({})
         };
 
-        let prompt = args.query.clone();
-
         // Add the system stats to the messages
         if !ai_os_stats && !ai_network_stats {
             let query_clone = args.query.clone();
@@ -925,6 +923,10 @@ async fn main() {
         if args.use_candle {
             // Capture the start time for performance metrics
             let start = Instant::now();
+
+            let prompt = format_messages_for_llama2(messages.clone());
+
+            info!("Prompt: {}", prompt);
 
             // Spawn a thread to run the mistral function, to keep the UI responsive
             std::thread::spawn(move || {

@@ -126,16 +126,16 @@ pub fn mistral(prompt: String, sample_len: usize, external_sender: Sender<String
     let cpu = false;
     let tracing = false;
     let use_flash_attn = false;
-    let temperature = 0.8;
-    let top_p = 0.9;
-    let seed = 299792458;
+    let temperature: f64 = 0.8;
+    let top_p: Option<f64> = None;
+    let seed = 0;
     let model_id: Option<String> = None;
     let revision: String = "main".to_string();
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
-    let quantized = true;
+    let quantized = false;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 64;
+    let repeat_last_n = 0;
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
@@ -217,11 +217,11 @@ pub fn mistral(prompt: String, sample_len: usize, external_sender: Sender<String
     let mut pipeline = TextGeneration::new(
         model,
         tokenizer,
-        0,         // seed
-        Some(1.0), // temp
-        Some(1.0), // top_p
-        1.1,       // repeat_penalty
-        64,        // repeat_last_n
+        seed,              // seed
+        Some(temperature), // temp
+        top_p,             // top_p
+        repeat_penalty,    // repeat_penalty
+        repeat_last_n,     // repeat_last_n
         &device,
         internal_sender,
     );
