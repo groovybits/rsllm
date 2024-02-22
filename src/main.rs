@@ -497,7 +497,6 @@ async fn main() {
     }
 
     let system_prompt = args.system_prompt;
-    let query = args.query;
 
     let system_message = Message {
         role: "system".to_string(),
@@ -779,11 +778,15 @@ async fn main() {
             json!({})
         };
 
+        let prompt = args.query.clone();
+
         // Add the system stats to the messages
         if !ai_os_stats && !ai_network_stats {
+            let query_clone = args.query.clone();
+
             let user_message = Message {
                 role: "user".to_string(),
-                content: query.to_string(),
+                content: query_clone.to_string(),
             };
             messages.push(user_message.clone());
         } else if ai_network_stats {
@@ -807,7 +810,7 @@ async fn main() {
                         pretty_date_time,
                         system_stats_json.to_string(),
                         decode_batch,
-                        query
+                        args.query
                     ),
                 };
                 messages.push(network_stats_message.clone());
@@ -827,7 +830,7 @@ async fn main() {
                     "{} System Stats: {}\nInstructions: {}",
                     pretty_date_time,
                     system_stats_json.to_string(),
-                    query
+                    args.query
                 ),
             };
             messages.push(system_stats_message.clone());
@@ -918,9 +921,6 @@ async fn main() {
 
         // Setup mpsc channels for internal communication within the mistral function
         let (external_sender, external_receiver) = std::sync::mpsc::channel::<String>();
-
-        // Example prompt to feed into the mistral function
-        let prompt = "The quick brown fox jumps over the lazy dog".to_string();
 
         if args.use_candle {
             // Capture the start time for performance metrics

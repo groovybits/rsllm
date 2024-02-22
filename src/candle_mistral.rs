@@ -34,7 +34,6 @@ struct TextGeneration {
     repeat_penalty: f32,
     repeat_last_n: usize,
     internal_token_sender: Sender<String>,
-    external_token_sender: Sender<String>,
 }
 
 impl TextGeneration {
@@ -49,7 +48,6 @@ impl TextGeneration {
         repeat_last_n: usize,
         device: &Device,
         internal_token_sender: Sender<String>,
-        external_token_sender: Sender<String>,
     ) -> Self {
         let logits_processor = LogitsProcessor::new(seed, temp, top_p);
         Self {
@@ -60,7 +58,6 @@ impl TextGeneration {
             repeat_last_n,
             device: device.clone(),
             internal_token_sender,
-            external_token_sender,
         }
     }
 
@@ -227,7 +224,6 @@ pub fn mistral(prompt: String, sample_len: usize, external_sender: Sender<String
         64,        // repeat_last_n
         &device,
         internal_sender,
-        external_sender.clone(),
     );
 
     // Start the text generation in a separate thread
