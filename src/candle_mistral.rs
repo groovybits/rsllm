@@ -122,20 +122,24 @@ impl TextGeneration {
     }
 }
 
-pub fn mistral(prompt: String, sample_len: usize, external_sender: Sender<String>) -> Result<()> {
+pub fn mistral(
+    prompt: String,
+    sample_len: usize,
+    temperature: f64,
+    quantized: bool,
+    external_sender: Sender<String>,
+) -> Result<()> {
     let cpu = false;
     let tracing = false;
     let use_flash_attn = false;
-    let temperature: f64 = 0.8;
     let top_p: Option<f64> = None;
     let seed = 0;
     let model_id: Option<String> = None;
     let revision: String = "main".to_string();
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
-    let quantized = false;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 0;
+    let repeat_last_n = 64;
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();

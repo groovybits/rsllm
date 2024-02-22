@@ -73,6 +73,15 @@ struct Args {
     )]
     temperature: f32,
 
+    /// Quantized bool
+    #[clap(
+        long,
+        env = "QUANTIZED",
+        default_value = "false",
+        help = "Quantized, it will use a quantized LLM to generate output faster on CPUs or GPUs."
+    )]
+    quantized: bool,
+
     /// Top P
     #[clap(
         long,
@@ -931,7 +940,13 @@ async fn main() {
             // Spawn a thread to run the mistral function, to keep the UI responsive
             std::thread::spawn(move || {
                 // Assuming `mistral` is adapted to accept a prompt and a Sender for external communication
-                if let Err(e) = mistral(prompt, max_tokens as usize, external_sender) {
+                if let Err(e) = mistral(
+                    prompt,
+                    max_tokens as usize,
+                    temperature as f64,
+                    args.quantized,
+                    external_sender,
+                ) {
                     eprintln!("Error running mistral: {}", e);
                 }
             });
