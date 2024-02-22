@@ -6,6 +6,11 @@ extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
 use clap::Parser;
+use std::sync::mpsc::{self, Sender};
+use std::thread;
+use tracing_chrome::ChromeLayerBuilder;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use candle_transformers::models::mistral::{Config, Model as Mistral};
 use candle_transformers::models::quantized_mistral::Model as QMistral;
@@ -29,6 +34,8 @@ struct TextGeneration {
     logits_processor: LogitsProcessor,
     repeat_penalty: f32,
     repeat_last_n: usize,
+    internal_token_sender: Sender<String>,
+    external_token_sender: Sender<String>,
 }
 
 impl TextGeneration {
@@ -42,6 +49,8 @@ impl TextGeneration {
         repeat_penalty: f32,
         repeat_last_n: usize,
         device: &Device,
+        internal_token_sender: Sender<String>,
+        external_token_sender: Sender<String>,
     ) -> Self {
         let logits_processor = LogitsProcessor::new(seed, temp, top_p);
         Self {
@@ -51,6 +60,8 @@ impl TextGeneration {
             repeat_penalty,
             repeat_last_n,
             device: device.clone(),
+            internal_token_sender,
+            external_token_sender,
         }
     }
 
@@ -66,12 +77,13 @@ impl TextGeneration {
             .to_vec();
         for &t in tokens.iter() {
             if let Some(t) = self.tokenizer.next_token(t)? {
-                print!("{t}")
+                self.internal_token_sender
+                    .send(t.clone())
+                    .expect("Failed to send token internally");
             }
         }
         std::io::stdout().flush()?;
 
-        let mut generated_tokens = 0usize;
         let eos_token = match self.tokenizer.get_token("</s>") {
             Some(token) => token,
             None => anyhow::bail!("cannot find the </s> token"),
@@ -100,24 +112,16 @@ impl TextGeneration {
 
             let next_token = self.logits_processor.sample(&logits)?;
             tokens.push(next_token);
-            generated_tokens += 1;
             if next_token == eos_token {
                 break;
             }
             if let Some(t) = self.tokenizer.next_token(next_token)? {
-                print!("{t}");
-                std::io::stdout().flush()?;
+                self.internal_token_sender
+                    .send(t.clone())
+                    .expect("Failed to send token internally");
             }
         }
-        let dt = start_gen.elapsed();
-        if let Some(rest) = self.tokenizer.decode_rest().map_err(E::msg)? {
-            print!("{rest}");
-        }
-        std::io::stdout().flush()?;
-        println!(
-            "\n{generated_tokens} tokens generated ({:.2} token/s)",
-            generated_tokens as f64 / dt.as_secs_f64(),
-        );
+
         Ok(())
     }
 }
@@ -179,11 +183,12 @@ struct Args {
     repeat_last_n: usize,
 }
 
-fn main() -> Result<()> {
-    use tracing_chrome::ChromeLayerBuilder;
-    use tracing_subscriber::prelude::*;
-
+pub fn mistral(
+    external_sender: Sender<String>,
+    _external_receiver: mpsc::Receiver<String>,
+) -> Result<()> {
     let args = Args::parse();
+
     let _guard = if args.tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
         tracing_subscriber::registry().with(chrome_layer).init();
@@ -264,16 +269,39 @@ fn main() -> Result<()> {
 
     println!("loaded the model in {:?}", start.elapsed());
 
+    let (internal_sender, internal_receiver) = mpsc::channel();
+
+    // Pass both the internal and external senders to TextGeneration
     let mut pipeline = TextGeneration::new(
         model,
         tokenizer,
-        args.seed,
-        args.temperature,
-        args.top_p,
-        args.repeat_penalty,
-        args.repeat_last_n,
+        0,         // seed
+        Some(1.0), // temp
+        Some(1.0), // top_p
+        1.1,       // repeat_penalty
+        64,        // repeat_last_n
         &device,
+        internal_sender,
+        external_sender.clone(),
     );
-    pipeline.run(&args.prompt, args.sample_len)?;
+
+    // Start the text generation in a separate thread
+    thread::spawn(move || {
+        pipeline
+            .run(&args.prompt, args.sample_len)
+            .expect("Failed to run the pipeline");
+    });
+
+    // Set up a thread to listen on the internal receiver and forward messages to the external sender
+    let external_sender_clone = external_sender.clone();
+    thread::spawn(move || {
+        for token in internal_receiver {
+            external_sender_clone
+                .send(token)
+                .expect("Failed to send token externally");
+        }
+    });
+
+    // Additional logic as needed...
     Ok(())
 }
