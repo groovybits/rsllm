@@ -94,6 +94,31 @@ fn process_and_print_token(token: &str, current_line_length: &mut usize, break_l
     }
 }
 
+pub fn format_messages_for_llama2(messages: Vec<Message>) -> String {
+    let mut formatted_history = String::new();
+
+    for message in messages {
+        match message.role.as_str() {
+            "system" => {
+                formatted_history += &format!("System: {}</s>\n", message.content);
+            }
+            "user" => {
+                // Assuming user messages should be formatted as instructions
+                formatted_history += &format!("User: {}\n", message.content);
+            }
+            "assistant" => {
+                // Close the instruction tag for user/system messages and add the assistant's response
+                formatted_history += &format!("Assistant: {}</s>\n", message.content);
+            }
+            _ => {}
+        }
+    }
+
+    formatted_history += "Instructions: Use the previous converation between you the assitant and the user as context and to answer the last question asked by the User as the assitant.\nAssistant:";
+
+    formatted_history
+}
+
 /*
  * {"choices":[{"finish_reason":"stop","index":0,"message":{"content":"The Los Angeles Dodgers won
  * the World Series in 2020. They defeated the Tampa Bay Rays in six

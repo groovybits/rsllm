@@ -7,6 +7,7 @@
  * for RsLLM.
 */
 
+pub mod candle_mistral;
 pub mod mpegts;
 #[cfg(feature = "ndi")]
 pub mod ndi;

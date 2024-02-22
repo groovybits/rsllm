@@ -17,8 +17,9 @@
 
 use clap::Parser;
 use log::{debug, error, info};
+use rsllm::candle_mistral::mistral;
 use rsllm::network_capture::{network_capture, NetworkCapture};
-use rsllm::openai_api::{stream_completion, Message, OpenAIRequest};
+use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -28,6 +29,7 @@ use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
 use std::env;
+use std::io::Write;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -70,6 +72,15 @@ struct Args {
         help = "Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8."
     )]
     temperature: f32,
+
+    /// Quantized bool
+    #[clap(
+        long,
+        env = "QUANTIZED",
+        default_value = "false",
+        help = "Quantized, it will use a quantized LLM to generate output faster on CPUs or GPUs."
+    )]
+    quantized: bool,
 
     /// Top P
     #[clap(
@@ -443,6 +454,15 @@ struct Args {
         help = "Max Iterations, default is 1."
     )]
     max_iterations: i32,
+
+    /// Use Candle for LLM
+    #[clap(
+        long,
+        env = "USE_CANDLE",
+        default_value_t = false,
+        help = "Use Candle for LLM, default is false."
+    )]
+    use_candle: bool,
 }
 
 #[tokio::main]
@@ -486,7 +506,6 @@ async fn main() {
     }
 
     let system_prompt = args.system_prompt;
-    let query = args.query;
 
     let system_message = Message {
         role: "system".to_string(),
@@ -770,9 +789,11 @@ async fn main() {
 
         // Add the system stats to the messages
         if !ai_os_stats && !ai_network_stats {
+            let query_clone = args.query.clone();
+
             let user_message = Message {
                 role: "user".to_string(),
-                content: query.to_string(),
+                content: query_clone.to_string(),
             };
             messages.push(user_message.clone());
         } else if ai_network_stats {
@@ -796,7 +817,7 @@ async fn main() {
                         pretty_date_time,
                         system_stats_json.to_string(),
                         decode_batch,
-                        query
+                        args.query
                     ),
                 };
                 messages.push(network_stats_message.clone());
@@ -816,7 +837,7 @@ async fn main() {
                     "{} System Stats: {}\nInstructions: {}",
                     pretty_date_time,
                     system_stats_json.to_string(),
-                    query
+                    args.query
                 ),
             };
             messages.push(system_stats_message.clone());
@@ -905,43 +926,86 @@ async fn main() {
             }
         }
 
-        // Stream API Completion
-        let stream = !args.no_stream;
-        let open_ai_request = OpenAIRequest {
-            model: &model,
-            max_tokens: &max_tokens, // add this field to the request struct
-            messages: messages.clone(),
-            temperature: &temperature, // add this field to the request struct
-            top_p: &top_p,             // add this field to the request struct
-            presence_penalty: &presence_penalty, // add this field to the request struct
-            frequency_penalty: &frequency_penalty, // add this field to the request struct
-            stream: &stream,
-        };
+        // Setup mpsc channels for internal communication within the mistral function
+        let (external_sender, external_receiver) = std::sync::mpsc::channel::<String>();
 
-        // Directly await the future; no need for an explicit runtime block
-        let answers = stream_completion(
-            open_ai_request,
-            &openai_key,
-            &llm_host,
-            &llm_path,
-            debug_inline,
-            args.show_output_errors,
-            args.break_line_length,
-            args.sd_image,
-            args.ndi_images,
-        )
-        .await
-        .unwrap_or_else(|_| Vec::new());
+        if args.use_candle {
+            // Capture the start time for performance metrics
+            let start = Instant::now();
 
-        // for each answer in the response
-        for answer in answers {
-            let assistant_message = Message {
-                role: "assistant".to_string(),
-                content: answer.content,
+            let prompt = format_messages_for_llama2(messages.clone());
+
+            info!("Prompt: {}", prompt);
+
+            // Spawn a thread to run the mistral function, to keep the UI responsive
+            std::thread::spawn(move || {
+                // Assuming `mistral` is adapted to accept a prompt and a Sender for external communication
+                if let Err(e) = mistral(
+                    prompt,
+                    max_tokens as usize,
+                    temperature as f64,
+                    args.quantized,
+                    external_sender,
+                ) {
+                    eprintln!("Error running mistral: {}", e);
+                }
+            });
+
+            // Count tokens and collect output
+            let mut token_count = 0;
+            for received in external_receiver {
+                print!("{}", received);
+                std::io::stdout().flush().unwrap();
+                token_count += 1;
+            }
+
+            // Calculate elapsed time and tokens per second
+            let elapsed = start.elapsed().as_secs_f64();
+            let tokens_per_second = token_count as f64 / elapsed;
+
+            println!(
+                "\nGenerated {} tokens in {:.2?} seconds ({:.2} tokens/second)",
+                token_count, elapsed, tokens_per_second
+            );
+        } else {
+            // Stream API Completion
+            let stream = !args.no_stream;
+            let open_ai_request = OpenAIRequest {
+                model: &model,
+                max_tokens: &max_tokens, // add this field to the request struct
+                messages: messages.clone(),
+                temperature: &temperature, // add this field to the request struct
+                top_p: &top_p,             // add this field to the request struct
+                presence_penalty: &presence_penalty, // add this field to the request struct
+                frequency_penalty: &frequency_penalty, // add this field to the request struct
+                stream: &stream,
             };
 
-            // push the message to the open_ai_request
-            messages.push(assistant_message.clone());
+            // Directly await the future; no need for an explicit runtime block
+            let answers = stream_completion(
+                open_ai_request,
+                &openai_key,
+                &llm_host,
+                &llm_path,
+                debug_inline,
+                args.show_output_errors,
+                args.break_line_length,
+                args.sd_image,
+                args.ndi_images,
+            )
+            .await
+            .unwrap_or_else(|_| Vec::new());
+
+            // for each answer in the response
+            for answer in answers {
+                let assistant_message = Message {
+                    role: "assistant".to_string(),
+                    content: answer.content,
+                };
+
+                // push the message to the open_ai_request
+                messages.push(assistant_message.clone());
+            }
         }
 
         // break the loop if we are not running as a daemon or hit max iterations
