@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use system_stats::{get_system_stats, SystemStats};
+pub mod candle_gemma;
 
 /// Enum to determine the type of stats to fetch.
 pub enum StatsType {

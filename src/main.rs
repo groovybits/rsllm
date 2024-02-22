@@ -17,6 +17,7 @@
 
 use clap::Parser;
 use log::{debug, error, info};
+use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
@@ -463,6 +464,15 @@ struct Args {
         help = "Use Candle for LLM, default is false."
     )]
     use_candle: bool,
+
+    /// which llm to use from candle, string default is mistral
+    #[clap(
+        long,
+        env = "CANDLE_LLM",
+        default_value = "mistral",
+        help = "which llm to use from candle, string default is mistral."
+    )]
+    candle_llm: String,
 }
 
 #[tokio::main]
@@ -938,18 +948,35 @@ async fn main() {
             info!("Prompt: {}", prompt);
 
             // Spawn a thread to run the mistral function, to keep the UI responsive
-            std::thread::spawn(move || {
-                // Assuming `mistral` is adapted to accept a prompt and a Sender for external communication
-                if let Err(e) = mistral(
-                    prompt,
-                    max_tokens as usize,
-                    temperature as f64,
-                    args.quantized,
-                    external_sender,
-                ) {
-                    eprintln!("Error running mistral: {}", e);
-                }
-            });
+
+            if args.candle_llm == "mistral" {
+                std::thread::spawn(move || {
+                    if let Err(e) = mistral(
+                        prompt,
+                        max_tokens as usize,
+                        temperature as f64,
+                        args.quantized,
+                        external_sender,
+                    ) {
+                        eprintln!("Error running mistral: {}", e);
+                    }
+                });
+            } else if args.candle_llm == "gemma" {
+                std::thread::spawn(move || {
+                    if let Err(e) = gemma(
+                        prompt,
+                        max_tokens as usize,
+                        temperature as f64,
+                        args.quantized,
+                        external_sender,
+                    ) {
+                        eprintln!("Error running gemma: {}", e);
+                    }
+                });
+            } else {
+                log::error!("No AI model specified. Exiting.");
+                std::process::exit(1);
+            }
 
             // Count tokens and collect output
             let mut token_count = 0;
