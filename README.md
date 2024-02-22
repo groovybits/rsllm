@@ -3,16 +3,32 @@
 This is focused on a MacOS M1/M2/M3 ARM GPU since that is what I have to test with.
 If CPU/Nvidia are needed please help test and contribute the configuration to allow this easier.
 
-Simple rust program that can use an llm using the OpenAI specifications to analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. It is designed to be used with the llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
+Uses Candle with pure Rust LLM Mistral and Gemma. You can also use the OpenAI specifications for the LLM to any server that supports OpenAI API. Mixtral support is coming soon!
 
-A Rust-based client for interacting with the OpenAI API, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
+Analyze data from realtime captures of network devices or systems proc values or arbitrary streams of data. It can also be used to send prompts to the llm and display the results in the console. If you don't have Candle/Rust and a Metal Mac you will need to use llama.cpp server and the GGUF model Mixtral 8x7b. It can also be used with the OpenAI API.
 
-I recommend The Dolphin mixtral model is based on Mixtral-8x7b. The base model has 32k context, Dolphin finetuned it with 16k. This Dolphin is really good at coding, They trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as they show in the examples on the main model site on Huggingface.
+Rust-based client for interacting with an LLM, designed to send prompts and receive responses asynchronously, displaying them in the console. Ideal for developers and researchers integrating AI responses into Rust applications or exploring OpenAI's capabilities programmatically. It also includes a system and network analyzer that can be used to capture and analyze network packets and system stats.
 
-## Recommended model and server in C++ to run it with:
+## Use Candle pure Rust LLM with Meta Llama2 based Mistral or Google Gemma
+Use the command line args `--use-candle --use-gemma` or `--use-candle --use-mistral`, build with metal feature too or it will not work well..
+
+## Stable Diffusion and NDI output of images (WIP)
+Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM support in pure Rust directly no server or Python.
+
+Add --features metal to the cargo build command for MacOS GPU usage. `cargo build --features=metal,ndi`
+
+NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command. This is what needs to be done too: <https://digitaldrummerj.me/obs29-ndi-apple-silicon/> basically get <https://ndi.video/tools/ndi-core-suite/> and move the libndi.dynlib into /usr/local/lib so it can be found. like `sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"`
+ Then use `export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH` at runtime. It's unfortunate NDI sdk libs aren't easier to deal with. Also logging into Huggingface Hub with the cli fixes some warnings you will get otherwise... `huggingface-cli login`.
+
+## MetaVoice TTS Text to Speech Speaking (TODO)
+Candle will support MetaVoice soon (PR a WIP is in the Candle project `https://github.com/huggingface/candle/compare/main...metavoice` which will allow pure Rust based LLM + TTI + TTS with Candle and Metal GPU.
+
+## Recommended model when using llama.cpp OpenAI API, it is in C++ to run it with:
+- Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
 - GGUF Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF>
 - Dolphin 2.7 information: <https://huggingface.co/cognitivecomputations/dolphin-2.7-mixtral-8x7b>
-- Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
+
+I recommend The Dolphin mixtral model for llama.cpp, it is based on Mixtral-8x7b. The base model has 32k context, Dolphin finetuned it with 16k. This Dolphin is really good at coding, They trained with a lot of coding data. It is very obedient but it is not DPO tuned - so you still might need to encourage it in the system prompt as they show in the examples on the main model site on Huggingface.
 
 Run llama.cpp as a server with OpenAI API compatibility:
 
@@ -29,19 +45,11 @@ server -m /Volumes/BrahmaSSD/LLM/models/GGUF/dolphin-2.7-mixtral-8x7b.Q5_K_M.ggu
     --host 127.0.0.1
 ```
 
-## Stable Diffusion and NDI output of images (WIP)
-Stable diffusion with Candle native Rust Diffusers/Transformers/Tensors. LLM coming soon in pure Rust direct too. Add --features metal to the cargo build command for MacOS GPU usage. `cargo build --features=metal,ndi`
-
-NDI output of images WIP (and TTS speech audio TODO). You need the NDI SDK for this. <https://ndi.video/download-ndi-sdk/> add --features ndi to the cargo build command. This is what needs to be done too: <https://digitaldrummerj.me/obs29-ndi-apple-silicon/> basically get <https://ndi.video/tools/ndi-core-suite/> and move the libndi.dynlib into /usr/local/lib so it can be found. like `sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"`
- Then use `export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH` at runtime. It's unfortunate NDI sdk libs aren't easier to deal with. Also logging into Huggingface Hub with the cli fixes some warnings you will get otherwise... `huggingface-cli login`.
-
-## MetaVoice TTS Text to Speech Speaking (TODO)
-Candle will support MetaVoice soon (PR a WIP is in the Candle project `https://github.com/huggingface/candle/compare/main...metavoice` which will allow pure Rust based LLM + TTI + TTS with Candle and Metal GPU.
-
 ## Features
 
 - **Stable Diffusion**: Generates images based on output with Candle pure rust SD directly using any of the main diffusion models which are auto-loaded.
-- **LLM Client**: with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
+- **Pure Rust LLM with Candle**: Gemma and Mistral naive support direct with Metal GPU optimizations, no Python.
+- **LLM OpenAI API Client**: with OpenAI API compatibility that is simple for use without dependencies or complexity with async threading of stream output token by token.
 - **LLM Analysis of OS**: System Stats.
 - **LLM Analysis of Network**: Packet Capture (MpegTS support currently).
 - **CLI Support**: Uses the clap crate for an easy command-line interface.
@@ -54,8 +62,9 @@ Candle will support MetaVoice soon (PR a WIP is in the Candle project `https://g
 
 ## Dependencies
 
-- Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
-- GGUF Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF>
+- Candle Rust Transformers/Tensors for AI models <https://github.com/huggingface/candle>
+- Optional: (if no Candle)  Server Llama.cpp: <https://github.com/ggerganov/llama.cpp>
+- Optional: (if no Candle) GGUF Model Mixtral 8x7b: <https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF>
 
 ## Getting Started
 
@@ -108,221 +117,62 @@ Use the scripts in the [./scripts](./scripts/) directory.
 #### Command-Line Options:
 
 ```bash
-MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer
-
-Usage: rsllm [OPTIONS]
-
-Options:
-      --system-prompt <SYSTEM_PROMPT>
-          System prompt [env: SYSTEM_PROMPT=] [default: "You will recieve data in the prompt to analzye. You are able to say green or red depending on the data streams health determined from various forms of analysis as needed. The data is either system os stats or mpegts packets, you will know by the format and content which it is."]
-      --query <QUERY>
-          Query to generate completions for [env: QUERY=] [default: "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of the stream of data shown above. It will be in older to newer order per sample period shown by the timestamps per period."]
-      --temperature <TEMPERATURE>
-          Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8. [env: TEMPERATURE=] [default: 0.8]
-      --top-p <TOP_P>
-          Top P sampling, 0.0 to 1.0. Default is 1.0. [env: TOP_P=] [default: 1.0]
-      --presence-penalty <PRESENCE_PENALTY>
-          Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: PRESENCE_PENALTY=] [default: 0.0]
-      --frequency-penalty <FREQUENCY_PENALTY>
-          Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0. [env: FREQUENCY_PENALTY=] [default: 0.0]
-      --max-tokens <MAX_TOKENS>
-          Max Tokens, 1 to N. Default is 800. [env: MAX_TOKENS=] [default: 800]
-      --model <MODEL>
-          OpenAI LLM Model (N/A with local Llama2 based LLM) [env: MODEL=] [default: no-model-specified]
-      --llm-host <LLM_HOST>
-          LLM Host url with protocol, host, port,  no path [env: LLM_HOST=] [default: http://127.0.0.1:8080]
-      --llm-path <LLM_PATH>
-          LLM Url path for completions, default is /v1/chat/completions. [env: LLM_PATH=] [default: /v1/chat/completions]
-      --llm-history-size <LLM_HISTORY_SIZE>
-          LLM History size, default is 16768 (0 is unlimited). [env: LLM_HISTORY_SIZE=] [default: 16768]
-      --no-stream
-          Don't stream output, wait for all completions to be generated before returning. Default is false. [env: NO_STREAM=]
-      --use-openai
-          Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false. [env: USE_OPENAI=]
-      --debug-inline
-          debug inline on output (can mess up the output) as a bool. Default is false. [env: DEBUG_INLINE=]
-      --show-output-errors
-          Show LLM output errors which may mess up the output and niceness if packet loss occurs, default is false. [env: SHOW_OUTPUT_ERRORS=]
-      --ai-os-stats
-          Monitor system stats, default is false. [env: AI_OS_STATS=]
-      --daemon
-          run as a daemon monitoring the specified stats, default is false. [env: DAEMON=]
-      --ai-network-stats
-          Monitor network stats, default is false. [env: AI_NETWORK_STATS=]
-      --ai-network-packets
-          Monitor network packets, default is false. [env: AI_NETWORK_PACKETS=]
-      --ai-network-hexdump
-          Monitor network full packet hex dump, default is false. [env: AI_NETWORK_HEXDUMP=]
-      --ai-network-packet-count <AI_NETWORK_PACKET_COUNT>
-          AI Network Packet Count, default is 100. [env: AI_NETWORK_PACKET_COUNT=] [default: 100]
-      --pcap-stats
-          PCAP output capture stats mode, default is false. [env: PCAP_STATS=]
-      --pcap-batch-size <PCAP_BATCH_SIZE>
-          Sets the batch size, default is 7. [env: PCAP_BATCH_SIZE=] [default: 7]
-      --payload-offset <PAYLOAD_OFFSET>
-          Sets the payload offset, default is 42. [env: PAYLOAD_OFFSET=] [default: 42]
-      --packet-size <PACKET_SIZE>
-          Sets the packet size, default is 188. [env: PACKET_SIZE=] [default: 188]
-      --buffer-size <BUFFER_SIZE>
-          Sets the pcap buffer size, default is 1 * 1_358 * 1_000. [env: BUFFER_SIZE=] [default: 1358000]
-      --read-time-out <READ_TIME_OUT>
-          Sets the read timeout, default is 60_000. [env: READ_TIME_OUT=] [default: 300000]
-      --source-device <SOURCE_DEVICE>
-          Sets the source device for pcap capture. [env: SOURCE_DEVICE=] [default: ]
-      --source-ip <SOURCE_IP>
-          Sets the source IP to capture for pcap. [env: SOURCE_IP=] [default: 224.0.0.200]
-      --source-protocol <SOURCE_PROTOCOL>
-          Sets the source protocol to capture for pcap. [env: SOURCE_PROTOCOL=] [default: udp]
-      --source-port <SOURCE_PORT>
-          Sets the source port to capture for pcap, default is 10000. [env: SOURCE_PORT=] [default: 10000]
-      --use-wireless
-          Sets if wireless is used, default is false. [env: USE_WIRELESS=]
-      --promiscuous
-          Use promiscuous mode for network capture, default is false. [env: PROMISCUOUS=]
-      --immediate-mode
-          PCAP immediate mode, default is false. [env: IMMEDIATE_MODE=]
-      --hexdump
-          Hexdump mpegTS packets, default is false. [env: HEXDUMP=]
-      --show-tr101290
-          Show the TR101290 p1, p2 and p3 errors if any, default is false. [env: SHOW_TR101290=]
-      --pcap-channel-size <PCAP_CHANNEL_SIZE>
-          PCAP Channel Size, drop packets if channel is full, 1g = 1_000_000. [env: PCAP_CHANNEL_SIZE=] [default: 1000000]
-      --debug-llm-history
-          DEBUG LLM Message History, default is false. [env: DEBUG_LLM_HISTORY=]
-      --poll-interval <POLL_INTERVAL>
-          POLL Interval in ms. [env: POLL_INTERVAL=] [default: 0]
-      --no-progress
-          Turn off progress output dots, default is false. [env: NO_PROGRESS=]
-      --loglevel <LOGLEVEL>
-          Loglevel, control rust log level, default is info. [env: LOGLEVEL=] [default: ]
-      --break-line-length <BREAK_LINE_LENGTH>
-          Break Line Length - line length for breaking lines from LLM messages, default is 80. [env: BREAK_LINE_LENGTH=] [default: 80]
-      --sd-image
-          SD Image - create an SD image from the LLM messages, default is false. [env: SD_IMAGE=]
-      --ndi-images
-          NDI Images output, default is false. (use --features ndi to enable NDI) [env: NDI_IMAGES=]
-      --max-iterations <MAX_ITERATIONS>
-          Max Iterations, default is 1. [env: MAX_ITERATIONS=] [default: 1]
-  -h, --help
-          Print help
-  -V, --version
-          Print version
-
+cargo run --release --features ndi,metal -- -h
 ```
 
 ### Example:
 
-- using an mpegts packet payload with nal's to to parse and analyze from network capture
+- Using with Candle and OS Stats as a AI system analyzer.
 
 ```bash
-$ cargo run
+$ cargo run --release --features ndi,metal -- \
+    --use-candle --candle_llm mistral \
+    --quantized \
+    --max-tokens 300 \
+    --temperature 0.8 \
+    --ai-os-stats \
+    --ndi-images \ # You need to get the NDI SDK installed first for ndi
+    --system-prompt "you are helpful" \
+    --query "How is my system doing?"
+```
 
-Response status: 200 OK
----
+- Using with OpenAI API and OS Stats as a AI system analyzer.
 
-Analyzing the provided MPEG-TS NAL (Network Abstraction Layer) dumps requires breaking down each dump into their respective sections, identifying packet headers, payload, and interpreting the key elements like PID (Packet Identifier), continuity counters, and payload unit start indicators, among others. Given the complexity and detail involved in real-time MPEG-TS packet analysis, below is a simplified breakdown based on the provided NAL dumps. This representation will closely resemble what you might see on a professional MPEG-TS analyzer's output.
-
-### MPEG-TS Packet Analysis Overview
-
-#### General Stream Settings
-- **Video Codec**: H.264 (libx264)
-- **Audio Codec**: AAC
-- **Resolution**: 1920x1080
-- **Frame Rate**: 29.976fps
-- **Audio Sample Rate**: 48kHz
-- **Audio Bitrate**: 128kbps
-- **TS PMT PID**: 0x1000
-- **TS Start PID**: 0x0100
-- **Bitrate Settings**: CBR (Constant Bit Rate) 19Mbps
-- **Service Provider**: TestStream
-- **Service Name**: ColorBarsWithTone
-
-#### Packet Breakdown (Simplified for the first packet of each dump)
-
-1. **Packet 1**
-   - **Header**: 0x47010010
-     - Sync Byte: 0x47
-     - Payload Unit Start Indicator: 1
-     - PID: 0x0100
-     - Continuity Counter: 0
-   - **Payload Type**: Video
-   - **Content**: Beginning of a video frame (NAL unit)
-
-2. **Packet 2**
-   - **Header**: 0x47010011
-     - Sync Byte: 0x47
-     - Payload Unit Start Indicator: 1
-     - PID: 0x0101
-     - Continuity Counter: 0
-   - **Payload Type**: Audio
-   - **Content**: Beginning of an audio frame
-
-3. **Packet 3**
-   - **Header**: 0x47010012
-     - Sync Byte: 0x47
-     - Payload Unit Start Indicator: 1
-     - PID: 0x0102
-     - Continuity Counter: 0
-   - **Payload Type**: Undefined (could be metadata or additional stream data)
-   - **Content**: Data packet
-
-4. **Packet 4**
-   - **Header**: 0x47010013
-     - Sync Byte: 0x47
-     - Payload Unit Start Indicator: 1
-     - PID: 0x0103
-     - Continuity Counter: 0
-   - **Payload Type**: Undefined (could be metadata or additional stream data)
-   - **Content**: Data packet
-
-### Key Stats (Aggregated for simplicity)
-
-- **Total Packets Analyzed**: 4 (Note: This is for illustration; a full analysis would involve all packets in the dump)
-- **Video Packets**: Approx. 25% (Based on PID and content type)
-- **Audio Packets**: Approx. 25%
-- **Data/Undefined Packets**: Approx. 50%
-- **Error Packets**: 0%
-- **PAT/PMT Analysis**: Not directly provided in the dump, assumed based on settings
-- **Continuity Errors**: None detected in the provided samples
-- **PID Usage**:
-  - 0x0100: Video
-  - 0x0101: Audio
-  - 0x0102, 0x0103: Data/Undefined
-
-### Packet Flow Visualization
-
-This would typically involve a time-based graph showing packet intervals, PID distribution, bitrate fluctuations, and possibly packet losses or errors, which is not feasible to accurately depict in text form here. A professional MPEG-TS analyzer would provide a graphical representation of these elements, offering insights
---
-Index 0 ID chatcmpl-1mtdhIYmAGJpfJRU7rkiOxN7zZ3tPTUW
-Object chat.completion.chunk by Model no-model-specified User unknown
-Created on 2024-02-20 08:09:05 Finish reason: stop
- 106/65/41 Tokens/Prompt/Response 198 Bytes at 10 tokens per second and 4.224651541s seconds to complete.
---
+```bash
+$ cargo run --release -- \
+    --use-openai \
+    --max-tokens 300 \
+    --temperature 0.8 \
+    --ai-os-stats \
+    --system-prompt "you are helpful" \
+    --query "How is my system doing?"
 ```
 
 ## TODO
 
-- use pcap input and use LLM to analyze the network and provide insights, monitor, report, and alert.
-- analyze system stats to keep track of resources used and throttle our usage, monitor, report, and alert.
+* Priority:
+- Fix images for SD incrementally as we go.
+- Text NLS chunking.
+
+* Sooner or later:
+- use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
+- Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
+- Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
+- Improve network and system analyzers.
 - preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
 - use chroma db to do RAG with documents for augmenting the prompt with relevant information.
 - allow daemon mode to run and listent for requests via zmq input and pass to output.
-- return results from streaming function, fix streaming function to non-block and be more efficient.
-- segment output into smaller chunks for realtime processing downstream.
-- add more options for the LLM and openai api.
+- segment output via NLP into smaller chunks for realtime processing downstream.
+- fill out options for the LLM and openai api.
 - capnproto for serialization and deserialization of data.
-- add stable diffusion for image generation for visualizing results.
-- add text to speech for audio output of results.
-- add music generation for mood enhancement based on results.
-- add video generation with consistent frame context of objects staying same in frame.
-- speech to text for audio input for llm ingestion and subtitling of video.
-- setup as a crate library to use in other projects.
+- improve stable diffusion for image generation for visualizing results in incremental steps.
+- add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
+- add MetaMusic music generation for mood enhancement based on results.
+- add talking head video generation with consistent frame context of objects staying same in frame.
+- speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
 - freeform input options for the LLM to figure out what the user wants to do.
 - dynamic code generation of python for new tasks on the fly like video processing? risks?
 - iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
-- use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
-- MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
-- Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
 
 ## License
 
