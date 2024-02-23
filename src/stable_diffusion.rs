@@ -168,7 +168,7 @@ fn text_embeddings(
         Some(padding) => *tokenizer.get_vocab(true).get(padding.as_str()).unwrap(),
         None => *tokenizer.get_vocab(true).get("<|endoftext|>").unwrap(),
     };
-    println!("Running with prompt \"{prompt}\".");
+    println!("Stable Diffusion: Running with prompt \"{prompt}\".");
     let mut tokens = tokenizer
         .encode(prompt, true)
         .map_err(E::msg)?
@@ -179,7 +179,7 @@ fn text_embeddings(
     }
     let tokens = Tensor::new(tokens.as_slice(), device)?.unsqueeze(0)?;
 
-    println!("Building the Clip transformer.");
+    println!("Stable Diffusion: Building the Clip transformer.");
     let clip_weights_file = if first {
         ModelFile::Clip
     } else {
@@ -359,6 +359,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo => vec![true, false],
         _ => vec![true],
     };
+
     let text_embeddings = which
         .iter()
         .map(|first| {
@@ -379,9 +380,9 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         .collect::<Result<Vec<_>>>()?;
 
     let text_embeddings = Tensor::cat(&text_embeddings, D::Minus1)?;
-    println!("{text_embeddings:?}");
+    println!("Stable Diffusion: Text Embeddings - {text_embeddings:?}");
 
-    println!("Building the autoencoder.");
+    println!("Stable Diffusion: Building the autoencoder.");
     let vae_weights = ModelFile::Vae.get(config.vae_weights, config.sd_version, config.use_f16)?;
     let vae = sd_config.build_vae(vae_weights, &device, dtype)?;
     let init_latent_dist = match &config.img2img {
@@ -391,7 +392,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
             Some(vae.encode(&image_buf)?)
         }
     };
-    println!("Building the unet.");
+    println!("Stable Diffusion: Building the unet.");
     let unet_weights =
         ModelFile::Unet.get(config.unet_weights, config.sd_version, config.use_f16)?;
     let unet = sd_config.build_unet(unet_weights, &device, 4, config.use_flash_attn, dtype)?;
@@ -438,7 +439,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         };
         let mut latents = latents.to_dtype(dtype)?;
 
-        println!("starting sampling");
+        println!("Stable Diffusion: starting sampling");
         for (timestep_index, &timestep) in timesteps.iter().enumerate() {
             if timestep_index < t_start {
                 continue;
@@ -465,7 +466,11 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
 
             latents = scheduler.step(&noise_pred, timestep, &latents)?;
             let dt = start_time.elapsed().as_secs_f32();
-            println!("step {}/{n_steps} done, {:.2}s", timestep_index + 1, dt);
+            println!(
+                "Stable Diffusion: step {}/{n_steps} done, {:.2}s",
+                timestep_index + 1,
+                dt
+            );
 
             if config.intermediary_images {
                 let image_buf = vae.decode(&(&latents / vae_scale)?)?;
@@ -488,7 +493,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         }
 
         println!(
-            "Generating the final image for sample {}/{}.",
+            "Stable Diffusion: Generating the final image for sample {}/{}.",
             idx + 1,
             config.num_samples
         );

@@ -429,7 +429,7 @@ pub async fn stream_completion(
             sd_config.height = Some(512);
             sd_config.width = Some(512);
 
-            let images_result = sd(sd_config); // This call now returns `Result<Vec<Vec<u8>>>`
+            let images_result = sd(sd_config); // This call returns `Result<Vec<Vec<u8>>>`
 
             match images_result {
                 Ok(images) => {

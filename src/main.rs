@@ -19,8 +19,10 @@ use clap::Parser;
 use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
+use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
+use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -437,6 +439,15 @@ struct Args {
         help = "SD Image - create an SD image from the LLM messages, default is false."
     )]
     sd_image: bool,
+
+    /// SD Max Length for SD Image
+    #[clap(
+        long,
+        env = "SD_MAX_LENGTH",
+        default_value_t = 200,
+        help = "SD Max Length for SD Image, default is 200."
+    )]
+    sd_max_length: usize,
 
     /// NDI output
     #[clap(
@@ -937,7 +948,7 @@ async fn main() {
         }
 
         // Setup mpsc channels for internal communication within the mistral function
-        let (external_sender, external_receiver) = std::sync::mpsc::channel::<String>();
+        let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
 
         if args.use_candle {
             // Capture the start time for performance metrics
@@ -948,9 +959,14 @@ async fn main() {
             info!("Prompt: {}", prompt);
 
             // Spawn a thread to run the mistral function, to keep the UI responsive
+            if args.candle_llm != "mistral" && args.candle_llm != "gemma" {
+                // exit if the LLM is not supported
+                error!("The specified LLM is not supported. Exiting...");
+                std::process::exit(1);
+            }
 
-            if args.candle_llm == "mistral" {
-                std::thread::spawn(move || {
+            let llm_thread = if args.candle_llm == "mistral" {
+                tokio::spawn(async move {
                     if let Err(e) = mistral(
                         prompt,
                         max_tokens as usize,
@@ -960,9 +976,9 @@ async fn main() {
                     ) {
                         eprintln!("Error running mistral: {}", e);
                     }
-                });
-            } else if args.candle_llm == "gemma" {
-                std::thread::spawn(move || {
+                })
+            } else {
+                tokio::spawn(async move {
                     if let Err(e) = gemma(
                         prompt,
                         max_tokens as usize,
@@ -972,28 +988,88 @@ async fn main() {
                     ) {
                         eprintln!("Error running gemma: {}", e);
                     }
-                });
-            } else {
-                log::error!("No AI model specified. Exiting.");
-                std::process::exit(1);
-            }
+                })
+            };
 
             // Count tokens and collect output
             let mut token_count = 0;
-            for received in external_receiver {
+            let mut answers = Vec::new();
+            while let Some(received) = external_receiver.recv().await {
                 print!("{}", received);
+                answers.push(received);
+
                 std::io::stdout().flush().unwrap();
                 token_count += 1;
             }
+
+            // Wait for the LLM thread to finish
+            llm_thread.await.unwrap();
 
             // Calculate elapsed time and tokens per second
             let elapsed = start.elapsed().as_secs_f64();
             let tokens_per_second = token_count as f64 / elapsed;
 
             println!(
-                "\nGenerated {} tokens in {:.2?} seconds ({:.2} tokens/second)",
+                "\n---\nGenerated {} tokens in {:.2?} seconds ({:.2} tokens/second)\n---\n",
                 token_count, elapsed, tokens_per_second
             );
+
+            // add answers to the messages as an assistant role message with the content
+            messages.push(Message {
+                role: "assistant".to_string(),
+                content: answers.join("").clone(),
+            });
+
+            // truncate answer_clone to max length of 300 characters
+            let answers_clone = if answers.len() > args.sd_max_length {
+                answers.join("").replace("\n", " ").clone()[..args.sd_max_length].to_string()
+            } else {
+                answers.join("").replace("\n", " ").clone()
+            };
+
+            // Stable Diffusion `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
+            if args.sd_image {
+                let handler = tokio::spawn(async move {
+                    let mut sd_config = SDConfig::new();
+                    sd_config.prompt = answers_clone.to_string();
+                    sd_config.height = Some(512);
+                    sd_config.width = Some(512);
+
+                    let images_result = sd(sd_config); // returns `Result<Vec<Vec<u8>>>`
+
+                    match images_result {
+                        Ok(images) => {
+                            // Send images over NDI
+                            if args.ndi_images {
+                                debug!("Sending images over NDI");
+                            }
+                            #[cfg(feature = "ndi")]
+                            if args.ndi_images {
+                                send_images_over_ndi(images.clone()).unwrap(); // This is now allowed
+                            }
+
+                            // Save images to disk
+                            for (index, image_bytes) in images.iter().enumerate() {
+                                let image_file = format!("{}.png", index);
+                                println!("Image {} saving to {}", index + 1, image_file);
+                                image_bytes
+                                    .save(image_file)
+                                    .map_err(candle_core::Error::wrap)
+                                    .unwrap(); // And this as well
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Error generating images: {:?}", e);
+                        }
+                    }
+                });
+
+                // wait till llm thread exits
+                //llm_thread.join().unwrap();
+
+                // Wait for the handler to finish
+                handler.await.unwrap();
+            }
         } else {
             // Stream API Completion
             let stream = !args.no_stream;

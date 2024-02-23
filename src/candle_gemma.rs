@@ -6,10 +6,10 @@ extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
 use clap::Parser;
+use std::io::Write;
 
 use candle_transformers::models::gemma::{Config, Model};
-use std::sync::mpsc::{self, Sender};
-use std::thread;
+use tokio::sync::mpsc::Sender;
 
 use candle_core::{DType, Device, Tensor};
 use candle_examples::token_output_stream::TokenOutputStream;
@@ -53,8 +53,7 @@ impl TextGeneration {
         }
     }
 
-    fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
-        use std::io::Write;
+    async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         self.tokenizer.clear();
         let mut tokens = self
             .tokenizer
@@ -67,6 +66,7 @@ impl TextGeneration {
             if let Some(t) = self.tokenizer.next_token(t)? {
                 self.internal_token_sender
                     .send(t.clone())
+                    .await
                     .expect("Failed to send token internally");
             }
         }
@@ -76,7 +76,6 @@ impl TextGeneration {
             Some(token) => token,
             None => anyhow::bail!("cannot find the </s> token"),
         };
-        let start_gen = std::time::Instant::now();
         for index in 0..sample_len {
             let context_size = if index > 0 { 1 } else { tokens.len() };
             let start_pos = tokens.len().saturating_sub(context_size);
@@ -103,6 +102,7 @@ impl TextGeneration {
             if let Some(t) = self.tokenizer.next_token(next_token)? {
                 self.internal_token_sender
                     .send(t.clone())
+                    .await
                     .expect("Failed to send token internally");
             }
         }
@@ -169,12 +169,11 @@ pub fn gemma(
     prompt: String,
     sample_len: usize,
     temperature: f64,
-    quantized: bool,
+    _quantized: bool,
     external_sender: Sender<String>,
 ) -> Result<()> {
     let cpu = false;
     let tracing = false;
-    let use_flash_attn = false;
     let top_p: Option<f64> = None;
     let seed = 0;
     let model_id: Option<String> = None;
@@ -249,7 +248,7 @@ pub fn gemma(
 
     println!("loaded the model in {:?}", start.elapsed());
 
-    let (internal_sender, internal_receiver) = mpsc::channel();
+    let (internal_sender, mut internal_receiver) = tokio::sync::mpsc::channel::<String>(32); // Example buffer size
 
     let mut pipeline = TextGeneration::new(
         model,
@@ -264,18 +263,20 @@ pub fn gemma(
     );
 
     // Start the text generation in a separate thread
-    thread::spawn(move || {
+    tokio::spawn(async move {
         pipeline
             .run(&prompt, sample_len)
+            .await
             .expect("Failed to run the pipeline");
     });
 
     // Set up a thread to listen on the internal receiver and forward messages to the external sender
     let external_sender_clone = external_sender.clone();
-    thread::spawn(move || {
-        for token in internal_receiver {
+    tokio::spawn(async move {
+        while let Some(token) = internal_receiver.recv().await {
             external_sender_clone
                 .send(token)
+                .await
                 .expect("Failed to send token externally");
         }
     });
