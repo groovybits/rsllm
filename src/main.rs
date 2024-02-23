@@ -792,7 +792,7 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
-    info!(
+    println!(
         "Starting up RsLLM with poll intervale of {} seconds...",
         poll_interval_duration.as_secs()
     );
@@ -867,17 +867,17 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
-            info!("---");
-            info!("Messages:");
+            println!("---");
+            println!("Messages:");
             for message in &messages {
-                info!("{}: {}", message.role, message.content);
+                println!("{}: {}", message.role, message.content);
             }
-            info!("---");
+            println!("---");
         }
 
         // measure size of messages in bytes and print it out
         let messages_size = bincode::serialize(&messages).unwrap().len();
-        info!("Initial Messages size: {}", messages_size);
+        debug!("Initial Messages size: {}", messages_size);
 
         let llm_history_size_bytes: usize = args.llm_history_size; // Your defined max size in bytes
 
@@ -956,7 +956,7 @@ async fn main() {
 
             let prompt = format_messages_for_llama2(messages.clone());
 
-            info!("Prompt: {}", prompt);
+            debug!("\nPrompt: {}", prompt);
 
             // Spawn a thread to run the mistral function, to keep the UI responsive
             if args.candle_llm != "mistral" && args.candle_llm != "gemma" {
@@ -1137,12 +1137,12 @@ async fn main() {
         // Sleep only if the elapsed time is less than the poll interval
         if elapsed < poll_interval_duration {
             // Sleep only if the elapsed time is less than the poll interval
-            info!(
+            println!(
                 "Sleeping for {} ms...",
                 poll_interval_duration.as_millis() - elapsed.as_millis()
             );
             tokio::time::sleep(poll_interval_duration - elapsed).await;
-            info!("Running after sleeping...");
+            println!("Running after sleeping...");
         }
 
         // Update start time for the next iteration

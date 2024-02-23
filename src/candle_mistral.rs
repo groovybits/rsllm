@@ -18,6 +18,7 @@ use candle_examples::token_output_stream::TokenOutputStream;
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use log::{debug, info};
 use tokenizers::Tokenizer;
 
 enum Model {
@@ -139,7 +140,7 @@ pub fn mistral(
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 64;
+    let repeat_last_n = prompt.len();
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
@@ -148,14 +149,14 @@ pub fn mistral(
     } else {
         None
     };
-    println!(
+    info!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
         candle_core::utils::with_simd128(),
         candle_core::utils::with_f16c()
     );
-    println!(
+    debug!(
         "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
         temperature, repeat_penalty, repeat_last_n
     );
@@ -190,7 +191,7 @@ pub fn mistral(
             }
         }
     };
-    println!("retrieved the files in {:?}", start.elapsed());
+    info!("retrieved the files in {:?}", start.elapsed());
     let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
     let start = std::time::Instant::now();
@@ -213,7 +214,7 @@ pub fn mistral(
         (Model::Mistral(model), device)
     };
 
-    println!("loaded the model in {:?}", start.elapsed());
+    info!("loaded the model in {:?}", start.elapsed());
 
     let (internal_sender, mut internal_receiver) = mpsc::channel(32768);
 

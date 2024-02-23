@@ -6,6 +6,7 @@ extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
 use clap::Parser;
+use log::{debug, info};
 use std::io::Write;
 
 use candle_transformers::models::gemma::{Config, Model};
@@ -194,14 +195,14 @@ pub fn gemma(
     } else {
         None
     };
-    println!(
+    info!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
         candle_core::utils::with_simd128(),
         candle_core::utils::with_f16c()
     );
-    println!(
+    info!(
         "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
         temperature, repeat_penalty, repeat_last_n
     );
@@ -232,7 +233,7 @@ pub fn gemma(
             .collect::<Vec<_>>(),
         None => candle_examples::hub_load_safetensors(&repo, "model.safetensors.index.json")?,
     };
-    println!("retrieved the files in {:?}", start.elapsed());
+    info!("retrieved the files in {:?}", start.elapsed());
     let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
     let config: Config = serde_json::from_reader(std::fs::File::open(config_filename)?)?;
 
@@ -246,7 +247,7 @@ pub fn gemma(
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
     let model = Model::new(&config, vb)?;
 
-    println!("loaded the model in {:?}", start.elapsed());
+    info!("loaded the model in {:?}", start.elapsed());
 
     let (internal_sender, mut internal_receiver) = tokio::sync::mpsc::channel::<String>(32); // Example buffer size
 
