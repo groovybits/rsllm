@@ -22,6 +22,7 @@ use rsllm::candle_mistral::mistral;
 use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
+use rsllm::remove_prompt_from_output;
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -965,10 +966,11 @@ async fn main() {
                 std::process::exit(1);
             }
 
+            let prompt_clone = prompt.clone();
             let llm_thread = if args.candle_llm == "mistral" {
                 tokio::spawn(async move {
                     if let Err(e) = mistral(
-                        prompt,
+                        prompt_clone,
                         max_tokens as usize,
                         temperature as f64,
                         args.quantized,
@@ -980,7 +982,7 @@ async fn main() {
             } else {
                 tokio::spawn(async move {
                     if let Err(e) = gemma(
-                        prompt,
+                        prompt_clone,
                         max_tokens as usize,
                         temperature as f64,
                         args.quantized,
@@ -995,11 +997,10 @@ async fn main() {
             let mut token_count = 0;
             let mut answers = Vec::new();
             while let Some(received) = external_receiver.recv().await {
-                print!("{}", received);
-                answers.push(received);
-
-                std::io::stdout().flush().unwrap();
                 token_count += 1;
+                print!("{}", received);
+                std::io::stdout().flush().unwrap();
+                answers.push(received);
             }
 
             // Wait for the LLM thread to finish
@@ -1014,17 +1015,20 @@ async fn main() {
                 token_count, elapsed, tokens_per_second
             );
 
+            let answers_str =
+                remove_prompt_from_output(&prompt.clone(), answers.join("").to_string());
+
             // add answers to the messages as an assistant role message with the content
             messages.push(Message {
                 role: "assistant".to_string(),
-                content: answers.join("").clone(),
+                content: answers_str.clone(),
             });
 
             // truncate answer_clone to max length of 300 characters
-            let answers_clone = if answers.len() > args.sd_max_length {
-                answers.join("").replace("\n", " ").clone()[..args.sd_max_length].to_string()
+            let answers_clone = if answers_str.len() > args.sd_max_length {
+                answers_str.replace("\n", " ").clone()[..args.sd_max_length].to_string()
             } else {
-                answers.join("").replace("\n", " ").clone()
+                answers_str.replace("\n", " ").clone()
             };
 
             // Stable Diffusion `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
@@ -1034,6 +1038,8 @@ async fn main() {
                     sd_config.prompt = answers_clone.to_string();
                     sd_config.height = Some(512);
                     sd_config.width = Some(512);
+
+                    println!("Generating images with prompt: {}", sd_config.prompt);
 
                     let images_result = sd(sd_config); // returns `Result<Vec<Vec<u8>>>`
 

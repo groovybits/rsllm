@@ -87,3 +87,13 @@ pub fn hexdump_ascii(packet: &[u8], packet_offset: usize, packet_len: usize) -> 
     }
     packet_dump
 }
+
+pub fn remove_prompt_from_output(prompt: &str, output: String) -> String {
+    if output.starts_with(prompt) {
+        // Remove the prompt from the beginning of the output
+        output[prompt.len()..].to_string()
+    } else {
+        // If the output does not start with the prompt, return it as is
+        output.to_string()
+    }
+}
