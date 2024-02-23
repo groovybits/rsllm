@@ -5,8 +5,7 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use std::sync::mpsc::{self, Sender};
-use std::thread;
+use tokio::sync::mpsc::{self, Sender};
 use tracing_chrome::ChromeLayerBuilder;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -19,6 +18,7 @@ use candle_examples::token_output_stream::TokenOutputStream;
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use log::{debug, info};
 use tokenizers::Tokenizer;
 
 enum Model {
@@ -61,7 +61,7 @@ impl TextGeneration {
         }
     }
 
-    fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
+    async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         use std::io::Write;
         self.tokenizer.clear();
         let mut tokens = self
@@ -75,6 +75,7 @@ impl TextGeneration {
             if let Some(t) = self.tokenizer.next_token(t)? {
                 self.internal_token_sender
                     .send(t.clone())
+                    .await
                     .expect("Failed to send token internally");
             }
         }
@@ -84,7 +85,6 @@ impl TextGeneration {
             Some(token) => token,
             None => anyhow::bail!("cannot find the </s> token"),
         };
-        let start_gen = std::time::Instant::now();
         for index in 0..sample_len {
             let context_size = if index > 0 { 1 } else { tokens.len() };
             let start_pos = tokens.len().saturating_sub(context_size);
@@ -114,6 +114,7 @@ impl TextGeneration {
             if let Some(t) = self.tokenizer.next_token(next_token)? {
                 self.internal_token_sender
                     .send(t.clone())
+                    .await
                     .expect("Failed to send token internally");
             }
         }
@@ -139,7 +140,7 @@ pub fn mistral(
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 64;
+    let repeat_last_n = prompt.len();
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
@@ -148,14 +149,14 @@ pub fn mistral(
     } else {
         None
     };
-    println!(
+    info!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
         candle_core::utils::with_simd128(),
         candle_core::utils::with_f16c()
     );
-    println!(
+    debug!(
         "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
         temperature, repeat_penalty, repeat_last_n
     );
@@ -190,7 +191,7 @@ pub fn mistral(
             }
         }
     };
-    println!("retrieved the files in {:?}", start.elapsed());
+    info!("retrieved the files in {:?}", start.elapsed());
     let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
     let start = std::time::Instant::now();
@@ -213,9 +214,9 @@ pub fn mistral(
         (Model::Mistral(model), device)
     };
 
-    println!("loaded the model in {:?}", start.elapsed());
+    info!("loaded the model in {:?}", start.elapsed());
 
-    let (internal_sender, internal_receiver) = mpsc::channel();
+    let (internal_sender, mut internal_receiver) = mpsc::channel(32768);
 
     // Pass both the internal and external senders to TextGeneration
     let mut pipeline = TextGeneration::new(
@@ -231,18 +232,20 @@ pub fn mistral(
     );
 
     // Start the text generation in a separate thread
-    thread::spawn(move || {
+    tokio::spawn(async move {
         pipeline
             .run(&prompt, sample_len)
+            .await
             .expect("Failed to run the pipeline");
     });
 
     // Set up a thread to listen on the internal receiver and forward messages to the external sender
     let external_sender_clone = external_sender.clone();
-    thread::spawn(move || {
-        for token in internal_receiver {
+    tokio::spawn(async move {
+        while let Some(token) = internal_receiver.recv().await {
             external_sender_clone
                 .send(token)
+                .await
                 .expect("Failed to send token externally");
         }
     });
