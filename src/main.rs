@@ -19,6 +19,7 @@ use clap::Parser;
 use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
+#[cfg(feature = "ndi")]
 use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
@@ -1051,6 +1052,7 @@ async fn main() {
                             }
                             #[cfg(feature = "ndi")]
                             if args.ndi_images {
+                                #[cfg(feature = "ndi")]
                                 send_images_over_ndi(images.clone()).unwrap(); // This is now allowed
                             }
 
