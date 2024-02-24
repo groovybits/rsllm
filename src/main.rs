@@ -69,15 +69,6 @@ struct Args {
     )]
     query: String,
 
-    /// Model ID - for gemma 2b or 7b, mistral has various options too
-    #[clap(
-        long,
-        env = "MODEL_ID",
-        default_value = "",
-        help = "Model ID"
-    )]
-    model_id: String,
-
     /// Temperature
     #[clap(
         long,
@@ -86,6 +77,15 @@ struct Args {
         help = "Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8."
     )]
     temperature: f32,
+
+    /// Model ID - for gemma 2b or 7b, mistral has various options too
+    #[clap(
+        long,
+        env = "MODEL_ID",
+        default_value = "auto",
+        help = "Model ID - model path on huggingface or 7b / 2b for gemma"
+    )]
+    model_id: String,
 
     /// Quantized bool
     #[clap(

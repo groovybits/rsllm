@@ -5,7 +5,7 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use log::{debug, info};
+use log::info;
 use std::io::Write;
 
 use candle_transformers::models::gemma::{Config, Model};
@@ -158,7 +158,7 @@ pub fn gemma(
         Some(model_id) => match model_id.as_str() {
             "7b" => "google/gemma-7b".to_string(),
             "2b" => "google/gemma-2b".to_string(),
-            "" => "google/gemma-2b".to_string(),
+            "auto" => "google/gemma-2b".to_string(),
             _ => model_id.to_string(),
         },
         None => "google/gemma-2b".to_string(),

@@ -165,7 +165,7 @@ pub fn mistral(
     let api = Api::new()?;
     let model_id = match &model_id {
         Some(model_id) => {
-            if model_id.is_empty() {
+            if model_id.is_empty() || model_id == "auto" {
                 if quantized {
                     "lmz/candle-mistral".to_string()
                 } else {
