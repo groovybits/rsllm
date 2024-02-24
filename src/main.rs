@@ -878,12 +878,15 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
-            println!("---");
+            println!("=============");
             println!("Messages:");
+            println!("=============");
             for message in &messages {
-                println!("{}: {}", message.role, message.content);
+                println!("{}: {}\n---\n", message.role, message.content);
             }
-            println!("---");
+            println!("============= NEW RESPONSE ============");
+        } else {
+            println!("============= NEW RESPONSE ============");
         }
 
         // measure size of messages in bytes and print it out
@@ -1098,9 +1101,6 @@ async fn main() {
                         }
                     }
                 });
-
-                // wait till llm thread exits
-                //llm_thread.join().unwrap();
 
                 // Wait for the handler to finish
                 handler.await.unwrap();

@@ -75,3 +75,4 @@ hex-slice = "0.1.4"
 bincode = "1.3.3"
 candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.4.0" }
 ndi-sdk = { git = "https://github.com/groovybits/rust-ndi.git", branch = "master", optional = true }
+rand = "0.8.5"

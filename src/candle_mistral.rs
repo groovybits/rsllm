@@ -90,6 +90,7 @@ impl TextGeneration {
             let start_pos = tokens.len().saturating_sub(context_size);
             let ctxt = &tokens[start_pos..];
             let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
+            //Model::Mistral7binstructV02(m) => m.forward(&input, start_pos)?,
             let logits = match &mut self.model {
                 Model::Mistral(m) => m.forward(&input, start_pos)?,
                 Model::Quantized(m) => m.forward(&input, start_pos)?,
@@ -135,7 +136,7 @@ pub fn mistral(
     let tracing = false;
     let use_flash_attn = false;
     let top_p: Option<f64> = None;
-    let seed = 0;
+    let seed = rand::random();
     let revision: String = "main".to_string();
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
@@ -165,7 +166,7 @@ pub fn mistral(
     let api = Api::new()?;
     let model_id = match &model_id {
         Some(model_id) => {
-            if model_id.is_empty() || model_id == "auto" {
+            if model_id.is_empty() || model_id.to_string() == "auto" {
                 if quantized {
                     "lmz/candle-mistral".to_string()
                 } else {
@@ -174,7 +175,7 @@ pub fn mistral(
             } else {
                 model_id.to_string()
             }
-        },
+        }
         None => {
             if quantized {
                 "lmz/candle-mistral".to_string()
