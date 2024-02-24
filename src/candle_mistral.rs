@@ -163,8 +163,18 @@ pub fn mistral(
 
     let start = std::time::Instant::now();
     let api = Api::new()?;
-    let model_id = match model_id {
-        Some(model_id) => model_id,
+    let model_id = match &model_id {
+        Some(model_id) => {
+            if model_id.is_empty() {
+                if quantized {
+                    "lmz/candle-mistral".to_string()
+                } else {
+                    "mistralai/Mistral-7B-v0.1".to_string()
+                }
+            } else {
+                model_id.to_string()
+            }
+        },
         None => {
             if quantized {
                 "lmz/candle-mistral".to_string()
@@ -173,6 +183,7 @@ pub fn mistral(
             }
         }
     };
+
     let repo = api.repo(Repo::with_revision(model_id, RepoType::Model, revision));
     let tokenizer_filename = match tokenizer_file {
         Some(file) => std::path::PathBuf::from(file),

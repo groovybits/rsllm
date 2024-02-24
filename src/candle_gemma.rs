@@ -5,7 +5,6 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use clap::Parser;
 use log::{debug, info};
 use std::io::Write;
 
@@ -112,60 +111,6 @@ impl TextGeneration {
     }
 }
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Run on CPU rather than on GPU.
-    #[arg(long)]
-    cpu: bool,
-
-    /// Enable tracing (generates a trace-timestamp.json file).
-    #[arg(long)]
-    tracing: bool,
-
-    #[arg(long)]
-    prompt: String,
-
-    /// The temperature used to generate samples.
-    #[arg(long)]
-    temperature: Option<f64>,
-
-    /// Nucleus sampling probability cutoff.
-    #[arg(long)]
-    top_p: Option<f64>,
-
-    /// The seed to use when generating random samples.
-    #[arg(long, default_value_t = 299792458)]
-    seed: u64,
-
-    /// The length of the sample to generate (in tokens).
-    #[arg(long, short = 'n', default_value_t = 10000)]
-    sample_len: usize,
-
-    #[arg(long)]
-    model_id: Option<String>,
-
-    #[arg(long, default_value = "main")]
-    revision: String,
-
-    #[arg(long)]
-    tokenizer_file: Option<String>,
-
-    #[arg(long)]
-    config_file: Option<String>,
-
-    #[arg(long)]
-    weight_files: Option<String>,
-
-    /// Penalty to be applied for repeating tokens, 1. means no penalty.
-    #[arg(long, default_value_t = 1.1)]
-    repeat_penalty: f32,
-
-    /// The context size to consider for the repeat penalty.
-    #[arg(long, default_value_t = 64)]
-    repeat_last_n: usize,
-}
-
 pub fn gemma(
     prompt: String,
     sample_len: usize,
@@ -213,6 +158,7 @@ pub fn gemma(
         Some(model_id) => match model_id.as_str() {
             "7b" => "google/gemma-7b".to_string(),
             "2b" => "google/gemma-2b".to_string(),
+            "" => "google/gemma-2b".to_string(),
             _ => model_id.to_string(),
         },
         None => "google/gemma-2b".to_string(),

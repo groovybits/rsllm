@@ -73,7 +73,7 @@ struct Args {
     #[clap(
         long,
         env = "MODEL_ID",
-        default_value = None,
+        default_value = "",
         help = "Model ID"
     )]
     model_id: String,
