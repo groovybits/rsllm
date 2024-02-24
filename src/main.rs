@@ -967,7 +967,21 @@ async fn main() {
             // Capture the start time for performance metrics
             let start = Instant::now();
 
-            let prompt = format_messages_for_llama2(messages.clone());
+            let chat_format = if args.candle_llm == "mistral" {
+                "llama2".to_string()
+            } else if args.candle_llm == "gemma" {
+                if args.model_id == "7b-it" {
+                    "google".to_string()
+                } else if args.model_id == "2b-it" {
+                    "google".to_string()
+                } else {
+                    "".to_string()
+                }
+            } else {
+                "llama2".to_string()
+            };
+
+            let prompt = format_messages_for_llama2(messages.clone(), chat_format);
 
             debug!("\nPrompt: {}", prompt);
 

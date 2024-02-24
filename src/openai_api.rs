@@ -94,21 +94,99 @@ fn process_and_print_token(token: &str, current_line_length: &mut usize, break_l
     }
 }
 
-pub fn format_messages_for_llama2(messages: Vec<Message>) -> String {
+pub fn format_messages_for_llama2(messages: Vec<Message>, chat_format: String) -> String {
     let mut formatted_history = String::new();
+    // Begin/End Stream Tokens
+    let eos_token = if chat_format == "llama2" {
+        "</s>"
+    } else {
+        ""
+    };
+    let bos_token = if chat_format == "llama2" {
+        "<s>"
+    } else {
+        ""
+    };
+    // Instruction Tokens
+    let inst_token = if chat_format == "llama2" {
+        "[INST]"
+    } else if chat_format == "google" {
+        "<start_of_turn>"
+    } else {
+        ""
+    };
+    let inst_end_token = if chat_format == "llama2" {
+        "[/INST]"
+    } else if chat_format == "google" {
+        "<end_of_turn>"
+    } else {
+        ""
+    };
+    // Assistant Tokens
+    let assist_token = if chat_format == "llama2" {
+        ""
+    } else if chat_format == "google" {
+        "<start_of_turn>"
+    } else {
+        ""
+    };
+    let assist_end_token = if chat_format == "llama2" {
+        ""
+    } else if chat_format == "google" {
+        "<end_of_turn>"
+    } else {
+        ""
+    };
+    // System Tokens
+    let sys_token = if chat_format == "llama2" {
+        "<<SYS>>"
+    } else if chat_format == "google" {
+        "<start_of_turn>"
+    } else {
+        ""
+    };
+    let sys_end_token = if chat_format == "llama2" {
+        "<</SYS>>"
+    } else if chat_format == "google" {
+        "<end_of_turn>"
+    } else {
+        ""
+    };
+    // Names
+    let sys_name = if chat_format == "llama2" {
+        ""
+    } else if chat_format == "google" {
+        "model"
+    } else {
+        ""
+    };
+    let user_name = if chat_format == "llama2" {
+        ""
+    } else if chat_format == "google" {
+        "user"
+    } else {
+        ""
+    };
+    let assist_name = if chat_format == "llama2" {
+        ""
+    } else if chat_format == "google" {
+        "model"
+    } else {
+        ""
+    };
 
     for message in messages {
         match message.role.as_str() {
             "system" => {
-                formatted_history += &format!("<s>System: {}</s>\n", message.content);
+                formatted_history += &format!("{}{}{} {}{}{}\n", bos_token, sys_token, sys_name, message.content, sys_end_token, eos_token);
             }
             "user" => {
                 // Assuming user messages should be formatted as instructions
-                formatted_history += &format!("<s>User: {}\n", message.content);
+                formatted_history += &format!("{}{}{} {}{}\n", bos_token, inst_token, user_name, message.content, inst_end_token);
             }
             "assistant" => {
                 // Close the instruction tag for user/system messages and add the assistant's response
-                formatted_history += &format!("Assistant: {}</s>\n", message.content);
+                formatted_history += &format!("{}{} {}{}{}\n", assist_token, assist_name, message.content, assist_end_token, eos_token);
             }
             _ => {}
         }
