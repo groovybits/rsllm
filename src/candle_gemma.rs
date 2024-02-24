@@ -73,9 +73,9 @@ impl TextGeneration {
         }
         std::io::stdout().flush()?;
 
-        let eos_token = match self.tokenizer.get_token("</s>") {
+        let eos_token = match self.tokenizer.get_token("<eos>") {
             Some(token) => token,
-            None => anyhow::bail!("cannot find the </s> token"),
+            None => anyhow::bail!("cannot find the <eos> token"),
         };
         for index in 0..sample_len {
             let context_size = if index > 0 { 1 } else { tokens.len() };
@@ -171,13 +171,13 @@ pub fn gemma(
     sample_len: usize,
     temperature: f64,
     _quantized: bool,
+    model_id: Option<String>,
     external_sender: Sender<String>,
 ) -> Result<()> {
     let cpu = false;
     let tracing = false;
     let top_p: Option<f64> = None;
     let seed = 0;
-    let model_id: Option<String> = None;
     let revision: String = "main".to_string();
     let tokenizer_file: Option<String> = None;
     let config_file: Option<String> = None;

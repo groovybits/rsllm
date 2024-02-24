@@ -69,6 +69,15 @@ struct Args {
     )]
     query: String,
 
+    /// Model ID - for gemma 2b or 7b, mistral has various options too
+    #[clap(
+        long,
+        env = "MODEL_ID",
+        default_value = None,
+        help = "Model ID"
+    )]
+    model_id: String,
+
     /// Temperature
     #[clap(
         long,
@@ -952,6 +961,8 @@ async fn main() {
         // Setup mpsc channels for internal communication within the mistral function
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
 
+        let model_id = args.model_id.clone();
+
         if args.use_candle {
             // Capture the start time for performance metrics
             let start = Instant::now();
@@ -975,6 +986,7 @@ async fn main() {
                         max_tokens as usize,
                         temperature as f64,
                         args.quantized,
+                        Some(model_id),
                         external_sender,
                     ) {
                         eprintln!("Error running mistral: {}", e);
@@ -987,6 +999,7 @@ async fn main() {
                         max_tokens as usize,
                         temperature as f64,
                         args.quantized,
+                        Some(model_id),
                         external_sender,
                     ) {
                         eprintln!("Error running gemma: {}", e);

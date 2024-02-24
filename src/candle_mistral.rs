@@ -128,6 +128,7 @@ pub fn mistral(
     sample_len: usize,
     temperature: f64,
     quantized: bool,
+    model_id: Option<String>,
     external_sender: Sender<String>,
 ) -> Result<()> {
     let cpu = false;
@@ -135,7 +136,6 @@ pub fn mistral(
     let use_flash_attn = false;
     let top_p: Option<f64> = None;
     let seed = 0;
-    let model_id: Option<String> = None;
     let revision: String = "main".to_string();
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
