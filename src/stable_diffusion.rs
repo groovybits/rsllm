@@ -9,7 +9,7 @@ use candle_transformers::models::stable_diffusion;
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
 use image::ImageBuffer;
-use log::{debug, info};
+use log::debug;
 use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
@@ -277,7 +277,7 @@ impl SDConfig {
             n_steps: None,
             num_samples: 1,
             sd_version: StableDiffusionVersion::Turbo,
-            intermediary_images: false,
+            intermediary_images: true,
             use_flash_attn: false,
             use_f16: false,
             guidance_scale: None,

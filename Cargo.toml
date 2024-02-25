@@ -77,3 +77,5 @@ candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.
 ndi-sdk = { git = "https://github.com/groovybits/rust-ndi.git", branch = "master", optional = true }
 rand = "0.8.5"
 uuid = { version = "1.7.0", features = ["v4"] }
+imageproc = "0.23.0"
+rusttype = "0.9.3"

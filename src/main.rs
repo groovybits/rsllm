@@ -410,7 +410,7 @@ struct Args {
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 0_000,
+        default_value_t = 10_000,
         help = "POLL Interval in ms."
     )]
     poll_interval: u64,
@@ -803,10 +803,14 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
-    println!(
-        "Starting up RsLLM with poll intervale of {} seconds...",
-        poll_interval_duration.as_secs()
-    );
+    if args.daemon {
+        println!(
+            "Starting up RsLLM with poll interval of {} seconds...",
+            poll_interval_duration.as_secs()
+        );
+    } else {
+        println!("Running RsLLM #{} iterations...", args.max_iterations);
+    }
     let mut count = 0;
     loop {
         count += 1;
@@ -1043,16 +1047,47 @@ async fn main() {
                 answers.push(received.clone());
 
                 // If a newline is at the end of the token, process the accumulated paragraph for image generation
-                if received.contains('\n') {
+                if received.contains('\n')
+                    || (current_paragraph.join("").len() > args.sd_max_length
+                        && (received.contains('.')
+                            || received.contains('?')
+                            || received.contains(' ')
+                            || received.contains('!')))
+                {
                     // Join the current paragraph tokens into a single String without adding extra spaces
                     if !current_paragraph.is_empty()
                         && current_paragraph.join("").len() > min_paragraph_len
                     {
                         // check if token has the new line character, split it at the new line into two parts, then put the first part onto
                         // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
-                        let mut split = received.split('\n');
-                        let first = split.next().unwrap();
-                        let second = split.next().unwrap();
+                        // Safely handle split at the newline character
+                        let mut split_pos = received.len();
+                        for delimiter in ['\n', '.', '?', '!'] {
+                            if let Some(pos) = received.find(delimiter) {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
+                                split_pos = split_pos.min(end_pos);
+                                break; // Break after finding the first delimiter
+                            }
+                        }
+                        // Handle ' ' delimiter separately
+                        if split_pos == received.len() {
+                            if let Some(pos) = received.find(' ') {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = pos + 1;
+                                split_pos = split_pos.min(end_pos);
+                            }
+                        }
+
+                        // Split 'received' at the determined position, handling '\n' specifically
+                        let (mut first, mut second) = received.split_at(split_pos);
+
+                        // If splitting on '\n', adjust 'first' and 'second' to not include '\n' in 'first'
+                        if first.ends_with('\n') {
+                            first = &first[..first.len() - 1];
+                        } else if second.starts_with('\n') {
+                            second = &second[1..];
+                        }
 
                         // Store the first part of the split token into the current paragraph
                         current_paragraph.push(first.to_string());
@@ -1091,6 +1126,8 @@ async fn main() {
                                 sd_config.height = Some(512);
                                 sd_config.width = Some(512);
 
+                                let prompt_clone = sd_config.prompt.clone();
+
                                 debug!("Generating images with prompt: {}", sd_config.prompt);
 
                                 match sd(sd_config).await {
@@ -1104,7 +1141,8 @@ async fn main() {
                                                 debug!("Sending images over NDI");
                                             }
                                             #[cfg(feature = "ndi")]
-                                            send_images_over_ndi(images.clone()).unwrap();
+                                            send_images_over_ndi(images.clone(), &prompt_clone)
+                                                .unwrap();
                                         }
 
                                         // Save images to disk
@@ -1172,6 +1210,8 @@ async fn main() {
                     sd_config.height = Some(512);
                     sd_config.width = Some(512);
 
+                    let prompt_clone = sd_config.prompt.clone();
+
                     debug!("Generating images with prompt: {}", sd_config.prompt);
 
                     match sd(sd_config).await {
@@ -1184,7 +1224,7 @@ async fn main() {
                             #[cfg(feature = "ndi")]
                             if args.ndi_images {
                                 #[cfg(feature = "ndi")]
-                                send_images_over_ndi(images.clone()).unwrap();
+                                send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
                                 // This is now allowed
                             }
 

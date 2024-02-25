@@ -4,18 +4,12 @@ set -e
 
 # Copy NDI library to the local directory
 if [ ! -f "libndi.dylib" ]; then
-    if [ -f "/Applications/NDI Launcher.app/Contents/Frameworks/libndi.dylib" ]; then
-        # copy ndi lib to ./
-        cp -f "/Applications/NDI Launcher.app/Contents/Frameworks/libndi.dylib" ./
-    else
-        echo "Please install the NDI SDK from https://ndi.video/download-ndi-sdk/"
-        exit 1
-    fi
+    curl -L https://github.com/nariakiiwatani/ofxNDI/raw/master/libs/NDI/lib/osx/x64/libndi.4.dylib --output libndi.dylib
 fi
 
 # Point to NDI path
 if [ "$DYLD_LIBRARY_PATH" = "" ]; then
-    export DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH
+    export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
 fi
 
 ## Build release version

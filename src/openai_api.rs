@@ -518,7 +518,7 @@ pub async fn stream_completion(
                     }
                     #[cfg(feature = "ndi")]
                     if ndi_images {
-                        send_images_over_ndi(images.clone())?;
+                        send_images_over_ndi(images.clone(), &answers.join("").clone())?;
                     }
 
                     // Save images to disk

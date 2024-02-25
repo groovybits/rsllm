@@ -39,10 +39,12 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
    cd rsllm
    ```
 
-3. **Compile with Metal GPU Support and NDI SKD support**:
+3. **Compile with Metal GPU Support and NDI SDK support**:
    ```bash
-   #  cargo build --release --features=metal,ndi
-   ./scripts/compile.sh # Script helps handle the NDI SDK and DYLD_LIBRARY_PATH
+   # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
+   # cargo build --release --features=metal,ndi
+   ## run the compile.sh which basically does the above command + gets the libndi.dylib.
+   ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
    ```
 
 ### Configuration
@@ -81,23 +83,18 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 ### NDI Output for Images and TTS Speech Audio (Audio is a Work in Progress)
 
-The toolkit is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks. To leverage these capabilities, the NDI SDK is required:
+The toolkit is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks.
 
-- **NDI SDK Installation**: Download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is essential for enabling NDI output functionalities within the toolkit.
+- **(OPTIONAL) NDI SDK Installation**: The [compile.sh](scripts/compile.sh] script will download hte libndi.dylib for you. If you want to, you can Download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is useful for viewing the NDI output and other tools to explore.
 - **Configuration Steps**:
     1. Add `--features ndi` to the Cargo build command to include NDI support in your build.
-    2. Obtain the NDI Core Suite from [NDI Tools](https://ndi.video/tools/ndi-core-suite/).
-    3. Copy the `libndi.dynlib` file into your `./rsllm/` and `/usr/local/lib` directory for easy accessibility. For instance, you can use the command:
-    ```bash
-    sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "./rsllm/libndi.dylib"
+    2. Run scripts/compile.sh which will retreive the libndi.dylib which works best for MacOS.
     ```
-    4. To ensure the library is correctly recognized when building with `cargo --features=ndi`, set the `DYLD_LIBRARY_PATH` environment variable:
+    3. To ensure the library is correctly recognized when building with `cargo --features=ndi`, set the `DYLD_LIBRARY_PATH` environment variable:
     ```bash
-    export DYLD_LIBRARY_PATH=/usr/local/lib:./:$DYLD_LIBRARY_PATH # include ./ for rsllm directory current path
+    export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
     ```
 - **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
-
-These steps aim to streamline the process of setting up NDI output capabilities, despite the complexities associated with handling NDI SDK libraries.
 
 ### MetaVoice TTS Text to Speech (Planned Feature)
 
@@ -146,7 +143,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Acknowledgments
 
 - Candle Rust Transformers/Tensors by Huggingface: [Candle](https://github.com/huggingface/candle)
-- NDI SDK for Image Output: [NDI SDK](https://ndi.video/download-ndi-sdk/)
 - OpenAI for API Specifications: [OpenAI](https://openai.com/)
 - MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
 - Whisper for Speech to Text: [Whisper](https://whisper.com/)

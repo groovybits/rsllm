@@ -1,9 +1,11 @@
-use image::{ImageBuffer, Rgb};
+use image::{ImageBuffer, Rgb, Rgba};
+use imageproc::drawing::draw_text_mut;
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
 use once_cell::sync::Lazy;
+use rusttype::{point, Font, Scale};
 use std::io::Result;
 use std::sync::Mutex;
 
@@ -24,14 +26,18 @@ static NDI_SENDER: Lazy<Mutex<SendInstance>> = Lazy::new(|| {
 });
 
 #[cfg(feature = "ndi")]
-pub fn send_images_over_ndi(images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> Result<()> {
+pub fn send_images_over_ndi(
+    images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>,
+    subtitle: &str,
+) -> Result<()> {
     let mut sender = NDI_SENDER.lock().unwrap();
 
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
+        let start_pos = (10, height as i32 / 3); // Text start position (x, y)
 
-        let rgba_buffer = convert_rgb_to_rgba(&image_buffer);
+        let rgba_buffer = convert_rgb_to_rgba_with_text(&image_buffer, subtitle, start_pos);
 
         let frame = ndi_sdk::send::create_ndi_send_video_frame(
             width as i32,
@@ -50,13 +56,93 @@ pub fn send_images_over_ndi(images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>) -> Resul
     Ok(())
 }
 
+// Helper function to wrap text into lines
 #[cfg(feature = "ndi")]
-fn convert_rgb_to_rgba(image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Vec<u8> {
-    image_buffer
+fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+    let space_width = font.glyph(' ').scaled(scale).h_metrics().advance_width;
+
+    for word in text.split_whitespace() {
+        let word_width = word
+            .chars()
+            .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+            .sum::<f32>();
+        if current_line.is_empty()
+            || text_width(&current_line, font, scale) + space_width + word_width <= max_width as f32
+        {
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(word);
+        } else {
+            lines.push(current_line);
+            current_line = String::from(word);
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+// Helper function to calculate text width
+#[cfg(feature = "ndi")]
+fn text_width(text: &str, font: &Font, scale: Scale) -> f32 {
+    text.chars()
+        .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+        .sum()
+}
+
+#[cfg(feature = "ndi")]
+fn convert_rgb_to_rgba_with_text(
+    image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>,
+    text: &str,
+    start_pos: (i32, i32), // Text start position (x, y)
+) -> Vec<u8> {
+    // Load the font. Ensure you have the font file at the specified path in your project directory.
+    // The path should be relative to the root of your crate; for example, if your font is in the root,
+    // the path could simply be "your_font.ttf".
+    let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf"); // Include your font file in the path
+    let font = Font::try_from_bytes(font_data as &[u8]).expect("Error constructing Font");
+
+    // Create a new ImageBuffer where we'll draw our text. Convert RGB to RGBA by adding an alpha channel.
+    let mut image_rgba =
+        ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
+            let pixel = image_buffer.get_pixel(x, y);
+            Rgba([pixel[0], pixel[1], pixel[2], 255]) // Copy the RGB pixel and add full alpha
+        });
+
+    // Setup for drawing text
+    let scale = Scale { x: 28.0, y: 28.0 }; // Adjust the font scale/size as needed
+    let text_color = Rgba([255, 255, 255, 0xff]);
+
+    // Wrap text and draw it
+    let max_width = image_buffer.width() as i32 - start_pos.0; // Max width for text before wrapping
+    let wrapped_text = wrap_text(text, &font, scale, max_width);
+
+    let mut current_height = start_pos.1;
+    for line in wrapped_text {
+        draw_text_mut(
+            &mut image_rgba,
+            text_color,
+            start_pos.0,
+            current_height,
+            scale,
+            &font,
+            &line,
+        );
+        current_height += 20; // Adjust based on font size or measured line height
+    }
+
+    // Convert the modified RGBA image buffer back to a flat Vec<u8>
+    image_rgba
         .pixels()
         .flat_map(|pixel| {
-            let Rgb(data) = *pixel;
-            vec![data[0], data[1], data[2], 255] // Adding full alpha value
+            let Rgba(data) = *pixel;
+            vec![data[0], data[1], data[2], data[3]] // Return the RGBA values including the alpha channel
         })
         .collect()
 }
