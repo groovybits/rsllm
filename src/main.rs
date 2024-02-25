@@ -1047,7 +1047,12 @@ async fn main() {
                 answers.push(received.clone());
 
                 // If a newline is at the end of the token, process the accumulated paragraph for image generation
-                if received.contains('\n') {
+                if received.contains('\n')
+                    || (current_paragraph.join("").len() > args.sd_max_length
+                        && (received.contains('.')
+                            || received.contains('?')
+                            || received.contains('!')))
+                {
                     // Join the current paragraph tokens into a single String without adding extra spaces
                     if !current_paragraph.is_empty()
                         && current_paragraph.join("").len() > min_paragraph_len

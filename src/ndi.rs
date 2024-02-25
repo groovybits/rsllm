@@ -35,7 +35,7 @@ pub fn send_images_over_ndi(
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
-        let start_pos = (10, 10); // Text start position (x, y)
+        let start_pos = (10, height as i32 / 3); // Text start position (x, y)
 
         let rgba_buffer = convert_rgb_to_rgba_with_text(&image_buffer, subtitle, start_pos);
 
@@ -54,6 +54,46 @@ pub fn send_images_over_ndi(
     }
 
     Ok(())
+}
+
+// Helper function to wrap text into lines
+#[cfg(feature = "ndi")]
+fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+    let space_width = font.glyph(' ').scaled(scale).h_metrics().advance_width;
+
+    for word in text.split_whitespace() {
+        let word_width = word
+            .chars()
+            .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+            .sum::<f32>();
+        if current_line.is_empty()
+            || text_width(&current_line, font, scale) + space_width + word_width <= max_width as f32
+        {
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(word);
+        } else {
+            lines.push(current_line);
+            current_line = String::from(word);
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+// Helper function to calculate text width
+#[cfg(feature = "ndi")]
+fn text_width(text: &str, font: &Font, scale: Scale) -> f32 {
+    text.chars()
+        .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+        .sum()
 }
 
 #[cfg(feature = "ndi")]
@@ -76,18 +116,26 @@ fn convert_rgb_to_rgba_with_text(
         });
 
     // Setup for drawing text
-    let scale = Scale { x: 20.0, y: 20.0 }; // Adjust the font scale/size as needed
+    let scale = Scale { x: 28.0, y: 28.0 }; // Adjust the font scale/size as needed
+    let text_color = Rgba([255, 255, 255, 0xff]);
 
-    // Draw text onto the RGBA image buffer
-    draw_text_mut(
-        &mut image_rgba,
-        Rgba([255, 255, 255, 0xff]), // Text color in RGBA format
-        start_pos.0,
-        start_pos.1,
-        scale,
-        &font,
-        text,
-    );
+    // Wrap text and draw it
+    let max_width = image_buffer.width() as i32 - start_pos.0; // Max width for text before wrapping
+    let wrapped_text = wrap_text(text, &font, scale, max_width);
+
+    let mut current_height = start_pos.1;
+    for line in wrapped_text {
+        draw_text_mut(
+            &mut image_rgba,
+            text_color,
+            start_pos.0,
+            current_height,
+            scale,
+            &font,
+            &line,
+        );
+        current_height += 20; // Adjust based on font size or measured line height
+    }
 
     // Convert the modified RGBA image buffer back to a flat Vec<u8>
     image_rgba
