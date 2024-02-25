@@ -5,7 +5,7 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
-use log::info;
+use log::{debug, info};
 use std::io::Write;
 
 use candle_transformers::models::gemma::{Config, Model};
@@ -62,17 +62,8 @@ impl TextGeneration {
             .map_err(E::msg)?
             .get_ids()
             .to_vec();
-        for &t in tokens.iter() {
-            if let Some(t) = self.tokenizer.next_token(t)? {
-                self.internal_token_sender
-                    .send(t.clone())
-                    .await
-                    .expect("Failed to send token internally");
-            }
-        }
-        std::io::stdout().flush()?;
 
-        println!("prompt: {:?}\n============\n", prompt);
+        debug!("prompt: {:?}", prompt);
 
         let eos_token = match self.tokenizer.get_token("<eos>") {
             Some(token) => token,
