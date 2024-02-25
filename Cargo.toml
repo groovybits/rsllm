@@ -1,6 +1,6 @@
 [package]
 name = "rsllm"
-description = "MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer"
+description = "Rust LLM Stream Analyzer and Content Generator"
 keywords = [
     "ai",
     "broadcast",
@@ -17,7 +17,7 @@ license-file = "LICENSE"
 homepage = "https://github.com/groovybits/rsllm/wiki"
 repository = "https://github.com/groovybits/rsllm"
 authors = ["Chris Kennedy"]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 
 [lib]

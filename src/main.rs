@@ -47,8 +47,8 @@ use uuid::Uuid;
 #[derive(Parser, Debug)]
 #[clap(
     author = "Chris Kennedy",
-    version = "2.1",
-    about = "MacOS Metal GPU Rust TextGen/ImageGen/SpeachGen - AI System/Network/Stream Analyzer"
+    version = "2.2",
+    about = "Rust LLM Stream Analyzer and Content Generator"
 )]
 struct Args {
     /// System prompt

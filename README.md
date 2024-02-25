@@ -1,13 +1,13 @@
-# MacOS Metal GPU Rust LLM Toolkit with Candle: A Comprehensive Guide
+# Rust LLM Stream Analyzer and Content Generator
 
-The MacOS Metal GPU Rust LLM Toolkit, leveraging the Candle framework from Huggingface, represents a cutting-edge approach to AI model interaction and stream analysis on MacOS devices equipped with M1/M2/M3 ARM GPUs. This toolkit is meticulously designed for developers and researchers aiming to integrate local large language models (LLMs) with high efficiency, bypassing the need for external dependencies and Python servers. At its core, it emphasizes the utilization of local LLMs for generating text, images, and speech within a Rust environment, offering a robust suite of features for real-time data stream analysis and AI-driven content creation.
+The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal GPUs leveraging the Candle framework from Huggingface, represents a cutting-edge approach to AI model interaction and stream analysis on MacOS devices equipped with M1/M2/M3 ARM GPUs. This toolkit is meticulously designed for developers and researchers aiming to integrate local large language models (LLMs) with high efficiency, bypassing the need for external dependencies and Python servers. At its core, it emphasizes the utilization of local LLMs for generating text, images, and speech within a Rust environment, offering a robust suite of features for real-time data stream analysis and AI-driven content creation.
 
 ## Highlighted Features
 
 - **Local LLM Focus**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
-- **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content.
-- **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response.
-- **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting.
+- **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
+- **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
+- **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
 
 ![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
 
@@ -49,15 +49,15 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
 
 ## Usage
 
-The toolkit is designed to facilitate a wide range of AI-driven operations, from generating text-based content to analyzing network streams and processing visual and audio inputs. Advanced features like NDI output and voice-to-text input processing are in development, aiming to enhance the interactive capabilities of the toolkit.
+The toolkit is designed to facilitate a wide range of AI-driven operations, from generating text-based content to analyzing network streams and processing visual and audio inputs. Advanced features like NDI audio output and voice-to-text input processing are in development, aiming to enhance the interactive capabilities of the toolkit.
 
 ### Example Commands
 
 - Use the scripts in the [./scripts](./scripts/) directory.
     ```bash
-    ./scripts/mpeg_analyzer.sh --llm-host http://your.llm.host:8080
-    ./scripts/mpeg_poetry.sh --llm-host http://your.llm.host:8080
-    ./scripts/system_health.sh --llm-host http://your.llm.host:8080
+    ./scripts/mpeg_analyzer.sh
+    ./scripts/mpeg_poetry.sh
+    ./scripts/system_health.sh
     ```
 
 - **Running with Candle and OS Stats for AI System Analysis**:
@@ -75,7 +75,7 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 ## Enhanced Output Capabilities and Upcoming Features
 
-### NDI Output for Images and TTS Speech Audio (Work in Progress)
+### NDI Output for Images and TTS Speech Audio (Audio is a Work in Progress)
 
 The toolkit is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks. To leverage these capabilities, the NDI SDK is required:
 
@@ -83,13 +83,13 @@ The toolkit is enhancing its output capabilities to include NDI (Network Device 
 - **Configuration Steps**:
     1. Add `--features ndi` to the Cargo build command to include NDI support in your build.
     2. Obtain the NDI Core Suite from [NDI Tools](https://ndi.video/tools/ndi-core-suite/).
-    3. Copy the `libndi.dynlib` file into your `/usr/local/lib` directory for easy accessibility. For instance, you can use the command:
+    3. Copy the `libndi.dynlib` file into your `./rsllm/` and `/usr/local/lib` directory for easy accessibility. For instance, you can use the command:
     ```bash
-    sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "/usr/local/lib/libndi.4.dylib"
+    sudo cp "/Applications/NDI Video Monitor.app/Contents/Frameworks/libndi_advanced.dylib" "./rsllm/libndi.dylib"
     ```
-    4. To ensure the library is correctly recognized, set the `DYLD_LIBRARY_PATH` environment variable:
+    4. To ensure the library is correctly recognized when building with `cargo --features=ndi`, set the `DYLD_LIBRARY_PATH` environment variable:
     ```bash
-    export DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH
+    export DYLD_LIBRARY_PATH=/usr/local/lib:./:$DYLD_LIBRARY_PATH # include ./ for rsllm directory current path
     ```
 - **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
 
@@ -129,6 +129,7 @@ These enhancements and planned features underscore our commitment to providing a
 - freeform input options for the LLM to figure out what the user wants to do.
 - dynamic code generation of python for new tasks on the fly like video processing? risks?
 - iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
+- Speech to Tet with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
 
 ## Contributing
 
@@ -143,9 +144,11 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - Candle Rust Transformers/Tensors by Huggingface: [Candle](https://github.com/huggingface/candle)
 - NDI SDK for Image Output: [NDI SDK](https://ndi.video/download-ndi-sdk/)
 - OpenAI for API Specifications: [OpenAI](https://openai.com/)
+- MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
+- Whisper for Speech to Text: [Whisper](https://whisper.com/)
 
 ## Author
 
 Chris Kennedy, leading the development of innovative AI solutions with the MacOS Metal GPU Rust LLM Toolkit. February 2024.
 
-We are committed to pushing the boundaries of AI integration on MacOS, ensuring developers and researchers have access to powerful, efficient, and versatile tools for their AI-driven projects.
+We are committed to pushing the boundaries of AI integration with Video Technology and Multimodal input/output on MacOS Arm CPUs in pure Rust, ensuring media developers and researchers have access to powerful, efficient, and versatile tools for their AI-driven projects.
