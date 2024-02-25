@@ -1051,6 +1051,7 @@ async fn main() {
                     || (current_paragraph.join("").len() > args.sd_max_length
                         && (received.contains('.')
                             || received.contains('?')
+                            || received.contains(' ')
                             || received.contains('!')))
                 {
                     // Join the current paragraph tokens into a single String without adding extra spaces
@@ -1059,9 +1060,34 @@ async fn main() {
                     {
                         // check if token has the new line character, split it at the new line into two parts, then put the first part onto
                         // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
-                        let mut split = received.split('\n');
-                        let first = split.next().unwrap();
-                        let second = split.next().unwrap();
+                        // Safely handle split at the newline character
+                        let mut split_pos = received.len();
+                        for delimiter in ['\n', '.', '?', '!'] {
+                            if let Some(pos) = received.find(delimiter) {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
+                                split_pos = split_pos.min(end_pos);
+                                break; // Break after finding the first delimiter
+                            }
+                        }
+                        // Handle ' ' delimiter separately
+                        if split_pos == received.len() {
+                            if let Some(pos) = received.find(' ') {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = pos + 1;
+                                split_pos = split_pos.min(end_pos);
+                            }
+                        }
+
+                        // Split 'received' at the determined position, handling '\n' specifically
+                        let (mut first, mut second) = received.split_at(split_pos);
+
+                        // If splitting on '\n', adjust 'first' and 'second' to not include '\n' in 'first'
+                        if first.ends_with('\n') {
+                            first = &first[..first.len() - 1];
+                        } else if second.starts_with('\n') {
+                            second = &second[1..];
+                        }
 
                         // Store the first part of the split token into the current paragraph
                         current_paragraph.push(first.to_string());
