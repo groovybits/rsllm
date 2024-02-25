@@ -410,7 +410,7 @@ struct Args {
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 0_000,
+        default_value_t = 10_000,
         help = "POLL Interval in ms."
     )]
     poll_interval: u64,
@@ -803,10 +803,14 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
-    println!(
-        "Starting up RsLLM with poll intervale of {} seconds...",
-        poll_interval_duration.as_secs()
-    );
+    if args.daemon {
+        println!(
+            "Starting up RsLLM with poll interval of {} seconds...",
+            poll_interval_duration.as_secs()
+        );
+    } else {
+        println!("Running RsLLM #{} iterations...", args.max_iterations);
+    }
     let mut count = 0;
     loop {
         count += 1;

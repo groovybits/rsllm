@@ -77,7 +77,6 @@ fn convert_rgb_to_rgba_with_text(
 
     // Setup for drawing text
     let scale = Scale { x: 20.0, y: 20.0 }; // Adjust the font scale/size as needed
-    let start_point = point(start_pos.0 as f32, start_pos.1 as f32); // Convert start_pos to a Point<f32>
 
     // Draw text onto the RGBA image buffer
     draw_text_mut(
