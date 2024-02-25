@@ -54,6 +54,8 @@ impl TextGeneration {
     }
 
     async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
+        let verbose_prompt: bool = true;
+
         self.tokenizer.clear();
         let mut tokens = self
             .tokenizer
@@ -62,6 +64,15 @@ impl TextGeneration {
             .map_err(E::msg)?
             .get_ids()
             .to_vec();
+
+        if verbose_prompt {
+            for &t in tokens.iter() {
+                if let Some(t) = self.tokenizer.next_token(t)? {
+                    println!("'{}'", t);
+                }
+            }
+        }
+        std::io::stdout().flush()?;
 
         debug!("prompt: {:?}", prompt);
 
@@ -121,7 +132,7 @@ pub fn gemma(
     let config_file: Option<String> = None;
     let weight_files: Option<String> = None;
     let repeat_penalty = 1.1;
-    let repeat_last_n = prompt.len();
+    let repeat_last_n = 64; //prompt.len();
 
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
