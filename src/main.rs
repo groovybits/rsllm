@@ -40,6 +40,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
+use tokio::sync::Semaphore;
 use tokio::time::Duration;
 use uuid::Uuid;
 
@@ -1037,6 +1038,11 @@ async fn main() {
             let min_paragraph_len = 40; // Minimum length of a paragraph to generate an image
             let mut image_spawn_handles = Vec::new();
 
+            // Stable Diffusion number of tasks max
+            // Before starting  loop, initialize the semaphore with a specific number of permits
+            let max_concurrent_tasks = 3; // Set this to the desired number of concurrent tasks
+            let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
 
@@ -1120,7 +1126,12 @@ async fn main() {
 
                             let output_id_clone = output_id.clone();
 
+                            let sem_clone = semaphore.clone();
                             let handle = tokio::spawn(async move {
+                                let _permit = sem_clone.acquire().await.expect(
+                                    "Stable Diffusion Thread: Failed to acquire semaphore permit",
+                                );
+
                                 let mut sd_config = SDConfig::new();
                                 sd_config.prompt = paragraph_clone;
                                 sd_config.height = Some(512);
