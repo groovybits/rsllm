@@ -1097,14 +1097,14 @@ async fn main() {
                                     // Ensure `sd` function is async and await its result
                                     Ok(images) => {
                                         // Send images over NDI
-                                        if args.ndi_images {
-                                            debug!("Sending images over NDI");
-                                        }
                                         #[cfg(feature = "ndi")]
                                         if args.ndi_images {
                                             #[cfg(feature = "ndi")]
+                                            if args.ndi_images {
+                                                debug!("Sending images over NDI");
+                                            }
+                                            #[cfg(feature = "ndi")]
                                             send_images_over_ndi(images.clone()).unwrap();
-                                            // This is now allowed
                                         }
 
                                         // Save images to disk
