@@ -9,7 +9,7 @@ use candle_transformers::models::stable_diffusion;
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
 use image::ImageBuffer;
-use log::{debug, info};
+use log::debug;
 use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]

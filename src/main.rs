@@ -1091,6 +1091,8 @@ async fn main() {
                                 sd_config.height = Some(512);
                                 sd_config.width = Some(512);
 
+                                let prompt_clone = sd_config.prompt.clone();
+
                                 debug!("Generating images with prompt: {}", sd_config.prompt);
 
                                 match sd(sd_config).await {
@@ -1104,7 +1106,8 @@ async fn main() {
                                                 debug!("Sending images over NDI");
                                             }
                                             #[cfg(feature = "ndi")]
-                                            send_images_over_ndi(images.clone()).unwrap();
+                                            send_images_over_ndi(images.clone(), &prompt_clone)
+                                                .unwrap();
                                         }
 
                                         // Save images to disk
@@ -1172,6 +1175,8 @@ async fn main() {
                     sd_config.height = Some(512);
                     sd_config.width = Some(512);
 
+                    let prompt_clone = sd_config.prompt.clone();
+
                     debug!("Generating images with prompt: {}", sd_config.prompt);
 
                     match sd(sd_config).await {
@@ -1184,7 +1189,7 @@ async fn main() {
                             #[cfg(feature = "ndi")]
                             if args.ndi_images {
                                 #[cfg(feature = "ndi")]
-                                send_images_over_ndi(images.clone()).unwrap();
+                                send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
                                 // This is now allowed
                             }
 
