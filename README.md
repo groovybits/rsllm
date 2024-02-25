@@ -39,9 +39,10 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
    cd rsllm
    ```
 
-3. **Compile with Metal GPU Support**:
+3. **Compile with Metal GPU Support and NDI SKD support**:
    ```bash
-   cargo build --release --features=metal,ndi
+   #  cargo build --release --features=metal,ndi
+   ./scripts/compile.sh # Script helps handle the NDI SDK and DYLD_LIBRARY_PATH
    ```
 
 ### Configuration
@@ -55,6 +56,8 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 - Use the scripts in the [./scripts](./scripts/) directory.
     ```bash
+    [./scripts/compile.sh](./scripts/compile.sh) # build rsllm
+
     ./scripts/mpeg_analyzer.sh
     ./scripts/mpeg_poetry.sh
     ./scripts/system_health.sh
@@ -63,14 +66,15 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 - **Running with Candle and OS Stats for AI System Analysis**:
    ```bash
    cargo run --release --features ndi,metal -- \
-     --use-candle --candle_llm mistral \
-     --quantized \
-     --max-tokens 300 \
+     --use-candle --candle_llm gemma \
+     --model-id "7b-it" \
+     --max-tokens 1000 \
      --temperature 0.8 \
      --ai-os-stats \
+     --sd-image \
      --ndi-images \
-     --system-prompt "you are helpful" \
-     --query "How is my system doing?"
+     --system-prompt "you create image prompts from os system stats health state." \
+     --query "How is my system doing? Create a report on the system health as visual image descriptions."
    ```
 
 ## Enhanced Output Capabilities and Upcoming Features

@@ -1,0 +1,37 @@
+#!/bin/bash
+#
+set -e
+
+# Copy NDI library to the local directory
+if [ ! -f "libndi.dylib" ]; then
+    if [ -f "/Applications/NDI Launcher.app/Contents/Frameworks/libndi.dylib" ]; then
+        # copy ndi lib to ./
+        cp -f "/Applications/NDI Launcher.app/Contents/Frameworks/libndi.dylib" ./
+    else
+        echo "Please install the NDI SDK from https://ndi.video/download-ndi-sdk/"
+        exit 1
+    fi
+fi
+
+# Point to NDI path
+if [ "$DYLD_LIBRARY_PATH" = "" ]; then
+    export DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH
+fi
+
+## Build release version
+cargo build \
+    --release \
+    --features metal,ndi
+
+# Build debug version
+cargo build \
+    --features metal,ndi
+
+if [ ! -f "target/release/rsllm" ]; then
+    echo "Error building rsllm, please check output"
+    exit 1
+fi
+
+./target/release/rsllm -h
+
+echo "Done, rsllm works and is in target/release/rsllm"
