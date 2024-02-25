@@ -9,7 +9,7 @@ use candle_transformers::models::stable_diffusion;
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
 use image::ImageBuffer;
-use log::info;
+use log::{debug, info};
 use tokenizers::Tokenizer;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
@@ -169,7 +169,7 @@ fn text_embeddings(
         Some(padding) => *tokenizer.get_vocab(true).get(padding.as_str()).unwrap(),
         None => *tokenizer.get_vocab(true).get("<|endoftext|>").unwrap(),
     };
-    info!("Stable Diffusion: Running with prompt \"{prompt}\".");
+    debug!("Stable Diffusion: Running with prompt \"{prompt}\".");
     let mut tokens = tokenizer
         .encode(prompt, true)
         .map_err(E::msg)?
@@ -180,7 +180,7 @@ fn text_embeddings(
     }
     let tokens = Tensor::new(tokens.as_slice(), device)?.unsqueeze(0)?;
 
-    info!("Stable Diffusion: Building the Clip transformer.");
+    debug!("Stable Diffusion: Building the Clip transformer.");
     let clip_weights_file = if first {
         ModelFile::Clip
     } else {
@@ -277,7 +277,7 @@ impl SDConfig {
             n_steps: None,
             num_samples: 1,
             sd_version: StableDiffusionVersion::Turbo,
-            intermediary_images: true,
+            intermediary_images: false,
             use_flash_attn: false,
             use_f16: false,
             guidance_scale: None,
@@ -287,7 +287,7 @@ impl SDConfig {
     }
 }
 
-pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>> {
+pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>> {
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
 
@@ -381,9 +381,9 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         .collect::<Result<Vec<_>>>()?;
 
     let text_embeddings = Tensor::cat(&text_embeddings, D::Minus1)?;
-    info!("Stable Diffusion: Text Embeddings - {text_embeddings:?}");
+    debug!("Stable Diffusion: Text Embeddings - {text_embeddings:?}");
 
-    info!("Stable Diffusion: Building the autoencoder.");
+    debug!("Stable Diffusion: Building the autoencoder.");
     let vae_weights = ModelFile::Vae.get(config.vae_weights, config.sd_version, config.use_f16)?;
     let vae = sd_config.build_vae(vae_weights, &device, dtype)?;
     let init_latent_dist = match &config.img2img {
@@ -393,7 +393,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
             Some(vae.encode(&image_buf)?)
         }
     };
-    info!("Stable Diffusion: Building the unet.");
+    debug!("Stable Diffusion: Building the unet.");
     let unet_weights =
         ModelFile::Unet.get(config.unet_weights, config.sd_version, config.use_f16)?;
     let unet = sd_config.build_unet(unet_weights, &device, 4, config.use_flash_attn, dtype)?;
@@ -440,7 +440,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
         };
         let mut latents = latents.to_dtype(dtype)?;
 
-        info!("Stable Diffusion: starting sampling");
+        debug!("Stable Diffusion: starting sampling");
         for (timestep_index, &timestep) in timesteps.iter().enumerate() {
             if timestep_index < t_start {
                 continue;
@@ -467,7 +467,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
 
             latents = scheduler.step(&noise_pred, timestep, &latents)?;
             let dt = start_time.elapsed().as_secs_f32();
-            info!(
+            debug!(
                 "Stable Diffusion: step {}/{n_steps} done, {:.2}s",
                 timestep_index + 1,
                 dt
@@ -493,7 +493,7 @@ pub fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>>
             }
         }
 
-        info!(
+        debug!(
             "Stable Diffusion: Generating the final image for sample {}/{}.",
             idx + 1,
             config.num_samples

@@ -97,16 +97,8 @@ fn process_and_print_token(token: &str, current_line_length: &mut usize, break_l
 pub fn format_messages_for_llama2(messages: Vec<Message>, chat_format: String) -> String {
     let mut formatted_history = String::new();
     // Begin/End Stream Tokens
-    let eos_token = if chat_format == "llama2" {
-        "</s>"
-    } else {
-        ""
-    };
-    let bos_token = if chat_format == "llama2" {
-        "<s>"
-    } else {
-        ""
-    };
+    let eos_token = if chat_format == "llama2" { "</s>" } else { "" };
+    let bos_token = if chat_format == "llama2" { "<s>" } else { "" };
     // Instruction Tokens
     let inst_token = if chat_format == "llama2" {
         "[INST]"
@@ -178,15 +170,24 @@ pub fn format_messages_for_llama2(messages: Vec<Message>, chat_format: String) -
     for message in messages {
         match message.role.as_str() {
             "system" => {
-                formatted_history += &format!("{}{}{} {}{}{}\n", bos_token, sys_token, sys_name, message.content, sys_end_token, eos_token);
+                formatted_history += &format!(
+                    "{}{}{} {}{}{}\n",
+                    bos_token, sys_token, sys_name, message.content, sys_end_token, eos_token
+                );
             }
             "user" => {
                 // Assuming user messages should be formatted as instructions
-                formatted_history += &format!("{}{}{} {}{}\n", bos_token, inst_token, user_name, message.content, inst_end_token);
+                formatted_history += &format!(
+                    "{}{}{} {}{}\n",
+                    bos_token, inst_token, user_name, message.content, inst_end_token
+                );
             }
             "assistant" => {
                 // Close the instruction tag for user/system messages and add the assistant's response
-                formatted_history += &format!("{}{} {}{}{}\n", assist_token, assist_name, message.content, assist_end_token, eos_token);
+                formatted_history += &format!(
+                    "{}{} {}{}{}\n",
+                    assist_token, assist_name, message.content, assist_end_token, eos_token
+                );
             }
             _ => {}
         }
@@ -509,7 +510,7 @@ pub async fn stream_completion(
 
             let images_result = sd(sd_config); // This call returns `Result<Vec<Vec<u8>>>`
 
-            match images_result {
+            match images_result.await {
                 Ok(images) => {
                     // Send images over NDI
                     if ndi_images {

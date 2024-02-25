@@ -23,7 +23,6 @@ use rsllm::candle_mistral::mistral;
 use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
-use rsllm::remove_prompt_from_output;
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -42,6 +41,7 @@ use std::sync::{
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
 use tokio::time::Duration;
+use uuid::Uuid;
 
 /// RScap Probe Configuration
 #[derive(Parser, Debug)]
@@ -455,7 +455,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 200,
+        default_value_t = 120,
         help = "SD Max Length for SD Image, default is 200."
     )]
     sd_max_length: usize,
@@ -878,9 +878,9 @@ async fn main() {
         // Debugging LLM history
         if args.debug_llm_history {
             // print out the messages to the console
-            println!("=============");
+            println!("==============================");
             println!("Messages:");
-            println!("=============");
+            println!("==============================");
             for message in &messages {
                 println!("{}: {}\n---\n", message.role, message.content);
             }
@@ -1027,11 +1027,191 @@ async fn main() {
             // Count tokens and collect output
             let mut token_count = 0;
             let mut answers = Vec::new();
+            let mut paragraphs: Vec<String> = Vec::new();
+            let mut current_paragraph: Vec<String> = Vec::new();
+            let mut paragraph_count = 0;
+            let min_paragraph_len = 40; // Minimum length of a paragraph to generate an image
+            let mut image_spawn_handles = Vec::new();
+
+            // create uuid unique identifier for the output images
+            let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+
             while let Some(received) = external_receiver.recv().await {
                 token_count += 1;
-                print!("{}", received);
-                std::io::stdout().flush().unwrap();
-                answers.push(received);
+
+                // Store the received token
+                answers.push(received.clone());
+
+                // If a newline is at the end of the token, process the accumulated paragraph for image generation
+                if received.contains('\n') {
+                    // Join the current paragraph tokens into a single String without adding extra spaces
+                    if !current_paragraph.is_empty()
+                        && current_paragraph.join("").len() > min_paragraph_len
+                    {
+                        // check if token has the new line character, split it at the new line into two parts, then put the first part onto
+                        // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
+                        let mut split = received.split('\n');
+                        let first = split.next().unwrap();
+                        let second = split.next().unwrap();
+
+                        // Store the first part of the split token into the current paragraph
+                        current_paragraph.push(first.to_string());
+
+                        let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                        paragraphs.push(paragraph_text.clone());
+
+                        // Clear current paragraph for the next one
+                        current_paragraph.clear(); // Clear current paragraph for the next one
+
+                        // Store the second part of the split token into the answers and current_paragraph
+                        current_paragraph.push(second.to_string());
+
+                        // Token output to stdout in real-time
+                        print!("{}", first);
+                        std::io::stdout().flush().unwrap();
+
+                        // Check if image generation is enabled and proceed
+                        if args.sd_image {
+                            // Clone necessary data for use in the async block
+                            let paragraph_clone = paragraphs[paragraph_count].clone();
+
+                            std::io::stdout().flush().unwrap();
+                            println!(
+                                "\n===\nGenerating image {} #{} for {} characters...\n===\n",
+                                output_id,
+                                paragraph_count,
+                                paragraph_clone.len()
+                            );
+
+                            let output_id_clone = output_id.clone();
+
+                            let handle = tokio::spawn(async move {
+                                let mut sd_config = SDConfig::new();
+                                sd_config.prompt = paragraph_clone;
+                                sd_config.height = Some(512);
+                                sd_config.width = Some(512);
+
+                                debug!("Generating images with prompt: {}", sd_config.prompt);
+
+                                match sd(sd_config).await {
+                                    // Ensure `sd` function is async and await its result
+                                    Ok(images) => {
+                                        // Send images over NDI
+                                        if args.ndi_images {
+                                            debug!("Sending images over NDI");
+                                        }
+                                        #[cfg(feature = "ndi")]
+                                        if args.ndi_images {
+                                            #[cfg(feature = "ndi")]
+                                            send_images_over_ndi(images.clone()).unwrap();
+                                            // This is now allowed
+                                        }
+
+                                        // Save images to disk
+                                        for (index, image_bytes) in images.iter().enumerate() {
+                                            let image_file = format!(
+                                                "{}_{}_{}.png",
+                                                output_id_clone, paragraph_count, index
+                                            );
+                                            debug!(
+                                                "Image {} {}/{} saving to {}",
+                                                output_id_clone, paragraph_count, index, image_file
+                                            );
+                                            image_bytes
+                                                .save(image_file)
+                                                .map_err(candle_core::Error::wrap)
+                                                .unwrap(); // And this as well
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!(
+                                            "Error generating images for {}: {:?}",
+                                            output_id_clone, e
+                                        );
+                                    }
+                                }
+                            });
+                            image_spawn_handles.push(handle);
+                        }
+
+                        // Token output to stdout in real-time
+                        print!("{}", second);
+                        std::io::stdout().flush().unwrap();
+
+                        paragraph_count += 1; // Increment paragraph count for the next paragraph
+                    } else {
+                        // Token output to stdout in real-time
+                        print!("{}", received);
+                        std::io::stdout().flush().unwrap();
+
+                        // store the token in the current paragraph
+                        current_paragraph.push(received.clone());
+                    }
+                } else {
+                    // Token output to stdout in real-time
+                    print!("{}", received);
+                    std::io::stdout().flush().unwrap();
+
+                    // store the token in the current paragraph
+                    current_paragraph.push(received.clone());
+                }
+            }
+
+            // Join the last paragraph tokens into a single String without adding extra spaces
+            if current_paragraph.len() > 0 {
+                // TODO: do anything needed with the last paragraph bits like TTS sending
+                let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                let paragraph_text_clone = paragraph_text.clone();
+
+                let output_id_clone = output_id.clone();
+
+                // end of the last paragraph image generation
+                let handle = tokio::spawn(async move {
+                    let mut sd_config = SDConfig::new();
+                    sd_config.prompt = paragraph_text_clone;
+                    sd_config.height = Some(512);
+                    sd_config.width = Some(512);
+
+                    debug!("Generating images with prompt: {}", sd_config.prompt);
+
+                    match sd(sd_config).await {
+                        // Ensure `sd` function is async and await its result
+                        Ok(images) => {
+                            // Send images over NDI
+                            if args.ndi_images {
+                                debug!("Sending images over NDI");
+                            }
+                            #[cfg(feature = "ndi")]
+                            if args.ndi_images {
+                                #[cfg(feature = "ndi")]
+                                send_images_over_ndi(images.clone()).unwrap();
+                                // This is now allowed
+                            }
+
+                            // Save images to disk
+                            for (index, image_bytes) in images.iter().enumerate() {
+                                let image_file = format!(
+                                    "{}_{}_{}.png",
+                                    output_id_clone, paragraph_count, index
+                                );
+                                debug!(
+                                    "\nImage {} {}/{} saving to {}",
+                                    output_id_clone, paragraph_count, index, image_file
+                                );
+                                image_bytes
+                                    .save(image_file)
+                                    .map_err(candle_core::Error::wrap)
+                                    .unwrap(); // And this as well
+                            }
+                        }
+                        Err(e) => {
+                            std::io::stdout().flush().unwrap();
+                            eprintln!("Error generating images for {}: {:?}", output_id_clone, e);
+                        }
+                    }
+                });
+                image_spawn_handles.push(handle);
+                paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
             // Wait for the LLM thread to finish
@@ -1041,13 +1221,12 @@ async fn main() {
             let elapsed = start.elapsed().as_secs_f64();
             let tokens_per_second = token_count as f64 / elapsed;
 
-            println!(
-                "\n---\nGenerated {} tokens in {:.2?} seconds ({:.2} tokens/second)\n---\n",
-                token_count, elapsed, tokens_per_second
-            );
+            let answers_str = answers.join("").to_string();
 
-            let answers_str =
-                remove_prompt_from_output(&prompt.clone(), answers.join("").to_string());
+            println!(
+                "\n================================\n#{} Generated {}/{}/{} paragraphs/tokens/chars in {:.2?} seconds ({:.2} tokens/second)\n================================\n",
+                output_id, paragraph_count, token_count, answers_str.len(), elapsed, tokens_per_second
+            );
 
             // add answers to the messages as an assistant role message with the content
             messages.push(Message {
@@ -1055,55 +1234,9 @@ async fn main() {
                 content: answers_str.clone(),
             });
 
-            // truncate answer_clone to max length of 300 characters
-            let answers_clone = if answers_str.len() > args.sd_max_length {
-                answers_str.replace("\n", " ").clone()[..args.sd_max_length].to_string()
-            } else {
-                answers_str.replace("\n", " ").clone()
-            };
-
-            // Stable Diffusion `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
-            if args.sd_image {
-                let handler = tokio::spawn(async move {
-                    let mut sd_config = SDConfig::new();
-                    sd_config.prompt = answers_clone.to_string();
-                    sd_config.height = Some(512);
-                    sd_config.width = Some(512);
-
-                    println!("Generating images with prompt: {}", sd_config.prompt);
-
-                    let images_result = sd(sd_config); // returns `Result<Vec<Vec<u8>>>`
-
-                    match images_result {
-                        Ok(images) => {
-                            // Send images over NDI
-                            if args.ndi_images {
-                                debug!("Sending images over NDI");
-                            }
-                            #[cfg(feature = "ndi")]
-                            if args.ndi_images {
-                                #[cfg(feature = "ndi")]
-                                send_images_over_ndi(images.clone()).unwrap(); // This is now allowed
-                            }
-
-                            // Save images to disk
-                            for (index, image_bytes) in images.iter().enumerate() {
-                                let image_file = format!("{}.png", index);
-                                println!("Image {} saving to {}", index + 1, image_file);
-                                image_bytes
-                                    .save(image_file)
-                                    .map_err(candle_core::Error::wrap)
-                                    .unwrap(); // And this as well
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error generating images: {:?}", e);
-                        }
-                    }
-                });
-
-                // Wait for the handler to finish
-                handler.await.unwrap();
+            // wait for the image generation to finish
+            for handle in image_spawn_handles {
+                handle.await.unwrap();
             }
         } else {
             // Stream API Completion
