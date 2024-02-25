@@ -146,6 +146,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - OpenAI for API Specifications: [OpenAI](https://openai.com/)
 - MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
 - Whisper for Speech to Text: [Whisper](https://whisper.com/)
+- Google Gemma LLM: [Gemma](https://huggingface.co/blog/gemma#prompt-format)
+- Mistral LLM: [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
 ## Author
 
