@@ -72,6 +72,8 @@ impl TextGeneration {
         }
         std::io::stdout().flush()?;
 
+        println!("prompt: {:?}\n============\n", prompt);
+
         let eos_token = match self.tokenizer.get_token("<eos>") {
             Some(token) => token,
             None => anyhow::bail!("cannot find the <eos> token"),
