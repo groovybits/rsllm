@@ -10,3 +10,6 @@ target/release/rsllm \
     --query "tell me a story about rainbows" \
     --loglevel error \
     $@
+
+## NDI Image output to RsLLM channel on monitor
+# --ndi-images
