@@ -461,6 +461,15 @@ struct Args {
     )]
     sd_max_length: usize,
 
+    /// Save Images - save images from the LLM messages
+    #[clap(
+        long,
+        env = "SAVE_IMAGES",
+        default_value_t = false,
+        help = "Save Images - save images from the LLM messages, default is false."
+    )]
+    save_images: bool,
+
     /// NDI output
     #[clap(
         long,
@@ -1157,19 +1166,24 @@ async fn main() {
                                         }
 
                                         // Save images to disk
-                                        for (index, image_bytes) in images.iter().enumerate() {
-                                            let image_file = format!(
-                                                "{}_{}_{}.png",
-                                                output_id_clone, paragraph_count, index
-                                            );
-                                            debug!(
-                                                "Image {} {}/{} saving to {}",
-                                                output_id_clone, paragraph_count, index, image_file
-                                            );
-                                            image_bytes
-                                                .save(image_file)
-                                                .map_err(candle_core::Error::wrap)
-                                                .unwrap(); // And this as well
+                                        if args.save_images {
+                                            for (index, image_bytes) in images.iter().enumerate() {
+                                                let image_file = format!(
+                                                    "images/{}_{}_{}.png",
+                                                    output_id_clone, paragraph_count, index
+                                                );
+                                                debug!(
+                                                    "Image {} {}/{} saving to {}",
+                                                    output_id_clone,
+                                                    paragraph_count,
+                                                    index,
+                                                    image_file
+                                                );
+                                                image_bytes
+                                                    .save(image_file)
+                                                    .map_err(candle_core::Error::wrap)
+                                                    .unwrap(); // And this as well
+                                            }
                                         }
                                     }
                                     Err(e) => {
@@ -1240,19 +1254,21 @@ async fn main() {
                             }
 
                             // Save images to disk
-                            for (index, image_bytes) in images.iter().enumerate() {
-                                let image_file = format!(
-                                    "{}_{}_{}.png",
-                                    output_id_clone, paragraph_count, index
-                                );
-                                debug!(
-                                    "\nImage {} {}/{} saving to {}",
-                                    output_id_clone, paragraph_count, index, image_file
-                                );
-                                image_bytes
-                                    .save(image_file)
-                                    .map_err(candle_core::Error::wrap)
-                                    .unwrap(); // And this as well
+                            if args.save_images {
+                                for (index, image_bytes) in images.iter().enumerate() {
+                                    let image_file = format!(
+                                        "images/{}_{}_{}.png",
+                                        output_id_clone, paragraph_count, index
+                                    );
+                                    debug!(
+                                        "\nImage {} {}/{} saving to {}",
+                                        output_id_clone, paragraph_count, index, image_file
+                                    );
+                                    image_bytes
+                                        .save(image_file)
+                                        .map_err(candle_core::Error::wrap)
+                                        .unwrap(); // And this as well
+                                }
                             }
                         }
                         Err(e) => {
