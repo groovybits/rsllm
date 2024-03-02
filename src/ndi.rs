@@ -1,13 +1,32 @@
 use image::{ImageBuffer, Rgb, Rgba};
 use imageproc::drawing::draw_text_mut;
+use minimp3::{Decoder, Error, Frame};
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
 use once_cell::sync::Lazy;
 use rusttype::{point, Font, Scale};
+use std::io::Cursor;
 use std::io::Result;
 use std::sync::Mutex;
+
+pub fn mp3_to_f32(mp3_data: Vec<u8>) -> Result<Vec<f32>> {
+    let cursor = Cursor::new(mp3_data);
+    let mut decoder = Decoder::new(cursor);
+    let mut samples_f32 = Vec::new();
+
+    while let Ok(Frame { data, .. }) = decoder.next_frame() {
+        for &sample in &data {
+            // Convert each sample to f32; MP3 samples are typically s16.
+            // Normalize the s16 sample to the range [-1.0, 1.0].
+            let sample_f32 = sample as f32 / i16::MAX as f32;
+            samples_f32.push(sample_f32);
+        }
+    }
+
+    Ok(samples_f32)
+}
 
 // Use Mutex to ensure thread-safety for NDIInstance and SendInstance
 #[cfg(feature = "ndi")]

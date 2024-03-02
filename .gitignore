@@ -1,2 +1,6 @@
 /target
 /images/*.png
+libndi.dylib
+Cargo.lock
+.env
+.DS_Store

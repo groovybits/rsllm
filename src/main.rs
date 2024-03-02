@@ -20,9 +20,14 @@ use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
 #[cfg(feature = "ndi")]
+use rsllm::ndi::send_audio_samples_over_ndi;
+#[cfg(feature = "ndi")]
 use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
+use rsllm::openai_tts::tts as oai_tts;
+use rsllm::openai_tts::Request as OAITTSRequest;
+use rsllm::openai_tts::Voice as OAITTSVoice;
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -186,6 +191,15 @@ struct Args {
         help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false."
     )]
     use_openai: bool,
+
+    /// OAI_TTS as text to speech from openai
+    #[clap(
+        long,
+        env = "OAI_TTS",
+        default_value = "false",
+        help = "OAI_TTS as text to speech from openai, default is false."
+    )]
+    oai_tts: bool,
 
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
@@ -479,6 +493,15 @@ struct Args {
     )]
     ndi_images: bool,
 
+    /// NDI Audio
+    #[clap(
+        long,
+        env = "NDI_AUDIO",
+        default_value_t = false,
+        help = "NDI Audio output, default is false. (use --features ndi to enable NDI)"
+    )]
+    ndi_audio: bool,
+
     /// Max Iterations
     #[clap(
         long,
@@ -536,15 +559,6 @@ async fn main() {
         _ => {
             log::set_max_level(log::LevelFilter::Info);
         }
-    }
-
-    let openai_key = env::var("OPENAI_API_KEY")
-        .ok()
-        .unwrap_or_else(|| "NO_API_KEY".to_string());
-
-    if args.use_openai && openai_key == "NO_API_KEY" {
-        error!("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.");
-        std::process::exit(1);
     }
 
     let system_prompt = args.system_prompt;
@@ -823,6 +837,17 @@ async fn main() {
     }
     let mut count = 0;
     loop {
+        let openai_key = env::var("OPENAI_API_KEY")
+            .ok()
+            .unwrap_or_else(|| "NO_API_KEY".to_string());
+
+        if (args.use_openai || args.oai_tts) && openai_key == "NO_API_KEY" {
+            error!(
+                "OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable."
+            );
+            std::process::exit(1);
+        }
+
         count += 1;
 
         // OS and Network stats message
@@ -1165,6 +1190,107 @@ async fn main() {
                                                 .unwrap();
                                         }
 
+                                        if args.oai_tts {
+                                            let input = prompt_clone.clone();
+                                            let model = String::from("tts-1");
+                                            let voice = OAITTSVoice::Nova;
+                                            let oai_request =
+                                                OAITTSRequest::new(input, model, voice);
+
+                                            let openai_key = std::env::var("OPENAI_API_KEY")
+                                                .expect(
+                                                "Stable Diffusion Thread: OPENAI_API_KEY not found",
+                                            );
+
+                                            let tts_thread: tokio::task::JoinHandle<
+                                                Result<(), Box<dyn std::error::Error + Send>>,
+                                            > = tokio::spawn(async move {
+                                                let bytes_result =
+                                                    oai_tts(oai_request, &openai_key).await;
+
+                                                match bytes_result {
+                                                    Ok(bytes) => {
+                                                        if args.ndi_audio {
+                                                            // Convert MP3 bytes to f32 samples
+                                                            #[cfg(feature = "ndi")]
+                                                            let samples_result =
+                                                                rsllm::ndi::mp3_to_f32(
+                                                                    bytes.to_vec(),
+                                                                );
+
+                                                            #[cfg(feature = "ndi")]
+                                                            match samples_result {
+                                                                Ok(samples_f32) => {
+                                                                    {
+                                                                        // samples_f32 is a Vec<f32> containing your audio samples
+                                                                        // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                                        send_audio_samples_over_ndi(
+                                                                                       samples_f32,
+                                                                                       32000, // Sample rate
+                                                                                       2,     // Channel count
+                                                                                   )
+                                                                                   .expect("Failed to send audio samples over NDI");
+                                                                    }
+                                                                }
+                                                                Err(e) => {
+                                                                    eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
+                                                                }
+                                                            }
+                                                        } else {
+                                                            // Play audio
+                                                            let (_stream, stream_handle) =
+                                                                rodio::OutputStream::try_default()
+                                                                    .unwrap();
+                                                            let sink = rodio::Sink::try_new(
+                                                                &stream_handle,
+                                                            )
+                                                            .unwrap();
+                                                            let cursor =
+                                                                std::io::Cursor::new(bytes);
+                                                            let decoder_result =
+                                                                rodio::Decoder::new_mp3(cursor);
+                                                            match decoder_result {
+                                                                Ok(source) => {
+                                                                    sink.append(source);
+                                                                    sink.sleep_until_end();
+                                                                }
+                                                                Err(e) => {
+                                                                    // Log or handle the error as needed
+                                                                    eprintln!(
+                                                                        "Error decoding MP3: {}",
+                                                                        e
+                                                                    );
+                                                                    return Err(Box::new(e)
+                                                                        as Box<
+                                                                            dyn std::error::Error
+                                                                                + Send,
+                                                                        >);
+                                                                }
+                                                            }
+                                                        }
+                                                        Ok(())
+                                                    }
+                                                    Err(e) => {
+                                                        // Log or handle the error as needed
+                                                        eprintln!("Error in TTS request: {}", e);
+                                                        Err(Box::new(e)
+                                                            as Box<dyn std::error::Error + Send>)
+                                                    }
+                                                }
+                                            });
+
+                                            match tts_thread.await {
+                                                Ok(result) => {
+                                                    result
+                                                        .expect("TTS thread encountered an error");
+                                                }
+                                                Err(e) => {
+                                                    // Handle the join error (if the spawned task panicked)
+                                                    eprintln!("Error joining TTS thread: {:?}", e);
+                                                }
+                                            }
+                                        }
+
                                         // Save images to disk
                                         if args.save_images {
                                             for (index, image_bytes) in images.iter().enumerate() {
@@ -1253,6 +1379,89 @@ async fn main() {
                                 // This is now allowed
                             }
 
+                            if args.oai_tts {
+                                let input = prompt_clone.clone();
+                                let model = String::from("tts-1");
+                                let voice = OAITTSVoice::Nova;
+                                let oai_request = OAITTSRequest::new(input, model, voice);
+
+                                let openai_key = std::env::var("OPENAI_API_KEY")
+                                    .expect("Stable Diffusion Thread: OPENAI_API_KEY not found");
+
+                                let tts_thread: tokio::task::JoinHandle<
+                                    Result<(), Box<dyn std::error::Error + Send>>,
+                                > = tokio::spawn(async move {
+                                    let bytes_result = oai_tts(oai_request, &openai_key).await;
+
+                                    match bytes_result {
+                                        Ok(bytes) => {
+                                            if args.ndi_audio {
+                                                // Convert MP3 bytes to f32 samples
+                                                #[cfg(feature = "ndi")]
+                                                let samples_result =
+                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                                #[cfg(feature = "ndi")]
+                                                match samples_result {
+                                                    Ok(samples_f32) => {
+                                                        {
+                                                            // samples_f32 is a Vec<f32> containing your audio samples
+                                                            // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                            send_audio_samples_over_ndi(
+                                                                           samples_f32,
+                                                                           32000, // Sample rate
+                                                                           2,     // Channel count
+                                                                       )
+                                                                       .expect("Failed to send audio samples over NDI");
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
+                                                    }
+                                                }
+                                            } else {
+                                                // Play audio
+                                                let (_stream, stream_handle) =
+                                                    rodio::OutputStream::try_default().unwrap();
+                                                let sink =
+                                                    rodio::Sink::try_new(&stream_handle).unwrap();
+                                                let cursor = std::io::Cursor::new(bytes);
+                                                let decoder_result =
+                                                    rodio::Decoder::new_mp3(cursor);
+                                                match decoder_result {
+                                                    Ok(source) => {
+                                                        sink.append(source);
+                                                        sink.sleep_until_end();
+                                                    }
+                                                    Err(e) => {
+                                                        // Log or handle the error as needed
+                                                        eprintln!("Error decoding MP3: {}", e);
+                                                        return Err(Box::new(e)
+                                                            as Box<dyn std::error::Error + Send>);
+                                                    }
+                                                }
+                                            }
+                                            Ok(())
+                                        }
+                                        Err(e) => {
+                                            // Log or handle the error as needed
+                                            eprintln!("Error in TTS request: {}", e);
+                                            Err(Box::new(e) as Box<dyn std::error::Error + Send>)
+                                        }
+                                    }
+                                });
+
+                                match tts_thread.await {
+                                    Ok(result) => {
+                                        result.expect("TTS thread encountered an error");
+                                    }
+                                    Err(e) => {
+                                        // Handle the join error (if the spawned task panicked)
+                                        eprintln!("Error joining TTS thread: {:?}", e);
+                                    }
+                                }
+                            }
+
                             // Save images to disk
                             if args.save_images {
                                 for (index, image_bytes) in images.iter().enumerate() {
@@ -1322,7 +1531,7 @@ async fn main() {
             // Directly await the future; no need for an explicit runtime block
             let answers = stream_completion(
                 open_ai_request,
-                &openai_key,
+                &openai_key.clone(),
                 &llm_host,
                 &llm_path,
                 debug_inline,
