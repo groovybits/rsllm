@@ -54,7 +54,7 @@ pub fn send_images_over_ndi(
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
-        let start_pos = (10, height as i32 / 3); // Text start position (x, y)
+        let start_pos = (10, height as i32 - (height as i32 / 4)); // Text start position (x, y)
 
         let rgba_buffer = convert_rgb_to_rgba_with_text(&image_buffer, subtitle, start_pos);
 

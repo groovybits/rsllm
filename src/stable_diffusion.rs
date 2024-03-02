@@ -277,7 +277,7 @@ impl SDConfig {
             n_steps: None,
             num_samples: 1,
             sd_version: StableDiffusionVersion::Turbo,
-            intermediary_images: true,
+            intermediary_images: false,
             use_flash_attn: false,
             use_f16: false,
             guidance_scale: None,
