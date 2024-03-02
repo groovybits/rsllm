@@ -1239,8 +1239,9 @@ async fn main() {
                                     }
                                 }
 
+                                // Integrate TTS processing here, directly after image generation
                                 if args.oai_tts {
-                                    let input = prompt_clone.clone();
+                                    let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
                                     let model = String::from("tts-1");
                                     let voice = OAITTSVoice::Nova;
                                     let oai_request = OAITTSRequest::new(model, input, voice);
@@ -1248,81 +1249,36 @@ async fn main() {
                                     let openai_key = std::env::var("OPENAI_API_KEY")
                                         .expect("TTS Thread: OPENAI_API_KEY not found");
 
-                                    let tts_thread: tokio::task::JoinHandle<
-                                        Result<(), Box<dyn std::error::Error + Send>>,
-                                    > = tokio::spawn(async move {
-                                        let bytes_result = oai_tts(oai_request, &openai_key).await;
+                                    // Directly await the TTS operation without spawning a new thread
+                                    let bytes_result = oai_tts(oai_request, &openai_key).await;
 
-                                        match bytes_result {
-                                            Ok(bytes) => {
-                                                if args.ndi_audio {
-                                                    // Convert MP3 bytes to f32 samples
-                                                    #[cfg(feature = "ndi")]
-                                                    let samples_result =
-                                                        rsllm::ndi::mp3_to_f32(bytes.to_vec());
-
-                                                    #[cfg(feature = "ndi")]
-                                                    match samples_result {
-                                                        Ok(samples_f32) => {
-                                                            {
-                                                                // samples_f32 is a Vec<f32> containing your audio samples
-                                                                // send_audio_samples_over_ndi expects a Vec<f32>, 24000 as sample rate, and 1 as channel count.
-                                                                send_audio_samples_over_ndi(
-                                                                               samples_f32,
-                                                                               24000, // Sample rate
-                                                                               1,     // Channel count
-                                                                           )
-                                                                           .expect("Failed to send audio samples over NDI");
-                                                            }
-                                                        }
-                                                        Err(e) => {
-                                                            eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
-                                                        }
-                                                    }
-                                                } else {
-                                                    // Play audio
-                                                    println!("Playing TTS audio");
-                                                    let (_stream, stream_handle) =
-                                                        rodio::OutputStream::try_default().unwrap();
-                                                    let sink = rodio::Sink::try_new(&stream_handle)
-                                                        .unwrap();
-                                                    let cursor = std::io::Cursor::new(bytes);
-                                                    let decoder_result =
-                                                        rodio::Decoder::new_mp3(cursor);
-                                                    match decoder_result {
-                                                        Ok(source) => {
-                                                            sink.append(source);
-                                                            sink.sleep_until_end();
-                                                        }
-                                                        Err(e) => {
-                                                            // Log or handle the error as needed
-                                                            eprintln!("Error decoding MP3: {}", e);
-                                                            return Err(Box::new(e)
-                                                                as Box<
-                                                                    dyn std::error::Error + Send,
-                                                                >);
-                                                        }
-                                                    }
+                                    match bytes_result {
+                                        Ok(bytes) => {
+                                            if args.ndi_audio {
+                                                // Convert MP3 bytes to f32 samples and send over NDI
+                                                #[cfg(feature = "ndi")]
+                                                let samples_result =
+                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec());
+                                                #[cfg(feature = "ndi")]
+                                                match samples_result {
+                                                    Ok(samples_f32) => send_audio_samples_over_ndi(samples_f32, 24000, 1).expect("Failed to send audio samples over NDI"),
+                                                    Err(e) => eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e),
                                                 }
-                                                Ok(())
+                                            } else {
+                                                // Example code to play audio directly, replace with your actual audio playback logic
+                                                println!("Playing TTS audio");
+                                                let (_stream, stream_handle) =
+                                                    rodio::OutputStream::try_default().unwrap();
+                                                let sink =
+                                                    rodio::Sink::try_new(&stream_handle).unwrap();
+                                                let cursor = std::io::Cursor::new(bytes);
+                                                let source = rodio::Decoder::new_mp3(cursor)
+                                                    .expect("Error decoding MP3");
+                                                sink.append(source);
+                                                sink.sleep_until_end();
                                             }
-                                            Err(e) => {
-                                                // Log or handle the error as needed
-                                                eprintln!("Error in TTS request: {}", e);
-                                                Err(Box::new(e)
-                                                    as Box<dyn std::error::Error + Send>)
-                                            }
                                         }
-                                    });
-
-                                    match tts_thread.await {
-                                        Ok(result) => {
-                                            result.expect("TTS thread encountered an error");
-                                        }
-                                        Err(e) => {
-                                            // Handle the join error (if the spawned task panicked)
-                                            eprintln!("Error joining TTS thread: {:?}", e);
-                                        }
+                                        Err(e) => eprintln!("Error in TTS request: {}", e),
                                     }
                                 }
                             });
@@ -1430,8 +1386,9 @@ async fn main() {
                         }
                     }
 
+                    // Integrate TTS processing here, directly after image generation
                     if args.oai_tts {
-                        let input = prompt_clone.clone();
+                        let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
                         let model = String::from("tts-1");
                         let voice = OAITTSVoice::Nova;
                         let oai_request = OAITTSRequest::new(model, input, voice);
@@ -1439,75 +1396,40 @@ async fn main() {
                         let openai_key = std::env::var("OPENAI_API_KEY")
                             .expect("TTS Thread: OPENAI_API_KEY not found");
 
-                        let tts_thread: tokio::task::JoinHandle<
-                            Result<(), Box<dyn std::error::Error + Send>>,
-                        > = tokio::spawn(async move {
-                            let bytes_result = oai_tts(oai_request, &openai_key).await;
+                        // Directly await the TTS operation without spawning a new thread
+                        let bytes_result = oai_tts(oai_request, &openai_key).await;
 
-                            match bytes_result {
-                                Ok(bytes) => {
-                                    if args.ndi_audio {
-                                        // Convert MP3 bytes to f32 samples
-                                        #[cfg(feature = "ndi")]
-                                        let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
-
-                                        #[cfg(feature = "ndi")]
-                                        match samples_result {
-                                            Ok(samples_f32) => {
-                                                {
-                                                    // samples_f32 is a Vec<f32> containing your audio samples
-                                                    // send_audio_samples_over_ndi expects a Vec<f32>, 24000 as sample rate, and 1 as channel count.
-                                                    send_audio_samples_over_ndi(
-                                                                                               samples_f32,
-                                                                                               24000, // Sample rate
-                                                                                               1,     // Channel count
-                                                                                           )
-                                                                                           .expect("Failed to send audio samples over NDI");
-                                                }
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
-                                            }
+                        match bytes_result {
+                            Ok(bytes) => {
+                                if args.ndi_audio {
+                                    // Convert MP3 bytes to f32 samples and send over NDI
+                                    #[cfg(feature = "ndi")]
+                                    let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
+                                    #[cfg(feature = "ndi")]
+                                    match samples_result {
+                                        Ok(samples_f32) => {
+                                            send_audio_samples_over_ndi(samples_f32, 24000, 1)
+                                                .expect("Failed to send audio samples over NDI")
                                         }
-                                    } else {
-                                        // Play audio
-                                        println!("Playing TTS audio");
-                                        let (_stream, stream_handle) =
-                                            rodio::OutputStream::try_default().unwrap();
-                                        let sink = rodio::Sink::try_new(&stream_handle).unwrap();
-                                        let cursor = std::io::Cursor::new(bytes);
-                                        let decoder_result = rodio::Decoder::new_mp3(cursor);
-                                        match decoder_result {
-                                            Ok(source) => {
-                                                sink.append(source);
-                                                sink.sleep_until_end();
-                                            }
-                                            Err(e) => {
-                                                // Log or handle the error as needed
-                                                eprintln!("Error decoding MP3: {}", e);
-                                                return Err(Box::new(e)
-                                                    as Box<dyn std::error::Error + Send>);
-                                            }
-                                        }
+                                        Err(e) => eprintln!(
+                                            "Failed to convert MP3 bytes to f32 samples: {:?}",
+                                            e
+                                        ),
                                     }
-                                    Ok(())
+                                } else {
+                                    // Example code to play audio directly, replace with your actual audio playback logic
+                                    println!("Playing TTS audio");
+                                    let (_stream, stream_handle) =
+                                        rodio::OutputStream::try_default().unwrap();
+                                    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+                                    let cursor = std::io::Cursor::new(bytes);
+                                    let source = rodio::Decoder::new_mp3(cursor)
+                                        .expect("Error decoding MP3");
+                                    sink.append(source);
+                                    sink.sleep_until_end();
                                 }
-                                Err(e) => {
-                                    // Log or handle the error as needed
-                                    eprintln!("Error in TTS request: {}", e);
-                                    Err(Box::new(e) as Box<dyn std::error::Error + Send>)
-                                }
                             }
-                        });
-
-                        match tts_thread.await {
-                            Ok(result) => {
-                                result.expect("TTS thread encountered an error");
-                            }
-                            Err(e) => {
-                                // Handle the join error (if the spawned task panicked)
-                                eprintln!("Error joining TTS thread: {:?}", e);
-                            }
+                            Err(e) => eprintln!("Error in TTS request: {}", e),
                         }
                     }
                 });
