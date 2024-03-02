@@ -1238,6 +1238,7 @@ async fn main() {
                                                             }
                                                         } else {
                                                             // Play audio
+                                                            info!("Playing TTS audio");
                                                             let (_stream, stream_handle) =
                                                                 rodio::OutputStream::try_default()
                                                                     .unwrap();
