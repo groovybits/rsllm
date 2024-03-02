@@ -27,6 +27,7 @@ use bytes::Bytes;
 use reqwest::Client;
 use serde::Serialize;
 const ENDPOINT: &str = "https://api.openai.com/v1/audio/speech";
+use log::info;
 
 #[derive(Debug)]
 pub enum ApiError {
@@ -101,6 +102,11 @@ impl Request {
 }
 pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
     let client = Client::new();
+
+    info!(
+        "Sending TTS request {} to OpenAI API Key {}",
+        req.input, api_key
+    );
     let response = client
         .post(ENDPOINT)
         .bearer_auth(api_key)
@@ -116,7 +122,11 @@ pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
                     Err(ApiError::Error(String::from("Error in posting data")))
                 }
             } else {
-                Err(ApiError::Error(response.status().to_string()))
+                Err(ApiError::Error(format!(
+                    "{}: {}",
+                    response.status().to_string(),
+                    response.text().await.unwrap_or_default()
+                )))
             }
         }
         Err(e) => Err(ApiError::RequestError(e)),
