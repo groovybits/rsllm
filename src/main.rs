@@ -1283,8 +1283,8 @@ async fn main() {
                                                                 // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
                                                                 send_audio_samples_over_ndi(
                                                                                samples_f32,
-                                                                               32000, // Sample rate
-                                                                               2,     // Channel count
+                                                                               24000, // Sample rate
+                                                                               1,     // Channel count
                                                                            )
                                                                            .expect("Failed to send audio samples over NDI");
                                                             }
@@ -1476,11 +1476,11 @@ async fn main() {
                                             Ok(samples_f32) => {
                                                 {
                                                     // samples_f32 is a Vec<f32> containing your audio samples
-                                                    // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                    // send_audio_samples_over_ndi expects a Vec<f32>, 24000 as sample rate, and 1 as channel count.
                                                     send_audio_samples_over_ndi(
                                                                                                samples_f32,
-                                                                                               32000, // Sample rate
-                                                                                               2,     // Channel count
+                                                                                               24000, // Sample rate
+                                                                                               1,     // Channel count
                                                                                            )
                                                                                            .expect("Failed to send audio samples over NDI");
                                                 }
