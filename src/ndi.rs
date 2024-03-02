@@ -1,13 +1,32 @@
 use image::{ImageBuffer, Rgb, Rgba};
 use imageproc::drawing::draw_text_mut;
+use minimp3::{Decoder, Frame};
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
 use once_cell::sync::Lazy;
-use rusttype::{point, Font, Scale};
+use rusttype::{Font, Scale};
+use std::io::Cursor;
 use std::io::Result;
 use std::sync::Mutex;
+
+pub fn mp3_to_f32(mp3_data: Vec<u8>) -> Result<Vec<f32>> {
+    let cursor = Cursor::new(mp3_data);
+    let mut decoder = Decoder::new(cursor);
+    let mut samples_f32 = Vec::new();
+
+    while let Ok(Frame { data, .. }) = decoder.next_frame() {
+        for &sample in &data {
+            // Convert each sample to f32; MP3 samples are typically s16.
+            // Normalize the s16 sample to the range [-1.0, 1.0].
+            let sample_f32 = sample as f32 / i16::MAX as f32;
+            samples_f32.push(sample_f32);
+        }
+    }
+
+    Ok(samples_f32)
+}
 
 // Use Mutex to ensure thread-safety for NDIInstance and SendInstance
 #[cfg(feature = "ndi")]
@@ -35,7 +54,7 @@ pub fn send_images_over_ndi(
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
-        let start_pos = (10, height as i32 / 3); // Text start position (x, y)
+        let start_pos = (10, height as i32 - (height as i32 / 4)); // Text start position (x, y)
 
         let rgba_buffer = convert_rgb_to_rgba_with_text(&image_buffer, subtitle, start_pos);
 

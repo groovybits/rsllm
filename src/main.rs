@@ -20,9 +20,14 @@ use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
 #[cfg(feature = "ndi")]
+use rsllm::ndi::send_audio_samples_over_ndi;
+#[cfg(feature = "ndi")]
 use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
+use rsllm::openai_tts::tts as oai_tts;
+use rsllm::openai_tts::Request as OAITTSRequest;
+use rsllm::openai_tts::Voice as OAITTSVoice;
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -186,6 +191,24 @@ struct Args {
         help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false."
     )]
     use_openai: bool,
+
+    /// OAI_TTS as text to speech from openai
+    #[clap(
+        long,
+        env = "OAI_TTS",
+        default_value = "false",
+        help = "OAI_TTS as text to speech from openai, default is false."
+    )]
+    oai_tts: bool,
+
+    /// max_concurrent_sd_image_tasks for the sd image semaphore
+    #[clap(
+        long,
+        env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
+        default_value = "1",
+        help = "max_concurrent_sd_image_tasks for the sd image semaphore, default is 1."
+    )]
+    max_concurrent_sd_image_tasks: usize,
 
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
@@ -479,6 +502,15 @@ struct Args {
     )]
     ndi_images: bool,
 
+    /// NDI Audio
+    #[clap(
+        long,
+        env = "NDI_AUDIO",
+        default_value_t = false,
+        help = "NDI Audio output, default is false. (use --features ndi to enable NDI)"
+    )]
+    ndi_audio: bool,
+
     /// Max Iterations
     #[clap(
         long,
@@ -536,15 +568,6 @@ async fn main() {
         _ => {
             log::set_max_level(log::LevelFilter::Info);
         }
-    }
-
-    let openai_key = env::var("OPENAI_API_KEY")
-        .ok()
-        .unwrap_or_else(|| "NO_API_KEY".to_string());
-
-    if args.use_openai && openai_key == "NO_API_KEY" {
-        error!("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.");
-        std::process::exit(1);
     }
 
     let system_prompt = args.system_prompt;
@@ -823,6 +846,17 @@ async fn main() {
     }
     let mut count = 0;
     loop {
+        let openai_key = env::var("OPENAI_API_KEY")
+            .ok()
+            .unwrap_or_else(|| "NO_API_KEY".to_string());
+
+        if (args.use_openai || args.oai_tts) && openai_key == "NO_API_KEY" {
+            error!(
+                "OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable."
+            );
+            std::process::exit(1);
+        }
+
         count += 1;
 
         // OS and Network stats message
@@ -1049,8 +1083,7 @@ async fn main() {
 
             // Stable Diffusion number of tasks max
             // Before starting  loop, initialize the semaphore with a specific number of permits
-            let max_concurrent_tasks = 3; // Set this to the desired number of concurrent tasks
-            let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+            let semaphore_sd_image = Arc::new(Semaphore::new(args.max_concurrent_sd_image_tasks));
 
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
@@ -1121,25 +1154,34 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         // Check if image generation is enabled and proceed
-                        if args.sd_image {
+                        if args.sd_image || args.oai_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
 
                             std::io::stdout().flush().unwrap();
-                            println!(
-                                "\n===\nGenerating image {} #{} for {} characters...\n===\n",
-                                output_id,
-                                paragraph_count,
-                                paragraph_clone.len()
-                            );
+                            if args.sd_image {
+                                println!(
+                                    "\n===\nGenerating image {} #{} for {} characters...\n===\n",
+                                    output_id,
+                                    paragraph_count,
+                                    paragraph_clone.len()
+                                );
+                            }
 
                             let output_id_clone = output_id.clone();
 
-                            let sem_clone = semaphore.clone();
+                            let sem_clone_sd_image = semaphore_sd_image.clone();
                             let handle = tokio::spawn(async move {
-                                let _permit = sem_clone.acquire().await.expect(
-                                    "Stable Diffusion Thread: Failed to acquire semaphore permit",
-                                );
+                                // Declare the permit variable outside the if block to extend its scope
+                                let _permit = if args.sd_image || args.oai_tts {
+                                    // Conditionally acquire the permit and store it in an Option
+                                    Some(sem_clone_sd_image.acquire().await.expect(
+                                        "Stable Diffusion: Failed to acquire semaphore permit",
+                                    ))
+                                } else {
+                                    // If the condition is not met, no permit is acquired, and None is stored
+                                    None
+                                };
 
                                 let mut sd_config = SDConfig::new();
                                 sd_config.prompt = paragraph_clone;
@@ -1148,52 +1190,133 @@ async fn main() {
 
                                 let prompt_clone = sd_config.prompt.clone();
 
-                                debug!("Generating images with prompt: {}", sd_config.prompt);
-
-                                match sd(sd_config).await {
-                                    // Ensure `sd` function is async and await its result
-                                    Ok(images) => {
-                                        // Send images over NDI
-                                        #[cfg(feature = "ndi")]
-                                        if args.ndi_images {
+                                if args.sd_image {
+                                    debug!("Generating images with prompt: {}", sd_config.prompt);
+                                    match sd(sd_config).await {
+                                        // Ensure `sd` function is async and await its result
+                                        Ok(images) => {
+                                            // Send images over NDI
                                             #[cfg(feature = "ndi")]
                                             if args.ndi_images {
-                                                debug!("Sending images over NDI");
+                                                #[cfg(feature = "ndi")]
+                                                if args.ndi_images {
+                                                    debug!("Sending images over NDI");
+                                                }
+                                                #[cfg(feature = "ndi")]
+                                                send_images_over_ndi(images.clone(), &prompt_clone)
+                                                    .unwrap();
                                             }
-                                            #[cfg(feature = "ndi")]
-                                            send_images_over_ndi(images.clone(), &prompt_clone)
-                                                .unwrap();
-                                        }
 
-                                        // Save images to disk
-                                        if args.save_images {
-                                            for (index, image_bytes) in images.iter().enumerate() {
-                                                let image_file = format!(
-                                                    "images/{}_{}_{}.png",
-                                                    output_id_clone, paragraph_count, index
-                                                );
-                                                debug!(
-                                                    "Image {} {}/{} saving to {}",
-                                                    output_id_clone,
-                                                    paragraph_count,
-                                                    index,
-                                                    image_file
-                                                );
-                                                image_bytes
-                                                    .save(image_file)
-                                                    .map_err(candle_core::Error::wrap)
-                                                    .unwrap(); // And this as well
+                                            // Save images to disk
+                                            if args.save_images {
+                                                for (index, image_bytes) in
+                                                    images.iter().enumerate()
+                                                {
+                                                    let image_file = format!(
+                                                        "images/{}_{}_{}.png",
+                                                        output_id_clone, paragraph_count, index
+                                                    );
+                                                    debug!(
+                                                        "Image {} {}/{} saving to {}",
+                                                        output_id_clone,
+                                                        paragraph_count,
+                                                        index,
+                                                        image_file
+                                                    );
+                                                    image_bytes
+                                                        .save(image_file)
+                                                        .map_err(candle_core::Error::wrap)
+                                                        .unwrap(); // And this as well
+                                                }
                                             }
+                                        }
+                                        Err(e) => {
+                                            eprintln!(
+                                                "Error generating images for {}: {:?}",
+                                                output_id_clone, e
+                                            );
                                         }
                                     }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "Error generating images for {}: {:?}",
-                                            output_id_clone, e
-                                        );
+                                }
+
+                                // Integrate TTS processing here, directly after image generation
+                                if args.oai_tts {
+                                    let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
+                                    let model = String::from("tts-1");
+                                    let voice = OAITTSVoice::Nova;
+                                    let oai_request = OAITTSRequest::new(model, input, voice);
+
+                                    let openai_key = std::env::var("OPENAI_API_KEY")
+                                        .expect("TTS Thread: OPENAI_API_KEY not found");
+
+                                    // Directly await the TTS operation without spawning a new thread
+                                    let bytes_result = oai_tts(oai_request, &openai_key).await;
+
+                                    match bytes_result {
+                                        Ok(bytes) => {
+                                            if args.ndi_audio {
+                                                // Convert MP3 bytes to f32 samples and send over NDI
+                                                #[cfg(feature = "ndi")]
+                                                let samples_result =
+                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                                // Send audio samples over NDI with pacing
+                                                #[cfg(feature = "ndi")]
+                                                if let Ok(samples_f32) = samples_result {
+                                                    // Define chunk size and delay
+                                                    let chunk_size = 24000; // 10ms of audio at 24kHz sample rate
+                                                    let delay_ms = 1000; // Delay between chunks to simulate real-time streaming
+
+                                                    // Iterate over samples_f32 in chunks
+                                                    for chunk_samples in
+                                                        samples_f32.chunks(chunk_size)
+                                                    {
+                                                        // Convert the chunk into the format expected by send_audio_samples_over_ndi
+                                                        let mut chunk_vec = chunk_samples.to_vec();
+
+                                                        // Check if this is the last chunk and it's smaller than the chunk_size
+                                                        if chunk_samples.len() < chunk_size {
+                                                            // Could pad with silence if necessary
+                                                            chunk_vec.resize(chunk_size, 0.0);
+                                                            // Pad with silence
+                                                        }
+
+                                                        // Send the chunk over NDI
+                                                        send_audio_samples_over_ndi(
+                                                            chunk_vec, 24000, 1,
+                                                        )
+                                                        .expect(
+                                                            "Failed to send audio samples over NDI",
+                                                        );
+
+                                                        // Await to introduce a delay simulating real-time streaming
+                                                        tokio::time::sleep(
+                                                            tokio::time::Duration::from_millis(
+                                                                delay_ms,
+                                                            ),
+                                                        )
+                                                        .await;
+                                                    }
+                                                }
+                                            } else {
+                                                // Example code to play audio directly, replace with your actual audio playback logic
+                                                println!("Playing TTS audio");
+                                                let (_stream, stream_handle) =
+                                                    rodio::OutputStream::try_default().unwrap();
+                                                let sink =
+                                                    rodio::Sink::try_new(&stream_handle).unwrap();
+                                                let cursor = std::io::Cursor::new(bytes);
+                                                let source = rodio::Decoder::new_mp3(cursor)
+                                                    .expect("Error decoding MP3");
+                                                sink.append(source);
+                                                sink.sleep_until_end();
+                                            }
+                                        }
+                                        Err(e) => eprintln!("Error in TTS request: {}", e),
                                     }
                                 }
                             });
+
                             image_spawn_handles.push(handle);
                         }
 
@@ -1229,7 +1352,22 @@ async fn main() {
                 let output_id_clone = output_id.clone();
 
                 // end of the last paragraph image generation
+                let sem_clone_sd_image = semaphore_sd_image.clone();
                 let handle = tokio::spawn(async move {
+                    // Declare the permit variable outside the if block to extend its scope
+                    let _permit = if args.sd_image || args.oai_tts {
+                        // Conditionally acquire the permit and store it in an Option
+                        Some(
+                            sem_clone_sd_image
+                                .acquire()
+                                .await
+                                .expect("Stable Diffusion: Failed to acquire semaphore permit"),
+                        )
+                    } else {
+                        // If the condition is not met, no permit is acquired, and None is stored
+                        None
+                    };
+
                     let mut sd_config = SDConfig::new();
                     sd_config.prompt = paragraph_text_clone;
                     sd_config.height = Some(512);
@@ -1237,43 +1375,115 @@ async fn main() {
 
                     let prompt_clone = sd_config.prompt.clone();
 
-                    debug!("Generating images with prompt: {}", sd_config.prompt);
+                    if args.sd_image {
+                        debug!("Generating images with prompt: {}", sd_config.prompt);
+                    }
 
-                    match sd(sd_config).await {
-                        // Ensure `sd` function is async and await its result
-                        Ok(images) => {
-                            // Send images over NDI
-                            if args.ndi_images {
-                                debug!("Sending images over NDI");
-                            }
-                            #[cfg(feature = "ndi")]
-                            if args.ndi_images {
+                    if args.sd_image {
+                        match sd(sd_config).await {
+                            // Ensure `sd` function is async and await its result
+                            Ok(images) => {
+                                // Send images over NDI
+                                if args.ndi_images {
+                                    debug!("Sending images over NDI");
+                                }
                                 #[cfg(feature = "ndi")]
-                                send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
-                                // This is now allowed
-                            }
-
-                            // Save images to disk
-                            if args.save_images {
-                                for (index, image_bytes) in images.iter().enumerate() {
-                                    let image_file = format!(
-                                        "images/{}_{}_{}.png",
-                                        output_id_clone, paragraph_count, index
-                                    );
-                                    debug!(
-                                        "\nImage {} {}/{} saving to {}",
-                                        output_id_clone, paragraph_count, index, image_file
-                                    );
-                                    image_bytes
-                                        .save(image_file)
-                                        .map_err(candle_core::Error::wrap)
-                                        .unwrap(); // And this as well
+                                if args.ndi_images {
+                                    #[cfg(feature = "ndi")]
+                                    send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
+                                }
+                                // Save images to disk
+                                if args.save_images {
+                                    for (index, image_bytes) in images.iter().enumerate() {
+                                        let image_file = format!(
+                                            "images/{}_{}_{}.png",
+                                            output_id_clone, paragraph_count, index
+                                        );
+                                        debug!(
+                                            "\nImage {} {}/{} saving to {}",
+                                            output_id_clone, paragraph_count, index, image_file
+                                        );
+                                        image_bytes
+                                            .save(image_file)
+                                            .map_err(candle_core::Error::wrap)
+                                            .unwrap(); // And this as well
+                                    }
                                 }
                             }
+                            Err(e) => {
+                                std::io::stdout().flush().unwrap();
+                                eprintln!(
+                                    "Error generating images for {}: {:?}",
+                                    output_id_clone, e
+                                );
+                            }
                         }
-                        Err(e) => {
-                            std::io::stdout().flush().unwrap();
-                            eprintln!("Error generating images for {}: {:?}", output_id_clone, e);
+                    }
+
+                    // Integrate TTS processing here, directly after image generation
+                    if args.oai_tts {
+                        let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
+                        let model = String::from("tts-1");
+                        let voice = OAITTSVoice::Nova;
+                        let oai_request = OAITTSRequest::new(model, input, voice);
+
+                        let openai_key = std::env::var("OPENAI_API_KEY")
+                            .expect("TTS Thread: OPENAI_API_KEY not found");
+
+                        // Directly await the TTS operation without spawning a new thread
+                        let bytes_result = oai_tts(oai_request, &openai_key).await;
+
+                        match bytes_result {
+                            Ok(bytes) => {
+                                if args.ndi_audio {
+                                    // Convert MP3 bytes to f32 samples and send over NDI
+                                    #[cfg(feature = "ndi")]
+                                    let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                    // Send audio samples over NDI with pacing
+                                    #[cfg(feature = "ndi")]
+                                    if let Ok(samples_f32) = samples_result {
+                                        // Define chunk size and delay
+                                        let chunk_size = 2400; // 100ms of audio at 24kHz sample rate
+                                        let delay_ms = 100; // Delay between chunks to simulate real-time streaming
+
+                                        // Iterate over samples_f32 in chunks
+                                        for chunk_samples in samples_f32.chunks(chunk_size) {
+                                            // Convert the chunk into the format expected by send_audio_samples_over_ndi
+                                            let mut chunk_vec = chunk_samples.to_vec();
+
+                                            // Check if this is the last chunk and it's smaller than the chunk_size
+                                            if chunk_samples.len() < chunk_size {
+                                                // Could pad with silence if necessary
+                                                chunk_vec.resize(chunk_size, 0.0);
+                                                // Pad with silence
+                                            }
+
+                                            // Send the chunk over NDI
+                                            send_audio_samples_over_ndi(chunk_vec, 24000, 1)
+                                                .expect("Failed to send audio samples over NDI");
+
+                                            // Await to introduce a delay simulating real-time streaming
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(
+                                                delay_ms,
+                                            ))
+                                            .await;
+                                        }
+                                    }
+                                } else {
+                                    // Example code to play audio directly, replace with your actual audio playback logic
+                                    println!("Playing TTS audio");
+                                    let (_stream, stream_handle) =
+                                        rodio::OutputStream::try_default().unwrap();
+                                    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+                                    let cursor = std::io::Cursor::new(bytes);
+                                    let source = rodio::Decoder::new_mp3(cursor)
+                                        .expect("Error decoding MP3");
+                                    sink.append(source);
+                                    sink.sleep_until_end();
+                                }
+                            }
+                            Err(e) => eprintln!("Error in TTS request: {}", e),
                         }
                     }
                 });
@@ -1322,7 +1532,7 @@ async fn main() {
             // Directly await the future; no need for an explicit runtime block
             let answers = stream_completion(
                 open_ai_request,
-                &openai_key,
+                &openai_key.clone(),
                 &llm_host,
                 &llm_path,
                 debug_inline,
