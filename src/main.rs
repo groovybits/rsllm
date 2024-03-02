@@ -1146,7 +1146,7 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         // Check if image generation is enabled and proceed
-                        if args.sd_image {
+                        if args.sd_image || args.oai_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
 
@@ -1173,154 +1173,144 @@ async fn main() {
 
                                 let prompt_clone = sd_config.prompt.clone();
 
-                                debug!("Generating images with prompt: {}", sd_config.prompt);
-
-                                match sd(sd_config).await {
-                                    // Ensure `sd` function is async and await its result
-                                    Ok(images) => {
-                                        // Send images over NDI
-                                        #[cfg(feature = "ndi")]
-                                        if args.ndi_images {
+                                if args.sd_image {
+                                    debug!("Generating images with prompt: {}", sd_config.prompt);
+                                    match sd(sd_config).await {
+                                        // Ensure `sd` function is async and await its result
+                                        Ok(images) => {
+                                            // Send images over NDI
                                             #[cfg(feature = "ndi")]
                                             if args.ndi_images {
-                                                debug!("Sending images over NDI");
+                                                #[cfg(feature = "ndi")]
+                                                if args.ndi_images {
+                                                    debug!("Sending images over NDI");
+                                                }
+                                                #[cfg(feature = "ndi")]
+                                                send_images_over_ndi(images.clone(), &prompt_clone)
+                                                    .unwrap();
                                             }
-                                            #[cfg(feature = "ndi")]
-                                            send_images_over_ndi(images.clone(), &prompt_clone)
-                                                .unwrap();
+
+                                            // Save images to disk
+                                            if args.save_images {
+                                                for (index, image_bytes) in
+                                                    images.iter().enumerate()
+                                                {
+                                                    let image_file = format!(
+                                                        "images/{}_{}_{}.png",
+                                                        output_id_clone, paragraph_count, index
+                                                    );
+                                                    debug!(
+                                                        "Image {} {}/{} saving to {}",
+                                                        output_id_clone,
+                                                        paragraph_count,
+                                                        index,
+                                                        image_file
+                                                    );
+                                                    image_bytes
+                                                        .save(image_file)
+                                                        .map_err(candle_core::Error::wrap)
+                                                        .unwrap(); // And this as well
+                                                }
+                                            }
                                         }
-
-                                        if args.oai_tts {
-                                            let input = prompt_clone.clone();
-                                            let model = String::from("tts-1");
-                                            let voice = OAITTSVoice::Nova;
-                                            let oai_request =
-                                                OAITTSRequest::new(model, input, voice);
-
-                                            let openai_key = std::env::var("OPENAI_API_KEY")
-                                                .expect(
-                                                "Stable Diffusion Thread: OPENAI_API_KEY not found",
+                                        Err(e) => {
+                                            eprintln!(
+                                                "Error generating images for {}: {:?}",
+                                                output_id_clone, e
                                             );
-
-                                            let tts_thread: tokio::task::JoinHandle<
-                                                Result<(), Box<dyn std::error::Error + Send>>,
-                                            > = tokio::spawn(async move {
-                                                let bytes_result =
-                                                    oai_tts(oai_request, &openai_key).await;
-
-                                                match bytes_result {
-                                                    Ok(bytes) => {
-                                                        if args.ndi_audio {
-                                                            // Convert MP3 bytes to f32 samples
-                                                            #[cfg(feature = "ndi")]
-                                                            let samples_result =
-                                                                rsllm::ndi::mp3_to_f32(
-                                                                    bytes.to_vec(),
-                                                                );
-
-                                                            #[cfg(feature = "ndi")]
-                                                            match samples_result {
-                                                                Ok(samples_f32) => {
-                                                                    {
-                                                                        // samples_f32 is a Vec<f32> containing your audio samples
-                                                                        // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
-                                                                        send_audio_samples_over_ndi(
-                                                                                       samples_f32,
-                                                                                       32000, // Sample rate
-                                                                                       2,     // Channel count
-                                                                                   )
-                                                                                   .expect("Failed to send audio samples over NDI");
-                                                                    }
-                                                                }
-                                                                Err(e) => {
-                                                                    eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
-                                                                }
-                                                            }
-                                                        } else {
-                                                            // Play audio
-                                                            println!("Playing TTS audio");
-                                                            let (_stream, stream_handle) =
-                                                                rodio::OutputStream::try_default()
-                                                                    .unwrap();
-                                                            let sink = rodio::Sink::try_new(
-                                                                &stream_handle,
-                                                            )
-                                                            .unwrap();
-                                                            let cursor =
-                                                                std::io::Cursor::new(bytes);
-                                                            let decoder_result =
-                                                                rodio::Decoder::new_mp3(cursor);
-                                                            match decoder_result {
-                                                                Ok(source) => {
-                                                                    sink.append(source);
-                                                                    sink.sleep_until_end();
-                                                                }
-                                                                Err(e) => {
-                                                                    // Log or handle the error as needed
-                                                                    eprintln!(
-                                                                        "Error decoding MP3: {}",
-                                                                        e
-                                                                    );
-                                                                    return Err(Box::new(e)
-                                                                        as Box<
-                                                                            dyn std::error::Error
-                                                                                + Send,
-                                                                        >);
-                                                                }
-                                                            }
-                                                        }
-                                                        Ok(())
-                                                    }
-                                                    Err(e) => {
-                                                        // Log or handle the error as needed
-                                                        eprintln!("Error in TTS request: {}", e);
-                                                        Err(Box::new(e)
-                                                            as Box<dyn std::error::Error + Send>)
-                                                    }
-                                                }
-                                            });
-
-                                            match tts_thread.await {
-                                                Ok(result) => {
-                                                    result
-                                                        .expect("TTS thread encountered an error");
-                                                }
-                                                Err(e) => {
-                                                    // Handle the join error (if the spawned task panicked)
-                                                    eprintln!("Error joining TTS thread: {:?}", e);
-                                                }
-                                            }
-                                        }
-
-                                        // Save images to disk
-                                        if args.save_images {
-                                            for (index, image_bytes) in images.iter().enumerate() {
-                                                let image_file = format!(
-                                                    "images/{}_{}_{}.png",
-                                                    output_id_clone, paragraph_count, index
-                                                );
-                                                debug!(
-                                                    "Image {} {}/{} saving to {}",
-                                                    output_id_clone,
-                                                    paragraph_count,
-                                                    index,
-                                                    image_file
-                                                );
-                                                image_bytes
-                                                    .save(image_file)
-                                                    .map_err(candle_core::Error::wrap)
-                                                    .unwrap(); // And this as well
-                                            }
                                         }
                                     }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "Error generating images for {}: {:?}",
-                                            output_id_clone, e
-                                        );
+                                }
+
+                                if args.oai_tts {
+                                    let input = prompt_clone.clone();
+                                    let model = String::from("tts-1");
+                                    let voice = OAITTSVoice::Nova;
+                                    let oai_request = OAITTSRequest::new(model, input, voice);
+
+                                    let openai_key = std::env::var("OPENAI_API_KEY").expect(
+                                        "Stable Diffusion Thread: OPENAI_API_KEY not found",
+                                    );
+
+                                    let tts_thread: tokio::task::JoinHandle<
+                                        Result<(), Box<dyn std::error::Error + Send>>,
+                                    > = tokio::spawn(async move {
+                                        let bytes_result = oai_tts(oai_request, &openai_key).await;
+
+                                        match bytes_result {
+                                            Ok(bytes) => {
+                                                if args.ndi_audio {
+                                                    // Convert MP3 bytes to f32 samples
+                                                    #[cfg(feature = "ndi")]
+                                                    let samples_result =
+                                                        rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                                    #[cfg(feature = "ndi")]
+                                                    match samples_result {
+                                                        Ok(samples_f32) => {
+                                                            {
+                                                                // samples_f32 is a Vec<f32> containing your audio samples
+                                                                // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                                send_audio_samples_over_ndi(
+                                                                               samples_f32,
+                                                                               32000, // Sample rate
+                                                                               2,     // Channel count
+                                                                           )
+                                                                           .expect("Failed to send audio samples over NDI");
+                                                            }
+                                                        }
+                                                        Err(e) => {
+                                                            eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Play audio
+                                                    println!("Playing TTS audio");
+                                                    let (_stream, stream_handle) =
+                                                        rodio::OutputStream::try_default().unwrap();
+                                                    let sink = rodio::Sink::try_new(&stream_handle)
+                                                        .unwrap();
+                                                    let cursor = std::io::Cursor::new(bytes);
+                                                    let decoder_result =
+                                                        rodio::Decoder::new_mp3(cursor);
+                                                    match decoder_result {
+                                                        Ok(source) => {
+                                                            sink.append(source);
+                                                            sink.sleep_until_end();
+                                                        }
+                                                        Err(e) => {
+                                                            // Log or handle the error as needed
+                                                            eprintln!("Error decoding MP3: {}", e);
+                                                            return Err(Box::new(e)
+                                                                as Box<
+                                                                    dyn std::error::Error + Send,
+                                                                >);
+                                                        }
+                                                    }
+                                                }
+                                                Ok(())
+                                            }
+                                            Err(e) => {
+                                                // Log or handle the error as needed
+                                                eprintln!("Error in TTS request: {}", e);
+                                                Err(Box::new(e)
+                                                    as Box<dyn std::error::Error + Send>)
+                                            }
+                                        }
+                                    });
+
+                                    match tts_thread.await {
+                                        Ok(result) => {
+                                            result.expect("TTS thread encountered an error");
+                                        }
+                                        Err(e) => {
+                                            // Handle the join error (if the spawned task panicked)
+                                            eprintln!("Error joining TTS thread: {:?}", e);
+                                        }
                                     }
                                 }
                             });
+
                             image_spawn_handles.push(handle);
                         }
 
@@ -1366,124 +1356,125 @@ async fn main() {
 
                     debug!("Generating images with prompt: {}", sd_config.prompt);
 
-                    match sd(sd_config).await {
-                        // Ensure `sd` function is async and await its result
-                        Ok(images) => {
-                            // Send images over NDI
-                            if args.ndi_images {
-                                debug!("Sending images over NDI");
-                            }
-                            #[cfg(feature = "ndi")]
-                            if args.ndi_images {
+                    if args.sd_image {
+                        match sd(sd_config).await {
+                            // Ensure `sd` function is async and await its result
+                            Ok(images) => {
+                                // Send images over NDI
+                                if args.ndi_images {
+                                    debug!("Sending images over NDI");
+                                }
                                 #[cfg(feature = "ndi")]
-                                send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
-                            }
-
-                            if args.oai_tts {
-                                let input = prompt_clone.clone();
-                                let model = String::from("tts-1");
-                                let voice = OAITTSVoice::Nova;
-                                let oai_request = OAITTSRequest::new(model, input, voice);
-
-                                let openai_key = std::env::var("OPENAI_API_KEY")
-                                    .expect("Stable Diffusion Thread: OPENAI_API_KEY not found");
-
-                                let tts_thread: tokio::task::JoinHandle<
-                                    Result<(), Box<dyn std::error::Error + Send>>,
-                                > = tokio::spawn(async move {
-                                    let bytes_result = oai_tts(oai_request, &openai_key).await;
-
-                                    match bytes_result {
-                                        Ok(bytes) => {
-                                            if args.ndi_audio {
-                                                // Convert MP3 bytes to f32 samples
-                                                #[cfg(feature = "ndi")]
-                                                let samples_result =
-                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec());
-
-                                                #[cfg(feature = "ndi")]
-                                                match samples_result {
-                                                    Ok(samples_f32) => {
-                                                        {
-                                                            // samples_f32 is a Vec<f32> containing your audio samples
-                                                            // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
-                                                            send_audio_samples_over_ndi(
-                                                                           samples_f32,
-                                                                           32000, // Sample rate
-                                                                           2,     // Channel count
-                                                                       )
-                                                                       .expect("Failed to send audio samples over NDI");
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
-                                                    }
-                                                }
-                                            } else {
-                                                // Play audio
-                                                println!("Playing TTS audio");
-                                                let (_stream, stream_handle) =
-                                                    rodio::OutputStream::try_default().unwrap();
-                                                let sink =
-                                                    rodio::Sink::try_new(&stream_handle).unwrap();
-                                                let cursor = std::io::Cursor::new(bytes);
-                                                let decoder_result =
-                                                    rodio::Decoder::new_mp3(cursor);
-                                                match decoder_result {
-                                                    Ok(source) => {
-                                                        sink.append(source);
-                                                        sink.sleep_until_end();
-                                                    }
-                                                    Err(e) => {
-                                                        // Log or handle the error as needed
-                                                        eprintln!("Error decoding MP3: {}", e);
-                                                        return Err(Box::new(e)
-                                                            as Box<dyn std::error::Error + Send>);
-                                                    }
-                                                }
-                                            }
-                                            Ok(())
-                                        }
-                                        Err(e) => {
-                                            // Log or handle the error as needed
-                                            eprintln!("Error in TTS request: {}", e);
-                                            Err(Box::new(e) as Box<dyn std::error::Error + Send>)
-                                        }
-                                    }
-                                });
-
-                                match tts_thread.await {
-                                    Ok(result) => {
-                                        result.expect("TTS thread encountered an error");
-                                    }
-                                    Err(e) => {
-                                        // Handle the join error (if the spawned task panicked)
-                                        eprintln!("Error joining TTS thread: {:?}", e);
+                                if args.ndi_images {
+                                    #[cfg(feature = "ndi")]
+                                    send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
+                                }
+                                // Save images to disk
+                                if args.save_images {
+                                    for (index, image_bytes) in images.iter().enumerate() {
+                                        let image_file = format!(
+                                            "images/{}_{}_{}.png",
+                                            output_id_clone, paragraph_count, index
+                                        );
+                                        debug!(
+                                            "\nImage {} {}/{} saving to {}",
+                                            output_id_clone, paragraph_count, index, image_file
+                                        );
+                                        image_bytes
+                                            .save(image_file)
+                                            .map_err(candle_core::Error::wrap)
+                                            .unwrap(); // And this as well
                                     }
                                 }
                             }
-
-                            // Save images to disk
-                            if args.save_images {
-                                for (index, image_bytes) in images.iter().enumerate() {
-                                    let image_file = format!(
-                                        "images/{}_{}_{}.png",
-                                        output_id_clone, paragraph_count, index
-                                    );
-                                    debug!(
-                                        "\nImage {} {}/{} saving to {}",
-                                        output_id_clone, paragraph_count, index, image_file
-                                    );
-                                    image_bytes
-                                        .save(image_file)
-                                        .map_err(candle_core::Error::wrap)
-                                        .unwrap(); // And this as well
-                                }
+                            Err(e) => {
+                                std::io::stdout().flush().unwrap();
+                                eprintln!(
+                                    "Error generating images for {}: {:?}",
+                                    output_id_clone, e
+                                );
                             }
                         }
-                        Err(e) => {
-                            std::io::stdout().flush().unwrap();
-                            eprintln!("Error generating images for {}: {:?}", output_id_clone, e);
+                    }
+
+                    if args.oai_tts {
+                        let input = prompt_clone.clone();
+                        let model = String::from("tts-1");
+                        let voice = OAITTSVoice::Nova;
+                        let oai_request = OAITTSRequest::new(model, input, voice);
+
+                        let openai_key = std::env::var("OPENAI_API_KEY")
+                            .expect("Stable Diffusion Thread: OPENAI_API_KEY not found");
+
+                        let tts_thread: tokio::task::JoinHandle<
+                            Result<(), Box<dyn std::error::Error + Send>>,
+                        > = tokio::spawn(async move {
+                            let bytes_result = oai_tts(oai_request, &openai_key).await;
+
+                            match bytes_result {
+                                Ok(bytes) => {
+                                    if args.ndi_audio {
+                                        // Convert MP3 bytes to f32 samples
+                                        #[cfg(feature = "ndi")]
+                                        let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                        #[cfg(feature = "ndi")]
+                                        match samples_result {
+                                            Ok(samples_f32) => {
+                                                {
+                                                    // samples_f32 is a Vec<f32> containing your audio samples
+                                                    // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                    send_audio_samples_over_ndi(
+                                                                                               samples_f32,
+                                                                                               32000, // Sample rate
+                                                                                               2,     // Channel count
+                                                                                           )
+                                                                                           .expect("Failed to send audio samples over NDI");
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e);
+                                            }
+                                        }
+                                    } else {
+                                        // Play audio
+                                        println!("Playing TTS audio");
+                                        let (_stream, stream_handle) =
+                                            rodio::OutputStream::try_default().unwrap();
+                                        let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+                                        let cursor = std::io::Cursor::new(bytes);
+                                        let decoder_result = rodio::Decoder::new_mp3(cursor);
+                                        match decoder_result {
+                                            Ok(source) => {
+                                                sink.append(source);
+                                                sink.sleep_until_end();
+                                            }
+                                            Err(e) => {
+                                                // Log or handle the error as needed
+                                                eprintln!("Error decoding MP3: {}", e);
+                                                return Err(Box::new(e)
+                                                    as Box<dyn std::error::Error + Send>);
+                                            }
+                                        }
+                                    }
+                                    Ok(())
+                                }
+                                Err(e) => {
+                                    // Log or handle the error as needed
+                                    eprintln!("Error in TTS request: {}", e);
+                                    Err(Box::new(e) as Box<dyn std::error::Error + Send>)
+                                }
+                            }
+                        });
+
+                        match tts_thread.await {
+                            Ok(result) => {
+                                result.expect("TTS thread encountered an error");
+                            }
+                            Err(e) => {
+                                // Handle the join error (if the spawned task panicked)
+                                eprintln!("Error joining TTS thread: {:?}", e);
+                            }
                         }
                     }
                 });

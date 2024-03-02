@@ -1,12 +1,12 @@
 use image::{ImageBuffer, Rgb, Rgba};
 use imageproc::drawing::draw_text_mut;
-use minimp3::{Decoder, Error, Frame};
+use minimp3::{Decoder, Frame};
 #[cfg(feature = "ndi")]
 use ndi_sdk::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
 use ndi_sdk::NDIInstance;
 use once_cell::sync::Lazy;
-use rusttype::{point, Font, Scale};
+use rusttype::{Font, Scale};
 use std::io::Cursor;
 use std::io::Result;
 use std::sync::Mutex;
