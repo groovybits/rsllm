@@ -104,8 +104,11 @@ pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
     let client = Client::new();
 
     info!(
-        "Sending TTS request {} to OpenAI API Key {}",
-        req.input, api_key
+        "Sending TTS request {}/{}/{} to OpenAI API Key {}",
+        req.input,
+        req.model,
+        "voice", //req.voice.to_string(),
+        api_key
     );
     let response = client
         .post(ENDPOINT)

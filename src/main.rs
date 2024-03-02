@@ -1195,7 +1195,7 @@ async fn main() {
                                             let model = String::from("tts-1");
                                             let voice = OAITTSVoice::Nova;
                                             let oai_request =
-                                                OAITTSRequest::new(input, model, voice);
+                                                OAITTSRequest::new(model, input, voice);
 
                                             let openai_key = std::env::var("OPENAI_API_KEY")
                                                 .expect(
@@ -1383,7 +1383,7 @@ async fn main() {
                                 let input = prompt_clone.clone();
                                 let model = String::from("tts-1");
                                 let voice = OAITTSVoice::Nova;
-                                let oai_request = OAITTSRequest::new(input, model, voice);
+                                let oai_request = OAITTSRequest::new(model, input, voice);
 
                                 let openai_key = std::env::var("OPENAI_API_KEY")
                                     .expect("Stable Diffusion Thread: OPENAI_API_KEY not found");
