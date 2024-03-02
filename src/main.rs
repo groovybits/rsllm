@@ -201,6 +201,24 @@ struct Args {
     )]
     oai_tts: bool,
 
+    /// max_concurrent_sd_image_tasks for the sd image semaphore
+    #[clap(
+        long,
+        env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
+        default_value = "1",
+        help = "max_concurrent_sd_image_tasks for the sd image semaphore, default is 1."
+    )]
+    max_concurrent_sd_image_tasks: usize,
+
+    /// max_concurrent_tts_text_tasks for the tts_text semaphore
+    #[clap(
+        long,
+        env = "MAX_CONCURRENT_TTS_TEXT_TASKS",
+        default_value = "1",
+        help = "max_concurrent_tts_text_tasks for the tts_text semaphore, default is 1."
+    )]
+    max_concurrent_tts_text_tasks: usize,
+
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
         long,
@@ -1074,8 +1092,7 @@ async fn main() {
 
             // Stable Diffusion number of tasks max
             // Before starting  loop, initialize the semaphore with a specific number of permits
-            let max_concurrent_tasks = 3; // Set this to the desired number of concurrent tasks
-            let semaphore = Arc::new(Semaphore::new(max_concurrent_tasks));
+            let semaphore_sd_image = Arc::new(Semaphore::new(args.max_concurrent_sd_image_tasks));
 
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
@@ -1151,20 +1168,24 @@ async fn main() {
                             let paragraph_clone = paragraphs[paragraph_count].clone();
 
                             std::io::stdout().flush().unwrap();
-                            println!(
-                                "\n===\nGenerating image {} #{} for {} characters...\n===\n",
-                                output_id,
-                                paragraph_count,
-                                paragraph_clone.len()
-                            );
+                            if args.sd_image {
+                                println!(
+                                    "\n===\nGenerating image {} #{} for {} characters...\n===\n",
+                                    output_id,
+                                    paragraph_count,
+                                    paragraph_clone.len()
+                                );
+                            }
 
                             let output_id_clone = output_id.clone();
 
-                            let sem_clone = semaphore.clone();
+                            let sem_clone_sd_image = semaphore_sd_image.clone();
                             let handle = tokio::spawn(async move {
-                                let _permit = sem_clone.acquire().await.expect(
-                                    "Stable Diffusion Thread: Failed to acquire semaphore permit",
-                                );
+                                if args.sd_image {
+                                    let _permit = sem_clone_sd_image.acquire().await.expect(
+                                    "Stable Diffusion TTS Thread: Failed to acquire semaphore permit",
+                                    );
+                                }
 
                                 let mut sd_config = SDConfig::new();
                                 sd_config.prompt = paragraph_clone;
@@ -1347,6 +1368,12 @@ async fn main() {
 
                 // end of the last paragraph image generation
                 let handle = tokio::spawn(async move {
+                    if args.sd_image {
+                        let _permit = semaphore_sd_image.acquire().await.expect(
+                            "Stable Diffusion TTS Thread: Failed to acquire semaphore permit",
+                        );
+                    }
+
                     let mut sd_config = SDConfig::new();
                     sd_config.prompt = paragraph_text_clone;
                     sd_config.height = Some(512);
@@ -1354,7 +1381,9 @@ async fn main() {
 
                     let prompt_clone = sd_config.prompt.clone();
 
-                    debug!("Generating images with prompt: {}", sd_config.prompt);
+                    if args.sd_image {
+                        debug!("Generating images with prompt: {}", sd_config.prompt);
+                    }
 
                     if args.sd_image {
                         match sd(sd_config).await {
