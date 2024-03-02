@@ -1376,7 +1376,6 @@ async fn main() {
                             if args.ndi_images {
                                 #[cfg(feature = "ndi")]
                                 send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
-                                // This is now allowed
                             }
 
                             if args.oai_tts {
@@ -1421,6 +1420,7 @@ async fn main() {
                                                 }
                                             } else {
                                                 // Play audio
+                                                info!("Playing TTS audio");
                                                 let (_stream, stream_handle) =
                                                     rodio::OutputStream::try_default().unwrap();
                                                 let sink =
