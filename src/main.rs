@@ -205,19 +205,10 @@ struct Args {
     #[clap(
         long,
         env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
-        default_value = "3",
-        help = "max_concurrent_sd_image_tasks for the sd image semaphore, default is 3."
+        default_value = "1",
+        help = "max_concurrent_sd_image_tasks for the sd image semaphore, default is 1."
     )]
     max_concurrent_sd_image_tasks: usize,
-
-    /// max_concurrent_tts_text_tasks for the tts_text semaphore
-    #[clap(
-        long,
-        env = "MAX_CONCURRENT_TTS_TEXT_TASKS",
-        default_value = "1",
-        help = "max_concurrent_tts_text_tasks for the tts_text semaphore, default is 1."
-    )]
-    max_concurrent_tts_text_tasks: usize,
 
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
@@ -1093,7 +1084,6 @@ async fn main() {
             // Stable Diffusion number of tasks max
             // Before starting  loop, initialize the semaphore with a specific number of permits
             let semaphore_sd_image = Arc::new(Semaphore::new(args.max_concurrent_sd_image_tasks));
-            let semaphore_tts_text = Arc::new(Semaphore::new(args.max_concurrent_tts_text_tasks));
 
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
@@ -1180,11 +1170,10 @@ async fn main() {
 
                             let output_id_clone = output_id.clone();
 
-                            let sem_clone_tts_text = semaphore_tts_text.clone();
                             let sem_clone_sd_image = semaphore_sd_image.clone();
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
-                                let _permit = if args.sd_image {
+                                let _permit = if args.sd_image || args.oai_tts {
                                     // Conditionally acquire the permit and store it in an Option
                                     Some(sem_clone_sd_image.acquire().await.expect(
                                         "Stable Diffusion: Failed to acquire semaphore permit",
@@ -1262,9 +1251,6 @@ async fn main() {
                                     let tts_thread: tokio::task::JoinHandle<
                                         Result<(), Box<dyn std::error::Error + Send>>,
                                     > = tokio::spawn(async move {
-                                        let _permit = sem_clone_tts_text.acquire().await.expect(
-                                            "TTS Thread: Failed to acquire semaphore permit",
-                                        );
                                         let bytes_result = oai_tts(oai_request, &openai_key).await;
 
                                         match bytes_result {
@@ -1280,7 +1266,7 @@ async fn main() {
                                                         Ok(samples_f32) => {
                                                             {
                                                                 // samples_f32 is a Vec<f32> containing your audio samples
-                                                                // send_audio_samples_over_ndi expects a Vec<f32>, 32000 as sample rate, and 2 as channel count.
+                                                                // send_audio_samples_over_ndi expects a Vec<f32>, 24000 as sample rate, and 1 as channel count.
                                                                 send_audio_samples_over_ndi(
                                                                                samples_f32,
                                                                                24000, // Sample rate
@@ -1376,11 +1362,10 @@ async fn main() {
                 let output_id_clone = output_id.clone();
 
                 // end of the last paragraph image generation
-                let sem_clone_tts_text = semaphore_tts_text.clone();
                 let sem_clone_sd_image = semaphore_sd_image.clone();
                 let handle = tokio::spawn(async move {
                     // Declare the permit variable outside the if block to extend its scope
-                    let _permit = if args.sd_image {
+                    let _permit = if args.sd_image || args.oai_tts {
                         // Conditionally acquire the permit and store it in an Option
                         Some(
                             sem_clone_sd_image
@@ -1457,11 +1442,6 @@ async fn main() {
                         let tts_thread: tokio::task::JoinHandle<
                             Result<(), Box<dyn std::error::Error + Send>>,
                         > = tokio::spawn(async move {
-                            let _permit = sem_clone_tts_text
-                                .acquire()
-                                .await
-                                .expect("TTS Thread: Failed to acquire semaphore permit");
-
                             let bytes_result = oai_tts(oai_request, &openai_key).await;
 
                             match bytes_result {
