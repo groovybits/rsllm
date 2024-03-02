@@ -1238,7 +1238,7 @@ async fn main() {
                                                             }
                                                         } else {
                                                             // Play audio
-                                                            info!("Playing TTS audio");
+                                                            println!("Playing TTS audio");
                                                             let (_stream, stream_handle) =
                                                                 rodio::OutputStream::try_default()
                                                                     .unwrap();
@@ -1421,7 +1421,7 @@ async fn main() {
                                                 }
                                             } else {
                                                 // Play audio
-                                                info!("Playing TTS audio");
+                                                println!("Playing TTS audio");
                                                 let (_stream, stream_handle) =
                                                     rodio::OutputStream::try_default().unwrap();
                                                 let sink =
