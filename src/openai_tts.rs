@@ -50,6 +50,19 @@ impl std::fmt::Display for ApiError {
     }
 }
 
+impl std::fmt::Display for Voice {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Voice::Alloy => write!(f, "alloy"),
+            Voice::Echo => write!(f, "echo"),
+            Voice::Fable => write!(f, "fable"),
+            Voice::Onyx => write!(f, "onyx"),
+            Voice::Nova => write!(f, "nova"),
+            Voice::Shimmer => write!(f, "shimmer"),
+        }
+    }
+}
+
 impl std::error::Error for ApiError {}
 
 #[derive(Serialize)]
@@ -104,11 +117,10 @@ pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
     let client = Client::new();
 
     info!(
-        "Sending TTS request {}/{}/{} to OpenAI API Key {}",
-        req.input,
+        "Sending TTS request: {}... model: {} voice: {} to OpenAI",
+        req.input[0..10].to_string(),
         req.model,
-        "voice", //req.voice.to_string(),
-        api_key
+        req.voice.to_string()
     );
     let response = client
         .post(ENDPOINT)
