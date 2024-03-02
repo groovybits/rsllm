@@ -1259,10 +1259,44 @@ async fn main() {
                                                 #[cfg(feature = "ndi")]
                                                 let samples_result =
                                                     rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                                // Send audio samples over NDI with pacing
                                                 #[cfg(feature = "ndi")]
-                                                match samples_result {
-                                                    Ok(samples_f32) => send_audio_samples_over_ndi(samples_f32, 24000, 1).expect("Failed to send audio samples over NDI"),
-                                                    Err(e) => eprintln!("Failed to convert MP3 bytes to f32 samples: {:?}", e),
+                                                if let Ok(samples_f32) = samples_result {
+                                                    // Define chunk size and delay
+                                                    let chunk_size = 24000; // 10ms of audio at 24kHz sample rate
+                                                    let delay_ms = 1000; // Delay between chunks to simulate real-time streaming
+
+                                                    // Iterate over samples_f32 in chunks
+                                                    for chunk_samples in
+                                                        samples_f32.chunks(chunk_size)
+                                                    {
+                                                        // Convert the chunk into the format expected by send_audio_samples_over_ndi
+                                                        let mut chunk_vec = chunk_samples.to_vec();
+
+                                                        // Check if this is the last chunk and it's smaller than the chunk_size
+                                                        if chunk_samples.len() < chunk_size {
+                                                            // Could pad with silence if necessary
+                                                            chunk_vec.resize(chunk_size, 0.0);
+                                                            // Pad with silence
+                                                        }
+
+                                                        // Send the chunk over NDI
+                                                        send_audio_samples_over_ndi(
+                                                            chunk_vec, 24000, 1,
+                                                        )
+                                                        .expect(
+                                                            "Failed to send audio samples over NDI",
+                                                        );
+
+                                                        // Await to introduce a delay simulating real-time streaming
+                                                        tokio::time::sleep(
+                                                            tokio::time::Duration::from_millis(
+                                                                delay_ms,
+                                                            ),
+                                                        )
+                                                        .await;
+                                                    }
                                                 }
                                             } else {
                                                 // Example code to play audio directly, replace with your actual audio playback logic
@@ -1405,16 +1439,36 @@ async fn main() {
                                     // Convert MP3 bytes to f32 samples and send over NDI
                                     #[cfg(feature = "ndi")]
                                     let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
+
+                                    // Send audio samples over NDI with pacing
                                     #[cfg(feature = "ndi")]
-                                    match samples_result {
-                                        Ok(samples_f32) => {
-                                            send_audio_samples_over_ndi(samples_f32, 24000, 1)
-                                                .expect("Failed to send audio samples over NDI")
+                                    if let Ok(samples_f32) = samples_result {
+                                        // Define chunk size and delay
+                                        let chunk_size = 2400; // 100ms of audio at 24kHz sample rate
+                                        let delay_ms = 100; // Delay between chunks to simulate real-time streaming
+
+                                        // Iterate over samples_f32 in chunks
+                                        for chunk_samples in samples_f32.chunks(chunk_size) {
+                                            // Convert the chunk into the format expected by send_audio_samples_over_ndi
+                                            let mut chunk_vec = chunk_samples.to_vec();
+
+                                            // Check if this is the last chunk and it's smaller than the chunk_size
+                                            if chunk_samples.len() < chunk_size {
+                                                // Could pad with silence if necessary
+                                                chunk_vec.resize(chunk_size, 0.0);
+                                                // Pad with silence
+                                            }
+
+                                            // Send the chunk over NDI
+                                            send_audio_samples_over_ndi(chunk_vec, 24000, 1)
+                                                .expect("Failed to send audio samples over NDI");
+
+                                            // Await to introduce a delay simulating real-time streaming
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(
+                                                delay_ms,
+                                            ))
+                                            .await;
                                         }
-                                        Err(e) => eprintln!(
-                                            "Failed to convert MP3 bytes to f32 samples: {:?}",
-                                            e
-                                        ),
                                     }
                                 } else {
                                     // Example code to play audio directly, replace with your actual audio playback logic
