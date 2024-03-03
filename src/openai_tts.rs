@@ -27,7 +27,7 @@ use bytes::Bytes;
 use reqwest::Client;
 use serde::Serialize;
 const ENDPOINT: &str = "https://api.openai.com/v1/audio/speech";
-use log::info;
+use log::debug;
 
 #[derive(Debug)]
 pub enum ApiError {
@@ -126,9 +126,9 @@ pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
         ..req
     };
 
-    info!(
+    debug!(
         "Sending TTS request: {}... model: {} voice: {} to OpenAI",
-        req.input[0..10].to_string(),
+        req.input.chars().take(10).collect::<String>(),
         req.model,
         req.voice.to_string()
     );

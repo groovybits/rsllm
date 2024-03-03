@@ -69,7 +69,7 @@ pub fn send_images_over_ndi(
         .build()
         .expect("Expected frame to be created");
 
-        println!("Video sending over NDI: frame size {}x{}", width, height);
+        log::debug!("Video sending over NDI: frame size {}x{}", width, height);
 
         sender.send_video(frame);
     }

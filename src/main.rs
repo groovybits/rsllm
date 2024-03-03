@@ -1320,7 +1320,7 @@ async fn main() {
                                                         * 1000.0)
                                                         as u64;
 
-                                                    println!(
+                                                    debug!(
                                                         "Sending {} ms duration {} audio samples",
                                                         delay_ms, chunk_size
                                                     );
@@ -1529,7 +1529,7 @@ async fn main() {
                                             * 1000.0)
                                             as u64;
 
-                                        println!(
+                                        debug!(
                                             "Sending {} ms duration {} audio samples",
                                             delay_ms, chunk_size
                                         );
