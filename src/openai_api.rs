@@ -214,6 +214,7 @@ pub async fn stream_completion(
     break_line_length: usize,
     sd_image: bool,
     ndi_images: bool,
+    font_size: f32,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -518,7 +519,7 @@ pub async fn stream_completion(
                     }
                     #[cfg(feature = "ndi")]
                     if ndi_images {
-                        send_images_over_ndi(images.clone(), &answers.join("").clone())?;
+                        send_images_over_ndi(images.clone(), &answers.join("").clone(), font_size)?;
                     }
 
                     // Save images to disk

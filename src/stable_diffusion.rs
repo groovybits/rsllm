@@ -10,7 +10,7 @@ use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
 use image::{
     imageops::{resize, FilterType},
-    DynamicImage, GenericImageView, ImageBuffer, Rgb,
+    ImageBuffer, Rgb,
 };
 use log::debug;
 use tokenizers::Tokenizer;

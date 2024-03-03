@@ -48,15 +48,17 @@ static NDI_SENDER: Lazy<Mutex<SendInstance>> = Lazy::new(|| {
 pub fn send_images_over_ndi(
     images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     subtitle: &str,
+    font_size: f32,
 ) -> Result<()> {
     let mut sender = NDI_SENDER.lock().unwrap();
 
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
-        let start_pos = (10, height as i32 - (height as i32 / 4)); // Text start position (x, y)
+        let start_pos = (10, height as i32 - (height as i32 / 3)); // Text start position (x, y)
 
-        let rgba_buffer = convert_rgb_to_rgba_with_text(&image_buffer, subtitle, start_pos);
+        let rgba_buffer =
+            convert_rgb_to_rgba_with_text(&image_buffer, subtitle, font_size, start_pos);
 
         let frame = ndi_sdk::send::create_ndi_send_video_frame(
             width as i32,
@@ -119,6 +121,7 @@ fn text_width(text: &str, font: &Font, scale: Scale) -> f32 {
 fn convert_rgb_to_rgba_with_text(
     image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>,
     text: &str,
+    font_size: f32,
     start_pos: (i32, i32), // Text start position (x, y)
 ) -> Vec<u8> {
     // Load the font. Ensure you have the font file at the specified path in your project directory.
@@ -135,7 +138,10 @@ fn convert_rgb_to_rgba_with_text(
         });
 
     // Setup for drawing text
-    let scale = Scale { x: 28.0, y: 28.0 }; // Adjust the font scale/size as needed
+    let scale = Scale {
+        x: font_size,
+        y: font_size,
+    }; // Adjust the font scale/size as needed
     let text_color = Rgba([255, 255, 255, 0xff]);
 
     // Wrap text and draw it
@@ -153,7 +159,7 @@ fn convert_rgb_to_rgba_with_text(
             &font,
             &line,
         );
-        current_height += 20; // Adjust based on font size or measured line height
+        current_height += font_size as i32; // Adjust based on font size or measured line height
     }
 
     // Convert the modified RGBA image buffer back to a flat Vec<u8>

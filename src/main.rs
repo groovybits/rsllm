@@ -572,6 +572,15 @@ struct Args {
         help = "SD Scaled Width."
     )]
     sd_scaled_width: u32,
+
+    /// hardsub font size
+    #[clap(
+        long,
+        env = "HARDSUB_FONT_SIZE",
+        default_value = "80.0",
+        help = "hardsub font size"
+    )]
+    hardsub_font_size: f32,
 }
 
 #[tokio::main]
@@ -1194,19 +1203,7 @@ async fn main() {
                         if args.sd_image || args.oai_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
-
-                            std::io::stdout().flush().unwrap();
-                            if args.sd_image {
-                                println!(
-                                    "\n===\nGenerating image {} #{} for {} characters...\n===\n",
-                                    output_id,
-                                    paragraph_count,
-                                    paragraph_clone.len()
-                                );
-                            }
-
                             let output_id_clone = output_id.clone();
-
                             let sem_clone_sd_image = semaphore_sd_image.clone();
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
@@ -1245,9 +1242,14 @@ async fn main() {
                                                 if args.ndi_images {
                                                     debug!("Sending images over NDI");
                                                 }
+
                                                 #[cfg(feature = "ndi")]
-                                                send_images_over_ndi(images.clone(), &prompt_clone)
-                                                    .unwrap();
+                                                send_images_over_ndi(
+                                                    images.clone(),
+                                                    &prompt_clone,
+                                                    args.hardsub_font_size,
+                                                )
+                                                .unwrap();
                                             }
 
                                             // Save images to disk
@@ -1456,7 +1458,12 @@ async fn main() {
                                 #[cfg(feature = "ndi")]
                                 if args.ndi_images {
                                     #[cfg(feature = "ndi")]
-                                    send_images_over_ndi(images.clone(), &prompt_clone).unwrap();
+                                    send_images_over_ndi(
+                                        images.clone(),
+                                        &prompt_clone,
+                                        args.hardsub_font_size,
+                                    )
+                                    .unwrap();
                                 }
                                 // Save images to disk
                                 if args.save_images {
@@ -1625,6 +1632,7 @@ async fn main() {
                 args.break_line_length,
                 args.sd_image,
                 args.ndi_images,
+                args.hardsub_font_size,
             )
             .await
             .unwrap_or_else(|_| Vec::new());
