@@ -905,6 +905,58 @@ async fn main() {
         }
     });
 
+    let twitch_auth = env::var("TWITCH_AUTH")
+        .ok()
+        .unwrap_or_else(|| "NO_AUTH_KEY".to_string());
+
+    if args.twitch_client {
+        if twitch_auth == "NO_AUTH_KEY" {
+            error!("Twitch Auth key is not set. Please set the TWITCH_AUTH environment variable.");
+            std::process::exit(1);
+        }
+
+        // Clone values before moving them into the closure
+        let twitch_channel_clone = vec![args.twitch_channel.clone()];
+        let twitch_username_clone = args.twitch_username.clone();
+        let twitch_auth_clone = twitch_auth.clone(); // Assuming twitch_auth is clonable and you want to use it within the closure.
+
+        info!(
+            "Setting up Twitch channel {} for user {}",
+            twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+            twitch_username_clone
+        );
+
+        let twitch_handle = tokio::task::spawn_blocking(move || async move {
+            match twitch_setup(
+                twitch_username_clone.clone(),
+                twitch_auth_clone,
+                twitch_channel_clone.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    info!(
+                        "Twitch setup successful for channel {} username {}",
+                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                        twitch_username_clone
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Error setting up Twitch channel {} for user {}: {}",
+                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                        twitch_username_clone,
+                        e
+                    );
+                }
+            }
+        });
+
+        // Wait for the twitch setup to complete
+        //if let Err(e) = twitch_handle.await {
+        //    error!("Error setting up Twitch channel: {}", e);
+        //}
+    }
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
@@ -918,38 +970,6 @@ async fn main() {
     }
     let mut count = 0;
     loop {
-        let twitch_auth = env::var("TWITCH_AUTH")
-            .ok()
-            .unwrap_or_else(|| "NO_AUTH_KEY".to_string());
-
-        if args.twitch_client {
-            if twitch_auth == "NO_AUTH_KEY" {
-                error!(
-                    "Twitch Auth key is not set. Please set the TWITCH_AUTH environment variable."
-                );
-                std::process::exit(1);
-            }
-
-            // wrap twitch channel in a vec
-            let twitch_channel = vec![args.twitch_channel.clone()];
-            let twitch_username_clone = args.twitch_username.clone();
-
-            match twitch_setup(twitch_username_clone, twitch_auth, twitch_channel).await {
-                Ok(_) => {
-                    info!(
-                        "Twitch setup successful for channel {} username {}",
-                        args.twitch_channel, args.twitch_username
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Error setting up Twitch channel {} for user {}: {}",
-                        args.twitch_channel, args.twitch_username, e
-                    );
-                }
-            }
-        }
-
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
             .unwrap_or_else(|| "NO_API_KEY".to_string());
