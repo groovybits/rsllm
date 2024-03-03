@@ -34,7 +34,7 @@ use rsllm::stream_data::{
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
-use rsllm::twitch_client::setup;
+use rsllm::twitch_client::setup as twitch_setup;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
@@ -582,6 +582,33 @@ struct Args {
         help = "hardsub font size"
     )]
     hardsub_font_size: f32,
+
+    /// enable twitch client
+    #[clap(
+        long,
+        env = "TWITCH_CLIENT",
+        default_value_t = false,
+        help = "enable twitch client."
+    )]
+    twitch_client: bool,
+
+    /// twitch username
+    #[clap(
+        long,
+        env = "TWITCH_USERNAME",
+        default_value = "",
+        help = "twitch username."
+    )]
+    twitch_username: String,
+
+    /// twitch channel
+    #[clap(
+        long,
+        env = "TWITCH_CHANNEL",
+        default_value = "",
+        help = "twitch channel."
+    )]
+    twitch_channel: String,
 }
 
 #[tokio::main]
@@ -891,6 +918,38 @@ async fn main() {
     }
     let mut count = 0;
     loop {
+        let twitch_auth = env::var("TWITCH_AUTH")
+            .ok()
+            .unwrap_or_else(|| "NO_AUTH_KEY".to_string());
+
+        if args.twitch_client {
+            if twitch_auth == "NO_AUTH_KEY" {
+                error!(
+                    "Twitch Auth key is not set. Please set the TWITCH_AUTH environment variable."
+                );
+                std::process::exit(1);
+            }
+
+            // wrap twitch channel in a vec
+            let twitch_channel = vec![args.twitch_channel.clone()];
+            let twitch_username_clone = args.twitch_username.clone();
+
+            match twitch_setup(twitch_username_clone, twitch_auth, twitch_channel).await {
+                Ok(_) => {
+                    info!(
+                        "Twitch setup successful for channel {} username {}",
+                        args.twitch_channel, args.twitch_username
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Error setting up Twitch channel {} for user {}: {}",
+                        args.twitch_channel, args.twitch_username, e
+                    );
+                }
+            }
+        }
+
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
             .unwrap_or_else(|| "NO_API_KEY".to_string());
