@@ -185,7 +185,7 @@ pub fn send_audio_samples_over_ndi(
         return Ok(());
     }
 
-    log::info!(
+    log::debug!(
         "Audio sending over NDI: {} samples at {} Hz",
         samples.len(),
         sample_rate

@@ -116,6 +116,16 @@ impl Request {
 pub async fn tts(req: Request, api_key: &str) -> Result<Bytes, ApiError> {
     let client = Client::new();
 
+    // remove any special characters from the input for tts request
+    let req = Request {
+        input: req
+            .input
+            .chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+            .collect(),
+        ..req
+    };
+
     info!(
         "Sending TTS request: {}... model: {} voice: {} to OpenAI",
         req.input[0..10].to_string(),

@@ -201,6 +201,15 @@ struct Args {
     )]
     oai_tts: bool,
 
+    /// audio chunk size
+    #[clap(
+        long,
+        env = "AUDIO_CHUNK_SIZE",
+        default_value = "1.0",
+        help = "audio chunk size in seconds for text to speech."
+    )]
+    audio_chunk_size: f32,
+
     /// max_concurrent_sd_image_tasks for the sd image semaphore
     #[clap(
         long,
@@ -479,7 +488,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 120,
+        default_value_t = 80,
         help = "SD Max Length for SD Image, default is 200."
     )]
     sd_max_length: usize,
@@ -1095,12 +1104,14 @@ async fn main() {
                 answers.push(received.clone());
 
                 // If a newline is at the end of the token, process the accumulated paragraph for image generation
-                if received.contains('\n')
+                if received.contains('\n') && !current_paragraph.is_empty()
                     || (current_paragraph.join("").len() > args.sd_max_length
                         && (received.contains('.')
                             || received.contains('?')
-                            || received.contains(' ')
-                            || received.contains('!')))
+                            || received.contains('\n')
+                            || received.contains('!'))
+                        || (current_paragraph.join("").len() > (2 * args.sd_max_length)
+                            && (received.contains(' '))))
                 {
                     // Join the current paragraph tokens into a single String without adding extra spaces
                     if !current_paragraph.is_empty()
@@ -1264,26 +1275,43 @@ async fn main() {
                                                 #[cfg(feature = "ndi")]
                                                 if let Ok(samples_f32) = samples_result {
                                                     // Define chunk size and delay
-                                                    let chunk_size = 24000; // 10ms of audio at 24kHz sample rate
-                                                    let delay_ms = 1000; // Delay between chunks to simulate real-time streaming
+                                                    let sample_rate = 24000;
+                                                    let channels: i32 = 1;
+                                                    let chunk_size = args.audio_chunk_size
+                                                        * sample_rate as f32
+                                                        * channels as f32; // 100ms of audio at 24kHz sample rate
+                                                    let delay_ms = (chunk_size as f32
+                                                        / channels as f32
+                                                        / sample_rate as f32
+                                                        * 1000.0)
+                                                        as u64;
+
+                                                    println!(
+                                                        "Sending {} ms duration {} audio samples",
+                                                        delay_ms, chunk_size
+                                                    );
 
                                                     // Iterate over samples_f32 in chunks
                                                     for chunk_samples in
-                                                        samples_f32.chunks(chunk_size)
+                                                        samples_f32.chunks(chunk_size as usize)
                                                     {
                                                         // Convert the chunk into the format expected by send_audio_samples_over_ndi
                                                         let mut chunk_vec = chunk_samples.to_vec();
 
                                                         // Check if this is the last chunk and it's smaller than the chunk_size
-                                                        if chunk_samples.len() < chunk_size {
-                                                            // Could pad with silence if necessary
-                                                            chunk_vec.resize(chunk_size, 0.0);
+                                                        if chunk_samples.len() < chunk_size as usize
+                                                        {
+                                                            // pad with silence if necessary
+                                                            chunk_vec
+                                                                .resize(chunk_size as usize, 0.0);
                                                             // Pad with silence
                                                         }
 
                                                         // Send the chunk over NDI
                                                         send_audio_samples_over_ndi(
-                                                            chunk_vec, 24000, 1,
+                                                            chunk_vec,
+                                                            sample_rate,
+                                                            channels,
                                                         )
                                                         .expect(
                                                             "Failed to send audio samples over NDI",
@@ -1443,25 +1471,44 @@ async fn main() {
                                     // Send audio samples over NDI with pacing
                                     #[cfg(feature = "ndi")]
                                     if let Ok(samples_f32) = samples_result {
-                                        // Define chunk size and delay
-                                        let chunk_size = 2400; // 100ms of audio at 24kHz sample rate
-                                        let delay_ms = 100; // Delay between chunks to simulate real-time streaming
+                                        let sample_rate = 24000;
+                                        let channels: i32 = 1;
+                                        let chunk_size = args.audio_chunk_size
+                                            * sample_rate as f32
+                                            * channels as f32;
+
+                                        // calculate delay of chunk_size samples at sample rate
+                                        let delay_ms = (chunk_size as f32
+                                            / channels as f32
+                                            / sample_rate as f32
+                                            * 1000.0)
+                                            as u64;
+
+                                        println!(
+                                            "Sending {} ms duration {} audio samples",
+                                            delay_ms, chunk_size
+                                        );
 
                                         // Iterate over samples_f32 in chunks
-                                        for chunk_samples in samples_f32.chunks(chunk_size) {
+                                        for chunk_samples in samples_f32.chunks(chunk_size as usize)
+                                        {
                                             // Convert the chunk into the format expected by send_audio_samples_over_ndi
                                             let mut chunk_vec = chunk_samples.to_vec();
 
                                             // Check if this is the last chunk and it's smaller than the chunk_size
-                                            if chunk_samples.len() < chunk_size {
+                                            if chunk_samples.len() < chunk_size as usize {
                                                 // Could pad with silence if necessary
-                                                chunk_vec.resize(chunk_size, 0.0);
+                                                chunk_vec.resize(chunk_size as usize, 0.0);
                                                 // Pad with silence
                                             }
 
                                             // Send the chunk over NDI
-                                            send_audio_samples_over_ndi(chunk_vec, 24000, 1)
-                                                .expect("Failed to send audio samples over NDI");
+                                            send_audio_samples_over_ndi(
+                                                chunk_vec,
+                                                sample_rate,
+                                                channels,
+                                            )
+                                            .expect("Failed to send audio samples over NDI");
 
                                             // Await to introduce a delay simulating real-time streaming
                                             tokio::time::sleep(tokio::time::Duration::from_millis(
