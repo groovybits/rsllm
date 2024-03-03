@@ -44,6 +44,7 @@ async fn run(mut client: tmi::Client, channels: Vec<tmi::Channel>) -> Result<()>
 }
 
 async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
+    println!("\nTwitch Message: {:?}", msg);
     log::info!(
         "Twitch Message from {}: {}",
         msg.sender().name(),
