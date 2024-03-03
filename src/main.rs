@@ -546,6 +546,32 @@ struct Args {
         help = "which llm to use from candle, string default is mistral."
     )]
     candle_llm: String,
+
+    /// sd height
+    #[clap(long, env = "SD_HEIGHT", default_value_t = 512, help = "SD Height.")]
+    sd_height: usize,
+
+    /// sd width
+    #[clap(long, env = "SD_WIDTH", default_value_t = 512, help = "SD Width.")]
+    sd_width: usize,
+
+    /// sd scaled height
+    #[clap(
+        long,
+        env = "SD_SCALED_HEIGHT",
+        default_value_t = 0,
+        help = "SD Scaled Height."
+    )]
+    sd_scaled_height: u32,
+
+    /// sd scaled width
+    #[clap(
+        long,
+        env = "SD_SCALED_WIDTH",
+        default_value_t = 0,
+        help = "SD Scaled Width."
+    )]
+    sd_scaled_width: u32,
 }
 
 #[tokio::main]
@@ -1196,8 +1222,14 @@ async fn main() {
 
                                 let mut sd_config = SDConfig::new();
                                 sd_config.prompt = paragraph_clone;
-                                sd_config.height = Some(512);
-                                sd_config.width = Some(512);
+                                sd_config.height = Some(args.sd_height);
+                                sd_config.width = Some(args.sd_width);
+                                if args.sd_scaled_height > 0 {
+                                    sd_config.scaled_height = Some(args.sd_scaled_height);
+                                }
+                                if args.sd_scaled_width > 0 {
+                                    sd_config.scaled_width = Some(args.sd_scaled_width);
+                                }
 
                                 let prompt_clone = sd_config.prompt.clone();
 
@@ -1398,8 +1430,14 @@ async fn main() {
 
                     let mut sd_config = SDConfig::new();
                     sd_config.prompt = paragraph_text_clone;
-                    sd_config.height = Some(512);
-                    sd_config.width = Some(512);
+                    sd_config.height = Some(args.sd_height);
+                    sd_config.width = Some(args.sd_width);
+                    if args.sd_scaled_height > 0 {
+                        sd_config.scaled_height = Some(args.sd_scaled_height);
+                    }
+                    if args.sd_scaled_width > 0 {
+                        sd_config.scaled_width = Some(args.sd_scaled_width);
+                    }
 
                     let prompt_clone = sd_config.prompt.clone();
 

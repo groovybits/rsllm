@@ -8,9 +8,50 @@ use candle_transformers::models::stable_diffusion;
 
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
-use image::ImageBuffer;
+use image::{
+    imageops::{resize, FilterType},
+    DynamicImage, GenericImageView, ImageBuffer, Rgb,
+};
 use log::debug;
 use tokenizers::Tokenizer;
+
+fn scale_image(
+    image: ImageBuffer<Rgb<u8>, Vec<u8>>,
+    new_width: Option<u32>,
+    new_height: Option<u32>,
+) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+    if let (Some(target_width), Some(target_height)) = (new_width, new_height) {
+        if target_width == 0 || target_height == 0 {
+            return image;
+        }
+
+        let (orig_width, orig_height) = image.dimensions();
+        let scale = (target_width as f32 / orig_width as f32)
+            .min(target_height as f32 / orig_height as f32);
+        let scaled_width = (orig_width as f32 * scale).round() as u32;
+        let scaled_height = (orig_height as f32 * scale).round() as u32;
+
+        // Scale the image while preserving the aspect ratio.
+        let scaled_image = resize(&image, scaled_width, scaled_height, FilterType::Lanczos3);
+
+        // Create a new image with the target dimensions filled with black pixels.
+        let mut new_image = ImageBuffer::from_pixel(target_width, target_height, Rgb([0, 0, 0]));
+
+        // Calculate the offsets to center the scaled image.
+        let x_offset = (target_width - scaled_width) / 2;
+        let y_offset = (target_height - scaled_height) / 2;
+
+        // Copy the scaled image onto the new image at the calculated offset.
+        for (x, y, pixel) in scaled_image.enumerate_pixels() {
+            new_image.put_pixel(x + x_offset, y + y_offset, *pixel);
+        }
+
+        new_image
+    } else {
+        // Return the original image if dimensions are not specified.
+        image
+    }
+}
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
 pub enum StableDiffusionVersion {
@@ -257,6 +298,8 @@ pub struct SDConfig {
     pub guidance_scale: Option<f64>,
     pub img2img: Option<String>,
     pub img2img_strength: f64,
+    pub scaled_width: Option<u32>,
+    pub scaled_height: Option<u32>,
 }
 
 impl SDConfig {
@@ -283,6 +326,8 @@ impl SDConfig {
             guidance_scale: None,
             img2img: None,
             img2img_strength: 0.8,
+            scaled_width: None,
+            scaled_height: None,
         }
     }
 }
@@ -519,5 +564,10 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
         images.push(image_u8);
     }
 
-    Ok(images)
+    let scaled_images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> = images
+        .into_iter()
+        .map(|image| scale_image(image, config.scaled_width, config.scaled_height))
+        .collect();
+
+    Ok(scaled_images)
 }
