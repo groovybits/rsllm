@@ -34,6 +34,7 @@ use rsllm::stream_data::{
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
+use rsllm::twitch_client::setup as twitch_setup;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
@@ -80,7 +81,7 @@ struct Args {
         long,
         env = "TEMPERATURE",
         default_value = "0.8",
-        help = "Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.8."
+        help = "Temperature for LLM sampling, 0.0 to 1.0, it will cause the LLM to generate more random outputs. 0.0 is deterministic, 1.0 is maximum randomness."
     )]
     temperature: f32,
 
@@ -107,7 +108,7 @@ struct Args {
         long,
         env = "TOP_P",
         default_value = "1.0",
-        help = "Top P sampling, 0.0 to 1.0. Default is 1.0."
+        help = "Top P sampling, 0.0 to 1.0."
     )]
     top_p: f32,
 
@@ -116,7 +117,7 @@ struct Args {
         long,
         env = "PRESENCE_PENALTY",
         default_value = "0.0",
-        help = "Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0."
+        help = "Presence Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness."
     )]
     presence_penalty: f32,
 
@@ -125,7 +126,7 @@ struct Args {
         long,
         env = "FREQUENCY_PENALTY",
         default_value = "0.0",
-        help = "Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness. Default is 0.0."
+        help = "Frequency Penalty, it will cause the LLM to generate more diverse outputs. 0.0 is deterministic, 1.0 is maximum randomness."
     )]
     frequency_penalty: f32,
 
@@ -134,7 +135,7 @@ struct Args {
         long,
         env = "MAX_TOKENS",
         default_value = "800",
-        help = "Max Tokens, 1 to N. Default is 800."
+        help = "Max Tokens, 1 to N."
     )]
     max_tokens: i32,
 
@@ -161,7 +162,7 @@ struct Args {
         long,
         env = "LLM_PATH",
         default_value = "/v1/chat/completions",
-        help = "LLM Url path for completions, default is /v1/chat/completions."
+        help = "LLM Url path for completions."
     )]
     llm_path: String,
 
@@ -170,7 +171,7 @@ struct Args {
         long,
         env = "LLM_HISTORY_SIZE",
         default_value = "16768",
-        help = "LLM History size, default is 16768 (0 is unlimited)."
+        help = "LLM History size (0 is unlimited)."
     )]
     llm_history_size: usize,
 
@@ -179,7 +180,7 @@ struct Args {
         long,
         env = "NO_STREAM",
         default_value = "false",
-        help = "Don't stream output, wait for all completions to be generated before returning. Default is false."
+        help = "Don't stream output, wait for all completions to be generated before returning."
     )]
     no_stream: bool,
 
@@ -188,7 +189,7 @@ struct Args {
         long,
         env = "USE_OPENAI",
         default_value = "false",
-        help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com. Default is false."
+        help = "Safety feature for using openai api and confirming you understand the risks, you must also set the OPENAI_API_KEY, this will set the llm-host to api.openai.com."
     )]
     use_openai: bool,
 
@@ -197,7 +198,7 @@ struct Args {
         long,
         env = "OAI_TTS",
         default_value = "false",
-        help = "OAI_TTS as text to speech from openai, default is false."
+        help = "OAI_TTS as text to speech from openai."
     )]
     oai_tts: bool,
 
@@ -215,7 +216,7 @@ struct Args {
         long,
         env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
         default_value = "1",
-        help = "max_concurrent_sd_image_tasks for the sd image semaphore, default is 1."
+        help = "max_concurrent_sd_image_tasks for the sd image semaphore."
     )]
     max_concurrent_sd_image_tasks: usize,
 
@@ -224,7 +225,7 @@ struct Args {
         long,
         env = "DEBUG_INLINE",
         default_value = "false",
-        help = "debug inline on output (can mess up the output) as a bool. Default is false."
+        help = "debug inline on output (can mess up the output) as a bool."
     )]
     debug_inline: bool,
 
@@ -233,7 +234,7 @@ struct Args {
         long,
         env = "SHOW_OUTPUT_ERRORS",
         default_value = "false",
-        help = "Show LLM output errors which may mess up the output and niceness if packet loss occurs, default is false."
+        help = "Show LLM output errors which may mess up the output and niceness if packet loss occurs."
     )]
     show_output_errors: bool,
 
@@ -242,7 +243,7 @@ struct Args {
         long,
         env = "AI_OS_STATS",
         default_value = "false",
-        help = "Monitor system stats, default is false."
+        help = "Monitor system stats."
     )]
     ai_os_stats: bool,
 
@@ -251,7 +252,7 @@ struct Args {
         long,
         env = "DAEMON",
         default_value = "false",
-        help = "run as a daemon monitoring the specified stats, default is false."
+        help = "run as a daemon monitoring the specified stats."
     )]
     daemon: bool,
 
@@ -260,7 +261,7 @@ struct Args {
         long,
         env = "AI_NETWORK_STATS",
         default_value = "false",
-        help = "Monitor network stats, default is false."
+        help = "Monitor network stats."
     )]
     ai_network_stats: bool,
 
@@ -269,7 +270,7 @@ struct Args {
         long,
         env = "AI_NETWORK_PACKETS",
         default_value = "false",
-        help = "Monitor network packets, default is false."
+        help = "Monitor network packets."
     )]
     ai_network_packets: bool,
 
@@ -278,7 +279,7 @@ struct Args {
         long,
         env = "AI_NETWORK_HEXDUMP",
         default_value = "false",
-        help = "Monitor network full packet hex dump, default is false."
+        help = "Monitor network full packet hex dump."
     )]
     ai_network_hexdump: bool,
 
@@ -287,7 +288,7 @@ struct Args {
         long,
         env = "AI_NETWORK_PACKET_COUNT",
         default_value_t = 100,
-        help = "AI Network Packet Count, default is 100."
+        help = "AI Network Packet Count."
     )]
     ai_network_packet_count: usize,
 
@@ -296,7 +297,7 @@ struct Args {
         long,
         env = "PCAP_STATS",
         default_value_t = false,
-        help = "PCAP output capture stats mode, default is false."
+        help = "PCAP output capture stats mode."
     )]
     pcap_stats: bool,
 
@@ -305,7 +306,7 @@ struct Args {
         long,
         env = "PCAP_BATCH_SIZE",
         default_value_t = 7,
-        help = "Sets the batch size, default is 7."
+        help = "Sets the batch size."
     )]
     pcap_batch_size: usize,
 
@@ -314,7 +315,7 @@ struct Args {
         long,
         env = "PAYLOAD_OFFSET",
         default_value_t = 42,
-        help = "Sets the payload offset, default is 42."
+        help = "Sets the payload offset."
     )]
     payload_offset: usize,
 
@@ -323,7 +324,7 @@ struct Args {
         long,
         env = "PACKET_SIZE",
         default_value_t = 188,
-        help = "Sets the packet size, default is 188."
+        help = "Sets the packet size."
     )]
     packet_size: usize,
 
@@ -336,7 +337,7 @@ struct Args {
         long,
         env = "READ_TIME_OUT",
         default_value_t = 300_000,
-        help = "Sets the read timeout, default is 60_000."
+        help = "Sets the read timeout."
     )]
     read_time_out: i32,
 
@@ -372,7 +373,7 @@ struct Args {
         long,
         env = "SOURCE_PORT",
         default_value_t = 10_000,
-        help = "Sets the source port to capture for pcap, default is 10000."
+        help = "Sets the source port to capture for pcap."
     )]
     source_port: i32,
 
@@ -381,7 +382,7 @@ struct Args {
         long,
         env = "USE_WIRELESS",
         default_value_t = false,
-        help = "Sets if wireless is used, default is false."
+        help = "Sets if wireless is used."
     )]
     use_wireless: bool,
 
@@ -390,7 +391,7 @@ struct Args {
         long,
         env = "PROMISCUOUS",
         default_value_t = false,
-        help = "Use promiscuous mode for network capture, default is false."
+        help = "Use promiscuous mode for network capture."
     )]
     promiscuous: bool,
 
@@ -399,7 +400,7 @@ struct Args {
         long,
         env = "IMMEDIATE_MODE",
         default_value_t = false,
-        help = "PCAP immediate mode, default is false."
+        help = "PCAP immediate mode."
     )]
     immediate_mode: bool,
 
@@ -408,7 +409,7 @@ struct Args {
         long,
         env = "HEXDUMP",
         default_value_t = false,
-        help = "Hexdump mpegTS packets, default is false."
+        help = "Hexdump mpegTS packets."
     )]
     hexdump: bool,
 
@@ -417,7 +418,7 @@ struct Args {
         long,
         env = "SHOW_TR101290",
         default_value_t = false,
-        help = "Show the TR101290 p1, p2 and p3 errors if any, default is false."
+        help = "Show the TR101290 p1, p2 and p3 errors if any."
     )]
     show_tr101290: bool,
 
@@ -435,7 +436,7 @@ struct Args {
         long,
         env = "DEBUG_LLM_HISTORY",
         default_value_t = false,
-        help = "DEBUG LLM Message History, default is false."
+        help = "DEBUG LLM Message History."
     )]
     debug_llm_history: bool,
 
@@ -453,7 +454,7 @@ struct Args {
         long,
         env = "NO_PROGRESS",
         default_value_t = false,
-        help = "Turn off progress output dots, default is false."
+        help = "Turn off progress output dots."
     )]
     no_progress: bool,
 
@@ -462,16 +463,16 @@ struct Args {
         long,
         env = "LOGLEVEL",
         default_value = "",
-        help = "Loglevel, control rust log level, default is info."
+        help = "Loglevel, control rust log level."
     )]
     loglevel: String,
 
-    /// Break Line Length - line length for breaking lines from LLM messages, default is 80
+    /// Break Line Length - line length for breaking lines from LLM messages
     #[clap(
         long,
         env = "BREAK_LINE_LENGTH",
-        default_value_t = 80,
-        help = "Break Line Length - line length for breaking lines from LLM messages, default is 80."
+        default_value_t = 120,
+        help = "Break Line Length - line length for breaking lines from LLM messages."
     )]
     break_line_length: usize,
 
@@ -480,7 +481,7 @@ struct Args {
         long,
         env = "SD_IMAGE",
         default_value_t = false,
-        help = "SD Image - create an SD image from the LLM messages, default is false."
+        help = "SD Image - create an SD image from the LLM messages."
     )]
     sd_image: bool,
 
@@ -489,7 +490,7 @@ struct Args {
         long,
         env = "SD_MAX_LENGTH",
         default_value_t = 80,
-        help = "SD Max Length for SD Image, default is 200."
+        help = "SD Max Length for SD Image."
     )]
     sd_max_length: usize,
 
@@ -498,7 +499,7 @@ struct Args {
         long,
         env = "SAVE_IMAGES",
         default_value_t = false,
-        help = "Save Images - save images from the LLM messages, default is false."
+        help = "Save Images - save images from the LLM messages."
     )]
     save_images: bool,
 
@@ -507,7 +508,7 @@ struct Args {
         long,
         env = "NDI_IMAGES",
         default_value_t = false,
-        help = "NDI Images output, default is false. (use --features ndi to enable NDI)"
+        help = "NDI Images output. (use --features ndi to enable NDI)"
     )]
     ndi_images: bool,
 
@@ -516,7 +517,7 @@ struct Args {
         long,
         env = "NDI_AUDIO",
         default_value_t = false,
-        help = "NDI Audio output, default is false. (use --features ndi to enable NDI)"
+        help = "NDI Audio output. (use --features ndi to enable NDI)"
     )]
     ndi_audio: bool,
 
@@ -525,7 +526,7 @@ struct Args {
         long,
         env = "MAX_ITERATIONS",
         default_value_t = 1,
-        help = "Max Iterations, default is 1."
+        help = "Max Iterations."
     )]
     max_iterations: i32,
 
@@ -534,16 +535,16 @@ struct Args {
         long,
         env = "USE_CANDLE",
         default_value_t = false,
-        help = "Use Candle for LLM, default is false."
+        help = "Use Candle for LLM."
     )]
     use_candle: bool,
 
-    /// which llm to use from candle, string default is mistral
+    /// which llm to use from candle, string
     #[clap(
         long,
         env = "CANDLE_LLM",
         default_value = "mistral",
-        help = "which llm to use from candle, string default is mistral."
+        help = "which llm to use from candle."
     )]
     candle_llm: String,
 
@@ -559,7 +560,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_SCALED_HEIGHT",
-        default_value_t = 0,
+        default_value_t = 1080,
         help = "SD Scaled Height."
     )]
     sd_scaled_height: u32,
@@ -568,7 +569,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_SCALED_WIDTH",
-        default_value_t = 0,
+        default_value_t = 1920,
         help = "SD Scaled Width."
     )]
     sd_scaled_width: u32,
@@ -581,6 +582,33 @@ struct Args {
         help = "hardsub font size"
     )]
     hardsub_font_size: f32,
+
+    /// enable twitch client
+    #[clap(
+        long,
+        env = "TWITCH_CLIENT",
+        default_value_t = false,
+        help = "enable twitch client."
+    )]
+    twitch_client: bool,
+
+    /// twitch username
+    #[clap(
+        long,
+        env = "TWITCH_USERNAME",
+        default_value = "",
+        help = "twitch username."
+    )]
+    twitch_username: String,
+
+    /// twitch channel
+    #[clap(
+        long,
+        env = "TWITCH_CHANNEL",
+        default_value = "",
+        help = "twitch channel."
+    )]
+    twitch_channel: String,
 }
 
 #[tokio::main]
@@ -877,6 +905,58 @@ async fn main() {
         }
     });
 
+    let twitch_auth = env::var("TWITCH_AUTH")
+        .ok()
+        .unwrap_or_else(|| "NO_AUTH_KEY".to_string());
+
+    if args.twitch_client {
+        if twitch_auth == "NO_AUTH_KEY" {
+            error!("Twitch Auth key is not set. Please set the TWITCH_AUTH environment variable.");
+            std::process::exit(1);
+        }
+
+        // Clone values before moving them into the closure
+        let twitch_channel_clone = vec![args.twitch_channel.clone()];
+        let twitch_username_clone = args.twitch_username.clone();
+        let twitch_auth_clone = twitch_auth.clone(); // Assuming twitch_auth is clonable and you want to use it within the closure.
+
+        info!(
+            "Setting up Twitch channel {} for user {}",
+            twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+            twitch_username_clone
+        );
+
+        let twitch_handle = tokio::task::spawn_blocking(move || async move {
+            match twitch_setup(
+                twitch_username_clone.clone(),
+                twitch_auth_clone,
+                twitch_channel_clone.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    info!(
+                        "Twitch setup successful for channel {} username {}",
+                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                        twitch_username_clone
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Error setting up Twitch channel {} for user {}: {}",
+                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                        twitch_username_clone,
+                        e
+                    );
+                }
+            }
+        });
+
+        // Wait for the twitch setup to complete
+        //if let Err(e) = twitch_handle.await {
+        //    error!("Error setting up Twitch channel: {}", e);
+        //}
+    }
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();

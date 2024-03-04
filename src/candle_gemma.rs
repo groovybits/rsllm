@@ -65,14 +65,14 @@ impl TextGeneration {
             .get_ids()
             .to_vec();
 
-        if verbose_prompt {
-            for &t in tokens.iter() {
-                if let Some(t) = self.tokenizer.next_token(t)? {
+        for &t in tokens.iter() {
+            if let Some(t) = self.tokenizer.next_token(t)? {
+                if verbose_prompt {
                     println!("'{}'", t);
+                    std::io::stdout().flush()?;
                 }
             }
         }
-        std::io::stdout().flush()?;
 
         debug!("prompt: {:?}", prompt);
 
