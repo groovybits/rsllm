@@ -560,7 +560,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_SCALED_HEIGHT",
-        default_value_t = 0,
+        default_value_t = 1080,
         help = "SD Scaled Height."
     )]
     sd_scaled_height: u32,
@@ -569,7 +569,7 @@ struct Args {
     #[clap(
         long,
         env = "SD_SCALED_WIDTH",
-        default_value_t = 0,
+        default_value_t = 1920,
         help = "SD Scaled Width."
     )]
     sd_scaled_width: u32,
