@@ -1,6 +1,6 @@
 #!/bin/bash
 
-target/release/rsllm \
+DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH target/release/rsllm \
     --daemon  \
     --ai-os-stats \
     --poll-interval 60000 \

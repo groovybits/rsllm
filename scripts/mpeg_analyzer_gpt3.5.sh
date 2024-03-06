@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-sudo target/release/rsllm \
+sudo DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH target/release/rsllm \
     --daemon  \
     --use-openai \
     --model "gpt-3.5-turbo" \
