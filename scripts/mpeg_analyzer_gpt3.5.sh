@@ -7,6 +7,5 @@ sudo DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH target/release/rsllm \
     --ai-network-stats \
     --pcap-stats \
     --llm-history-size 3500 \
-    --poll-interval 120000 \
     --ai-network-hexdump $@
 

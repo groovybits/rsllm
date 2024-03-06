@@ -7,5 +7,4 @@ DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH target/release/rsllm \
     --max-tokens 1000 \
     --daemon \
     --ai-os-stats \
-    --poll-interval 60000 \
     $@
