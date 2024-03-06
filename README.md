@@ -79,7 +79,7 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
     ```bash
     cargo run --release --features ndi,metal -- \
       --candle_llm gemma \
-      --model-id "7b-it" \
+      --model-id "2b-it" \
       --max-tokens 1000 \
       --temperature 0.8 \
       --ai-os-stats \
