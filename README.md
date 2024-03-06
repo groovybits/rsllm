@@ -4,51 +4,60 @@ The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal 
 
 ## Highlighted Features
 
-- **Local LLM Focus**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
-- **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
-- **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
-- **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
+-   **Local LLM Focus**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
+-   **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
+-   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
+-   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
+-   **TTS Open AI API Support**: Offers support for the OpenAI API, enabling users to leverage external AI models for text-to-speech (TTS) operations when necessary. (Candle to replace this with MetaVoice TTS in the near future).
 
 ![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
 
 ## Core Components
 
 ### Candle Framework Integration
+
 Candle, a project by Huggingface, offers Rust-native LLMs like Mistral and Gemma, optimized for Metal GPUs on MacOS. This integration facilitates local execution of LLMs, ensuring high performance and low latency in AI model interactions.
 
 ### OpenAI API Support
+
 While the toolkit’s primary focus is on running local LLMs, it also provides support for the OpenAI API, enabling users to leverage external AI models when necessary. This feature ensures versatility and broad applicability in various AI-driven projects.
 
 ### Real-time AI Analysis and Content Generation
+
 The toolkit excels in analyzing real-time data streams and generating AI-driven content, including text, images, and speech. It aims to create a dynamic interaction model where voice inputs can be converted into text commands for the LLM, and the generated outputs can be streamed back as voice or visual content.
 
 ## Installation and Configuration
 
 ### Prerequisites
-- Ensure Rust and Cargo are installed. [Installation Guide](https://www.rust-lang.org/tools/install).
-- MacOS system with M1/M2/M3 ARM GPU.
+
+-   Ensure Rust and Cargo are installed. [Installation Guide](https://www.rust-lang.org/tools/install).
+-   MacOS system with M1/M2/M3 ARM GPU.
 
 ### Setup Guide
+
 1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/groovybits/rsllm.git
-   ```
+
+    ```bash
+    git clone https://github.com/groovybits/rsllm.git
+    ```
 
 2. **Navigate to the Project Directory**:
-   ```bash
-   cd rsllm
-   ```
+
+    ```bash
+    cd rsllm
+    ```
 
 3. **Compile with Metal GPU Support and NDI SDK support**:
-   ```bash
-   # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-   # cargo build --release --features=metal,ndi
-   ## run the compile.sh which basically does the above command + gets the libndi.dylib.
-   ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
-   ```
+    ```bash
+    # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
+    # cargo build --release --features=metal,ndi
+    ## run the compile.sh which basically does the above command + gets the libndi.dylib.
+    ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
+    ```
 
 ### Configuration
-- Copy `.env.example` to `.env` and customize the settings, including the OpenAI API key if intending to use external AI models.
+
+-   Copy `.env.example` to `.env` and customize the settings, including the OpenAI API key if intending to use external AI models.
 
 ## Usage
 
@@ -56,7 +65,8 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 ### Example Commands
 
-- Use the scripts in the [./scripts](./scripts/) directory.
+-   Use the scripts in the [./scripts](./scripts/) directory.
+
     ```bash
     [./scripts/compile.sh](./scripts/compile.sh) # build rsllm
 
@@ -65,72 +75,75 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
     ./scripts/system_health.sh
     ```
 
-- **Running with Candle and OS Stats for AI System Analysis**:
-   ```bash
-   cargo run --release --features ndi,metal -- \
-     --use-candle --candle_llm gemma \
-     --model-id "7b-it" \
-     --max-tokens 1000 \
-     --temperature 0.8 \
-     --ai-os-stats \
-     --sd-image \
-     --ndi-images \
-     --system-prompt "you create image prompts from os system stats health state." \
-     --query "How is my system doing? Create a report on the system health as visual image descriptions."
-   ```
+-   **Running with Candle and OS Stats for AI System Analysis**:
+    ```bash
+    cargo run --release --features ndi,metal -- \
+      --use-candle --candle_llm gemma \
+      --model-id "7b-it" \
+      --max-tokens 1000 \
+      --temperature 0.8 \
+      --ai-os-stats \
+      --sd-image \
+      --ndi-images \
+      --system-prompt "you create image prompts from os system stats health state." \
+      --query "How is my system doing? Create a report on the system health as visual image descriptions."
+    ```
 
 ## Enhanced Output Capabilities and Upcoming Features
 
-### NDI Output for Images and TTS Speech Audio (Audio is a Work in Progress)
+### NDI Output for Images and TTS Speech Audio
 
 The toolkit is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks.
 
-- **(OPTIONAL) NDI SDK Installation**: The [compile.sh](scripts/compile.sh] script will download hte libndi.dylib for you. If you want to, you can Download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is useful for viewing the NDI output and other tools to explore.
-- **Configuration Steps**:
+-   **(OPTIONAL) NDI SDK Installation**: The [compile.sh](scripts/compile.sh] script will download hte libndi.dylib for you. If you want to, you can Download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is useful for viewing the NDI output and other tools to explore.
+-   **Configuration Steps**:
     1. Add `--features ndi` to the Cargo build command to include NDI support in your build.
     2. Run scripts/compile.sh which will retreive the libndi.dylib which works best for MacOS.
-    ```
+    ````
     3. To ensure the library is correctly recognized when building with `cargo --features=ndi`, set the `DYLD_LIBRARY_PATH` environment variable:
     ```bash
     export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-    ```
-- **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
+    ````
+-   **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
 
-### MetaVoice TTS Text to Speech (Planned Feature)
+### MetaVoice TTS Text to Speech (Planned Feature, OpenAI TTS works currently as a placeholder)
 
 Candle, our core Rust framework for LLM interaction, is poised to introduce support for MetaVoice, a groundbreaking Text-to-Speech (TTS) technology. This upcoming feature will enable pure Rust-based LLM, TTI (Text-to-Image), and TTS functionalities, seamlessly integrated with Metal GPU optimizations for MacOS.
 
-- **Development Status**: The MetaVoice integration is currently in the works, with a pull request under review within the Candle project. For the latest updates, refer to the PR [here](https://github.com/huggingface/candle/compare/main...metavoice).
-- **Anticipated Benefits**: Once deployed, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text, opening new avenues for interactive applications and content creation.
+-   **Development Status**: The MetaVoice integration is currently becoming available in the Candle framework, with plans to replace the OpenAI TTS API support in the toolkit when it is optimized and quality matches the reference implementation.
+-   **Anticipated Benefits**: Once deployed, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text without costing and low latency on a local LLM. Also it will give the ability to one shot learn a voice from a small clip and generate speech from it.
 
 These enhancements and planned features underscore our commitment to providing a versatile, high-performance toolkit for AI-driven content creation and analysis on MacOS, leveraging the full potential of Metal GPUs and Rust's efficiency.
 
 ## TODO
 
-* Priority:
-- Fix images for SD incrementally as we go.
-- Text NLS chunking.
+-   Priority:
 
-* Sooner or later:
-- use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
-- Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
-- Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
-- Improve network and system analyzers.
-- preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
-- use chroma db to do RAG with documents for augmenting the prompt with relevant information.
-- allow daemon mode to run and listent for requests via zmq input and pass to output.
-- segment output via NLP into smaller chunks for realtime processing downstream.
-- fill out options for the LLM and openai api.
-- capnproto for serialization and deserialization of data.
-- improve stable diffusion for image generation for visualizing results in incremental steps.
-- add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
-- add MetaMusic music generation for mood enhancement based on results.
-- add talking head video generation with consistent frame context of objects staying same in frame.
-- speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
-- freeform input options for the LLM to figure out what the user wants to do.
-- dynamic code generation of python for new tasks on the fly like video processing? risks?
-- iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
-- Speech to Tet with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
+*   Twitch Chat integration fixes for threading and input/output through mpsc channels async (WIP).
+*   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
+*   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
+*   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.
+*   Implement Metavoice to be the focus and use OpenAI TTS as a secondary choice, move up Candle LLM's as defaults too for 100% Rust based AI (NDI bindings seem like they are staying for now).
+
+-   Sooner or later:
+
+*   use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
+*   Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
+*   Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
+*   Improve network and system analyzers.
+*   preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
+*   use chroma db to do RAG with documents for augmenting the prompt with relevant information.
+*   allow daemon mode to run and listent for requests via zmq input and pass to output.
+*   fill out options for the LLM and openai api.
+*   capnproto for serialization and deserialization of data with modular zmq protocol communication.
+*   add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
+*   add MetaMusic music generation for mood enhancement based on results.
+*   add talking head video generation with consistent frame context of objects staying same in frame.
+*   speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
+*   freeform input options for the LLM to figure out what the user wants to do.
+*   dynamic code generation of python for new tasks on the fly like video processing? risks?
+*   iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
+*   Speech to Text with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
 
 ## Contributing
 
@@ -142,12 +155,13 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Acknowledgments
 
-- Candle Rust Transformers/Tensors by Huggingface: [Candle](https://github.com/huggingface/candle)
-- OpenAI for API Specifications: [OpenAI](https://openai.com/)
-- MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
-- Whisper for Speech to Text: [Whisper](https://whisper.com/)
-- Google Gemma LLM: [Gemma](https://huggingface.co/blog/gemma#prompt-format)
-- Mistral LLM: [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+-   Candle Rust Transformers/Tensors by Huggingface: [Candle](https://github.com/huggingface/candle)
+-   OpenAI for API Specifications: [OpenAI](https://openai.com/)
+-   OpenAI for TTS Integration: [OpenAI](https://openai.com/)
+-   MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
+-   Whisper for Speech to Text: [Whisper](https://whisper.com/)
+-   Google Gemma LLM: [Gemma](https://huggingface.co/blog/gemma#prompt-format)
+-   Mistral LLM: [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
 ## Author
 
