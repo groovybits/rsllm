@@ -530,14 +530,14 @@ struct Args {
     )]
     max_iterations: i32,
 
-    /// Use Candle for LLM
+    /// Use API for LLM
     #[clap(
         long,
-        env = "USE_CANDLE",
+        env = "USE_API",
         default_value_t = false,
-        help = "Use Candle for LLM."
+        help = "Use APIfor LLM, else Candle is used."
     )]
-    use_candle: bool,
+    use_api: bool,
 
     /// which llm to use from candle, string
     #[clap(
@@ -1138,7 +1138,7 @@ async fn main() {
 
         let model_id = args.model_id.clone();
 
-        if args.use_candle {
+        if !args.use_api && !args.use_openai {
             // Capture the start time for performance metrics
             let start = Instant::now();
 

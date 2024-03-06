@@ -78,13 +78,14 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 -   **Running with Candle and OS Stats for AI System Analysis**:
     ```bash
     cargo run --release --features ndi,metal -- \
-      --use-candle --candle_llm gemma \
+      --candle_llm gemma \
       --model-id "7b-it" \
       --max-tokens 1000 \
       --temperature 0.8 \
       --ai-os-stats \
       --sd-image \
       --ndi-images \
+      --ndi-audio \
       --system-prompt "you create image prompts from os system stats health state." \
       --query "How is my system doing? Create a report on the system health as visual image descriptions."
     ```
