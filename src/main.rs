@@ -444,7 +444,7 @@ struct Args {
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 10_000,
+        default_value_t = 60_000,
         help = "POLL Interval in ms."
     )]
     poll_interval: u64,
