@@ -117,33 +117,33 @@ These enhancements and planned features underscore our commitment to providing a
 
 ## TODO
 
--   Priority:
+### Priority:
 
-*   Twitch Chat integration fixes for threading and input/output through mpsc channels async (WIP).
-*   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
-*   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
-*   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.
-*   Implement Metavoice to be the focus and use OpenAI TTS as a secondary choice, move up Candle LLM's as defaults too for 100% Rust based AI (NDI bindings seem like they are staying for now).
+-   Twitch Chat integration fixes for threading and input/output through mpsc channels async (WIP).
+-   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
+-   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
+-   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.
+-   Implement Metavoice to be the focus and use OpenAI TTS as a secondary choice, move up Candle LLM's as defaults too for 100% Rust based AI (NDI bindings seem like they are staying for now).
 
--   Sooner or later:
+### Sooner or later:
 
-*   use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
-*   Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
-*   Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
-*   Improve network and system analyzers.
-*   preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
-*   use chroma db to do RAG with documents for augmenting the prompt with relevant information.
-*   allow daemon mode to run and listent for requests via zmq input and pass to output.
-*   fill out options for the LLM and openai api.
-*   capnproto for serialization and deserialization of data with modular zmq protocol communication.
-*   add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
-*   add MetaMusic music generation for mood enhancement based on results.
-*   add talking head video generation with consistent frame context of objects staying same in frame.
-*   speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
-*   freeform input options for the LLM to figure out what the user wants to do.
-*   dynamic code generation of python for new tasks on the fly like video processing? risks?
-*   iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
-*   Speech to Text with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
+-   use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
+-   Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
+-   Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
+-   Improve network and system analyzers.
+-   preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
+-   use chroma db to do RAG with documents for augmenting the prompt with relevant information.
+-   allow daemon mode to run and listent for requests via zmq input and pass to output.
+-   fill out options for the LLM and openai api.
+-   capnproto for serialization and deserialization of data with modular zmq protocol communication.
+-   add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
+-   add MetaMusic music generation for mood enhancement based on results.
+-   add talking head video generation with consistent frame context of objects staying same in frame.
+-   speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
+-   freeform input options for the LLM to figure out what the user wants to do.
+-   dynamic code generation of python for new tasks on the fly like video processing? risks?
+-   iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
+-   Speech to Text with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
 
 ## Contributing
 
