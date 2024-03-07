@@ -937,7 +937,7 @@ async fn main() {
             twitch_username_clone
         );
 
-        let twitch_handle = tokio::task::spawn_blocking(move || async move {
+        let twitch_handle = tokio::spawn(async move {
             match twitch_setup(
                 twitch_username_clone.clone(),
                 twitch_auth_clone,

@@ -21,11 +21,7 @@ pub async fn setup(nick: String, token: String, channel: Vec<String>) -> Result<
     client.join_all(&channels).await?;
     println!("Joined the following channels: {}", channels.join(", "));
 
-    select! {
-      res = tokio::spawn(run(client, channels)) => {
-        res?
-      }
-    }
+    run(client, channels).await
 }
 
 async fn run(mut client: tmi::Client, channels: Vec<tmi::Channel>) -> Result<()> {
