@@ -18,6 +18,7 @@
 use clap::Parser;
 use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
+use rsllm::candle_metavoice::metavoice;
 use rsllm::candle_mistral::mistral;
 #[cfg(feature = "ndi")]
 use rsllm::ndi::send_audio_samples_over_ndi;
@@ -35,6 +36,7 @@ use rsllm::stream_data::{
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
 use rsllm::twitch_client::setup as twitch_setup;
+use rsllm::ApiError;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
@@ -201,6 +203,15 @@ struct Args {
         help = "OAI_TTS as text to speech from openai."
     )]
     oai_tts: bool,
+
+    /// TTS text to speech enable
+    #[clap(
+        long,
+        env = "TTS_ENABLE",
+        default_value = "false",
+        help = "TTS text to speech enable."
+    )]
+    tts_enable: bool,
 
     /// audio chunk size
     #[clap(
@@ -1280,14 +1291,15 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         // Check if image generation is enabled and proceed
-                        if args.sd_image || args.oai_tts {
+                        if args.sd_image || args.tts_enable || args.oai_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
                             let output_id_clone = output_id.clone();
                             let sem_clone_sd_image = semaphore_sd_image.clone();
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
-                                let _permit = if args.sd_image || args.oai_tts {
+                                let _permit = if args.sd_image || (args.oai_tts || args.tts_enable)
+                                {
                                     // Conditionally acquire the permit and store it in an Option
                                     Some(sem_clone_sd_image.acquire().await.expect(
                                         "Stable Diffusion: Failed to acquire semaphore permit",
@@ -1365,25 +1377,39 @@ async fn main() {
                                 }
 
                                 // Integrate TTS processing here, directly after image generation
-                                if args.oai_tts {
+                                if args.oai_tts || args.tts_enable {
                                     let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
-                                    let model = String::from("tts-1");
-                                    let voice = OAITTSVoice::Nova;
-                                    let oai_request = OAITTSRequest::new(model, input, voice);
 
-                                    let openai_key = std::env::var("OPENAI_API_KEY")
-                                        .expect("TTS Thread: OPENAI_API_KEY not found");
+                                    let bytes_result = if args.oai_tts {
+                                        // OpenAI TTS request
+                                        let model = String::from("tts-1");
+                                        let voice = OAITTSVoice::Nova;
+                                        let oai_request = OAITTSRequest::new(model, input, voice);
 
-                                    // Directly await the TTS operation without spawning a new thread
-                                    let bytes_result = oai_tts(oai_request, &openai_key).await;
+                                        let openai_key = std::env::var("OPENAI_API_KEY")
+                                            .expect("TTS Thread: OPENAI_API_KEY not found");
+
+                                        // Directly await the TTS operation without spawning a new thread
+                                        oai_tts(oai_request, &openai_key).await
+                                    } else {
+                                        // Candle TTS request
+                                        metavoice(input)
+                                            .await
+                                            .map_err(|e| ApiError::Error(e.to_string()))
+                                    };
 
                                     match bytes_result {
                                         Ok(bytes) => {
                                             if args.ndi_audio {
-                                                // Convert MP3 bytes to f32 samples and send over NDI
+                                                // Determine the format based on TTS source
                                                 #[cfg(feature = "ndi")]
-                                                let samples_result =
-                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec());
+                                                let samples_result = if args.oai_tts {
+                                                    // OpenAI TTS returns MP3, convert MP3 bytes to f32 samples
+                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec())
+                                                } else {
+                                                    // Candle TTS (`metavoice`) returns WAV, directly convert WAV PCM to f32 samples
+                                                    rsllm::ndi::wav_to_f32(bytes.to_vec())
+                                                };
 
                                                 // Send audio samples over NDI with pacing
                                                 #[cfg(feature = "ndi")]
@@ -1497,7 +1523,7 @@ async fn main() {
                 let sem_clone_sd_image = semaphore_sd_image.clone();
                 let handle = tokio::spawn(async move {
                     // Declare the permit variable outside the if block to extend its scope
-                    let _permit = if args.sd_image || args.oai_tts {
+                    let _permit = if args.sd_image || args.tts_enable || args.oai_tts {
                         // Conditionally acquire the permit and store it in an Option
                         Some(
                             sem_clone_sd_image
@@ -1574,24 +1600,39 @@ async fn main() {
                     }
 
                     // Integrate TTS processing here, directly after image generation
-                    if args.oai_tts {
+                    if args.tts_enable || args.oai_tts {
                         let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
-                        let model = String::from("tts-1");
-                        let voice = OAITTSVoice::Nova;
-                        let oai_request = OAITTSRequest::new(model, input, voice);
 
-                        let openai_key = std::env::var("OPENAI_API_KEY")
-                            .expect("TTS Thread: OPENAI_API_KEY not found");
+                        let bytes_result = if args.oai_tts {
+                            // OpenAI TTS request
+                            let model = String::from("tts-1");
+                            let voice = OAITTSVoice::Nova;
+                            let oai_request = OAITTSRequest::new(model, input, voice);
 
-                        // Directly await the TTS operation without spawning a new thread
-                        let bytes_result = oai_tts(oai_request, &openai_key).await;
+                            let openai_key = std::env::var("OPENAI_API_KEY")
+                                .expect("TTS Thread: OPENAI_API_KEY not found");
+
+                            // Directly await the TTS operation without spawning a new thread
+                            oai_tts(oai_request, &openai_key).await
+                        } else {
+                            // Candle TTS request
+                            metavoice(input)
+                                .await
+                                .map_err(|e| ApiError::Error(e.to_string()))
+                        };
 
                         match bytes_result {
                             Ok(bytes) => {
                                 if args.ndi_audio {
-                                    // Convert MP3 bytes to f32 samples and send over NDI
+                                    // Determine the format based on TTS source
                                     #[cfg(feature = "ndi")]
-                                    let samples_result = rsllm::ndi::mp3_to_f32(bytes.to_vec());
+                                    let samples_result = if args.oai_tts {
+                                        // OpenAI TTS returns MP3, convert MP3 bytes to f32 samples
+                                        rsllm::ndi::mp3_to_f32(bytes.to_vec())
+                                    } else {
+                                        // Candle TTS (`metavoice`) returns WAV, directly convert WAV PCM to f32 samples
+                                        rsllm::ndi::wav_to_f32(bytes.to_vec())
+                                    };
 
                                     // Send audio samples over NDI with pacing
                                     #[cfg(feature = "ndi")]

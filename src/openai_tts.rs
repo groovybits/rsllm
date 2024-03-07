@@ -27,28 +27,8 @@ use bytes::Bytes;
 use reqwest::Client;
 use serde::Serialize;
 const ENDPOINT: &str = "https://api.openai.com/v1/audio/speech";
+use crate::ApiError;
 use log::debug;
-
-#[derive(Debug)]
-pub enum ApiError {
-    Error(String),
-    RequestError(reqwest::Error),
-}
-
-impl From<reqwest::Error> for ApiError {
-    fn from(value: reqwest::Error) -> Self {
-        ApiError::RequestError(value)
-    }
-}
-
-impl std::fmt::Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ApiError::Error(msg) => write!(f, "{}", msg),
-            ApiError::RequestError(e) => write!(f, "Request error: {}", e),
-        }
-    }
-}
 
 impl std::fmt::Display for Voice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
