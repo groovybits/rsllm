@@ -7,6 +7,7 @@
  * for RsLLM.
 */
 
+pub mod candle_metavoice;
 pub mod candle_mistral;
 pub mod mpegts;
 #[cfg(feature = "ndi")]
@@ -23,6 +24,27 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use system_stats::{get_system_stats, SystemStats};
 pub mod candle_gemma;
+
+#[derive(Debug)]
+pub enum ApiError {
+    Error(String),
+    RequestError(reqwest::Error),
+}
+
+impl From<reqwest::Error> for ApiError {
+    fn from(value: reqwest::Error) -> Self {
+        ApiError::RequestError(value)
+    }
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ApiError::Error(msg) => write!(f, "{}", msg),
+            ApiError::RequestError(e) => write!(f, "Request error: {}", e),
+        }
+    }
+}
 
 /// Enum to determine the type of stats to fetch.
 pub enum StatsType {
