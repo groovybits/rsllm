@@ -8,7 +8,7 @@ The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal 
 -   **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
 -   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
--   **TTS Open AI API Support**: Offers support for the OpenAI API, enabling users to leverage external AI models for text-to-speech (TTS) operations when necessary. (Candle to replace this with MetaVoice TTS in the near future).
+-   **TTS MetaVoice / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support can generate speech for now if wanting quality/realtime speech generation.
 
 ![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
 
@@ -107,14 +107,14 @@ The toolkit is enhancing its output capabilities to include NDI (Network Device 
     ````
 -   **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
 
-### MetaVoice TTS Text to Speech (Planned Feature, OpenAI TTS works currently as a placeholder)
+### MetaVoice TTS Text to Speech (WIP)
 
-Candle, our core Rust framework for LLM interaction, is poised to introduce support for MetaVoice, a groundbreaking Text-to-Speech (TTS) technology. This upcoming feature will enable pure Rust-based LLM, TTI (Text-to-Image), and TTS functionalities, seamlessly integrated with Metal GPU optimizations for MacOS.
+Candle, our core Rust framework for LLM interaction has MetaVoice now, a groundbreaking Text-to-Speech (TTS) technology. As this feature improves it will enable pure Rust-based LLM, TTI (Text-to-Image), and TTS functionalities, seamlessly integrated with Metal GPU optimizations for MacOS.
 
--   **Development Status**: The MetaVoice integration is currently becoming available in the Candle framework, with plans to replace the OpenAI TTS API support in the toolkit when it is optimized and quality matches the reference implementation.
--   **Anticipated Benefits**: Once deployed, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text without costing and low latency on a local LLM. Also it will give the ability to one shot learn a voice from a small clip and generate speech from it.
+-   **Development Status**: The MetaVoice integration is done and being optimized in Candle so that quality matches the reference implementation.
+-   **Anticipated Benefits**: Once full quality/optimized, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text without costing and low latency on a local LLM. Also it will give the ability to one shot learn a voice from a small clip and generate speech from it. For now you may want to use OpenAI for quality/realtime generation of the speech audio.
 
-These enhancements and planned features underscore our commitment to providing a versatile, high-performance toolkit for AI-driven content creation and analysis on MacOS, leveraging the full potential of Metal GPUs and Rust's efficiency.
+RsLLM has a mission to research and explore implementing a versatile, high-performance toolkit for AI-driven content creation and analysis on MacOS, leveraging the full potential of Metal GPUs and Rust's efficiency.
 
 ## TODO
 
@@ -124,7 +124,7 @@ These enhancements and planned features underscore our commitment to providing a
 -   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
 -   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
 -   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.
--   Implement Metavoice to be the focus and use OpenAI TTS as a secondary choice, move up Candle LLM's as defaults too for 100% Rust based AI (NDI bindings seem like they are staying for now).
+-   Merge fixes for Metavoice as they are done in Candle - WIP.
 
 ### Sooner or later:
 
@@ -137,7 +137,6 @@ These enhancements and planned features underscore our commitment to providing a
 -   allow daemon mode to run and listent for requests via zmq input and pass to output.
 -   fill out options for the LLM and openai api.
 -   capnproto for serialization and deserialization of data with modular zmq protocol communication.
--   add MetaVoice via Candle (TODO, waiting on it to be avaiable, in a PR from someone) text to speech for audio output of results.
 -   add MetaMusic music generation for mood enhancement based on results.
 -   add talking head video generation with consistent frame context of objects staying same in frame.
 -   speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
