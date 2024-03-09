@@ -8,7 +8,7 @@ The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal 
 -   **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
 -   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
--   **TTS MetaVoice / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support can generate speech for now if wanting quality/realtime speech generation.
+-   **TTS MetaVoice / Mimic3 TTS API / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support generates very nice speech for a prie if wanting quality/realtime speech generation. Mimic3 TTS API requires running the mimic3-server and is a bit more involved but is a good alternative to OpenAI TTS API since it is free if you have a local system. <https://github.com/MycroftAI/mimic3>
 
 ![RSLLM](https://storage.googleapis.com/gaib/2/rsllm.webp)
 
@@ -159,6 +159,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 -   OpenAI for API Specifications: [OpenAI](https://openai.com/)
 -   OpenAI for TTS Integration: [OpenAI](https://openai.com/)
 -   MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
+-   Mimic3 for TTS Integration: [Mimic3](https://github.com/MycroftAI/mimic3)
 -   Whisper for Speech to Text: [Whisper](https://whisper.com/)
 -   Google Gemma LLM: [Gemma](https://huggingface.co/blog/gemma#prompt-format)
 -   Mistral LLM: [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1)
