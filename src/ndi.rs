@@ -1,4 +1,3 @@
-use hound::{WavReader, WavSamples};
 use image::{ImageBuffer, Rgb, Rgba};
 use imageproc::drawing::draw_text_mut;
 use minimp3::{Decoder, Frame};

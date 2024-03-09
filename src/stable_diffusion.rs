@@ -15,6 +15,8 @@ use image::{
 use log::debug;
 use tokenizers::Tokenizer;
 
+use rand::Rng;
+
 fn scale_image(
     image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     new_width: Option<u32>,
@@ -300,6 +302,7 @@ pub struct SDConfig {
     pub img2img_strength: f64,
     pub scaled_width: Option<u32>,
     pub scaled_height: Option<u32>,
+    pub seed: Option<u32>,
 }
 
 impl SDConfig {
@@ -328,6 +331,7 @@ impl SDConfig {
             img2img_strength: 0.8,
             scaled_width: None,
             scaled_height: None,
+            seed: None,
         }
     }
 }
@@ -335,6 +339,13 @@ impl SDConfig {
 pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<u8>>>> {
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
+
+    // Check if config.seed is None and generate a new seed in that case
+    let mut seed = config.seed;
+
+    if seed.is_none() {
+        seed = Some(rand::random());
+    }
 
     if !(0. ..=1.).contains(&config.img2img_strength) {
         anyhow::bail!(
@@ -399,6 +410,9 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
 
     let scheduler = sd_config.build_scheduler(n_steps)?;
     let device = candle_examples::device(config.cpu)?;
+    if let Some(seed) = seed {
+        device.set_seed(seed.into())?;
+    }
     let use_guide_scale = guidance_scale > 1.0;
 
     let which = match config.sd_version {
