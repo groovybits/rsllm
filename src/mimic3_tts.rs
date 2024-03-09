@@ -15,16 +15,27 @@ pub struct Request {
     length_scale: Option<f32>,
     ssml: Option<bool>,
 }
+/*
+params = {
+            'text': text,
+            'voice': voice or 'en_US/cmu-arctic_low#slt',
+            'noiseScale': noise_scale or '0.333',
+            'noiseW': noise_w or '0.333',
+            'lengthScale': length_scale or '1.5',
+            'ssml': ssml or 'false',
+            'audioTarget': audio_target or 'client'
+        }
+        */
 
 impl Request {
     pub fn new(text: String, voice: String) -> Self {
         Request {
             text,
             voice,
-            noise_scale: None,
-            noise_w: None,
-            length_scale: None,
-            ssml: None,
+            noise_scale: Some(0.333),
+            noise_w: Some(0.333),
+            length_scale: Some(1.0),
+            ssml: Some(false),
         }
     }
 
