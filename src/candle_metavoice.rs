@@ -16,6 +16,7 @@ use candle_transformers::models::metavoice::{adapters, gpt, tokenizers, transfor
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::VarBuilder;
 use hf_hub::api::sync::Api;
+use rand::Rng;
 use rand::{distributions::Distribution, SeedableRng};
 
 pub const ENCODEC_NTOKENS: u32 = 1024;
@@ -36,15 +37,19 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let cpu = false;
     let guidance_scale = 3.0;
     let temperature = 1.0;
-    let seed = 299792458;
+    // Override seed for now
+    let mut seed: Option<u64> = Some(299792458);
     let max_tokens = 2000;
-    let out_file = "out.wav";
     let first_stage_meta: Option<String> = None;
     let first_stage_weights: Option<String> = None;
     let second_stage_weights: Option<String> = None;
     let encodec_weights: Option<String> = None;
     let spk_emb: Option<String> = None;
     let dtype = ArgDType::F32;
+
+    if seed.is_none() {
+        seed = Some(rand::random());
+    }
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
@@ -125,7 +130,8 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
         Some(spk_emb) => spk_emb.to_dtype(dtype)?,
     };
     let spk_emb = spk_emb.to_device(&device)?;
-    let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), Some(0.95));
+    let seed_u64 = seed.unwrap_or_else(|| rand::thread_rng().gen());
+    let mut logits_processor = LogitsProcessor::new(seed_u64, Some(temperature), Some(0.95));
 
     // First stage generation.
     for index in 0..max_tokens {
@@ -155,7 +161,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let fie2c = adapters::FlattenedInterleavedEncodec2Codebook::new(ENCODEC_NTOKENS);
     let (text_ids, ids1, ids2) = fie2c.decode(&tokens);
     log::debug!("text ids len: {}", text_ids.len());
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed + 1337);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed_u64 + 1337);
     // TODO: Use the config rather than hardcoding the offset here.
     let encoded_text: Vec<_> = prompt_tokens.iter().map(|v| v - 1024).collect();
     let mut hierarchies_in1 =

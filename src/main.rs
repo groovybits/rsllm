@@ -20,6 +20,8 @@ use log::{debug, error, info};
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_metavoice::metavoice;
 use rsllm::candle_mistral::mistral;
+use rsllm::mimic3_tts::tts as mimic3_tts;
+use rsllm::mimic3_tts::Request as Mimic3TTSRequest;
 #[cfg(feature = "ndi")]
 use rsllm::ndi::send_audio_samples_over_ndi;
 #[cfg(feature = "ndi")]
@@ -203,6 +205,24 @@ struct Args {
         help = "OAI_TTS as text to speech from openai."
     )]
     oai_tts: bool,
+
+    /// MIMIC3_TTS as text to speech from openai
+    #[clap(
+        long,
+        env = "MIMIC3_TTS",
+        default_value = "false",
+        help = "MIMIC3_TTS as text from mimic3-server local API."
+    )]
+    mimic3_tts: bool,
+
+    /// MIMIC3_VOICE voice model via text string to use for mimic3 tts, en_US/vctk_low#p326 is a good male voice
+    #[clap(
+        long,
+        env = "MIMIC3_VOICE",
+        default_value = "en_US/vctk_low#p303",
+        help = "MIMIC3_VOICE voice model via text string to use for mimic3 tts. Use en_US/vctk_low#p326 for a male voice, default is female."
+    )]
+    mimic3_voice: String,
 
     /// TTS text to speech enable
     #[clap(
@@ -1291,14 +1311,16 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         // Check if image generation is enabled and proceed
-                        if args.sd_image || args.tts_enable || args.oai_tts {
+                        if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
                             let output_id_clone = output_id.clone();
                             let sem_clone_sd_image = semaphore_sd_image.clone();
+                            let mimic3_voice = args.mimic3_voice.clone().to_string();
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
-                                let _permit = if args.sd_image || (args.oai_tts || args.tts_enable)
+                                let _permit = if args.sd_image
+                                    || (args.mimic3_tts || args.oai_tts || args.tts_enable)
                                 {
                                     // Conditionally acquire the permit and store it in an Option
                                     Some(sem_clone_sd_image.acquire().await.expect(
@@ -1377,7 +1399,7 @@ async fn main() {
                                 }
 
                                 // Integrate TTS processing here, directly after image generation
-                                if args.oai_tts || args.tts_enable {
+                                if args.mimic3_tts || args.oai_tts || args.tts_enable {
                                     let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
 
                                     let bytes_result = if args.oai_tts {
@@ -1391,6 +1413,13 @@ async fn main() {
 
                                         // Directly await the TTS operation without spawning a new thread
                                         oai_tts(oai_request, &openai_key).await
+                                    } else if args.mimic3_tts {
+                                        let api_request =
+                                            Mimic3TTSRequest::new(input, mimic3_voice);
+                                        // Mimic3 TTS request
+                                        mimic3_tts(api_request)
+                                            .await
+                                            .map_err(|e| ApiError::Error(e.to_string()))
                                     } else {
                                         // Candle TTS request
                                         metavoice(input)
@@ -1414,9 +1443,11 @@ async fn main() {
                                                 // Send audio samples over NDI with pacing
                                                 #[cfg(feature = "ndi")]
                                                 if let Ok(samples_f32) = samples_result {
-                                                    // Define chunk size and delay
-                                                    let sample_rate = 24000;
+                                                    // use 24000 unless mimic3_tts is enabled, then use 22050
+                                                    let sample_rate =
+                                                        if args.mimic3_tts { 22050 } else { 24000 };
                                                     let channels: i32 = 1;
+                                                    // Define chunk size and delay
                                                     let chunk_size = args.audio_chunk_size
                                                         * sample_rate as f32
                                                         * channels as f32; // 100ms of audio at 24kHz sample rate
@@ -1516,6 +1547,7 @@ async fn main() {
                 // TODO: do anything needed with the last paragraph bits like TTS sending
                 let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
                 let paragraph_text_clone = paragraph_text.clone();
+                let mimic3_voice = args.mimic3_voice.clone().to_string();
 
                 let output_id_clone = output_id.clone();
 
@@ -1523,18 +1555,19 @@ async fn main() {
                 let sem_clone_sd_image = semaphore_sd_image.clone();
                 let handle = tokio::spawn(async move {
                     // Declare the permit variable outside the if block to extend its scope
-                    let _permit = if args.sd_image || args.tts_enable || args.oai_tts {
-                        // Conditionally acquire the permit and store it in an Option
-                        Some(
-                            sem_clone_sd_image
-                                .acquire()
-                                .await
-                                .expect("Stable Diffusion: Failed to acquire semaphore permit"),
-                        )
-                    } else {
-                        // If the condition is not met, no permit is acquired, and None is stored
-                        None
-                    };
+                    let _permit =
+                        if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                            // Conditionally acquire the permit and store it in an Option
+                            Some(
+                                sem_clone_sd_image
+                                    .acquire()
+                                    .await
+                                    .expect("Stable Diffusion: Failed to acquire semaphore permit"),
+                            )
+                        } else {
+                            // If the condition is not met, no permit is acquired, and None is stored
+                            None
+                        };
 
                     let mut sd_config = SDConfig::new();
                     sd_config.prompt = paragraph_text_clone;
@@ -1600,7 +1633,7 @@ async fn main() {
                     }
 
                     // Integrate TTS processing here, directly after image generation
-                    if args.tts_enable || args.oai_tts {
+                    if args.tts_enable || args.oai_tts || args.mimic3_tts {
                         let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
 
                         let bytes_result = if args.oai_tts {
@@ -1614,6 +1647,12 @@ async fn main() {
 
                             // Directly await the TTS operation without spawning a new thread
                             oai_tts(oai_request, &openai_key).await
+                        } else if args.mimic3_tts {
+                            let api_request = Mimic3TTSRequest::new(input, mimic3_voice);
+                            // Mimic3 TTS request
+                            mimic3_tts(api_request)
+                                .await
+                                .map_err(|e| ApiError::Error(e.to_string()))
                         } else {
                             // Candle TTS request
                             metavoice(input)
@@ -1637,7 +1676,9 @@ async fn main() {
                                     // Send audio samples over NDI with pacing
                                     #[cfg(feature = "ndi")]
                                     if let Ok(samples_f32) = samples_result {
-                                        let sample_rate = 24000;
+                                        // use 24000 unless mimic3_tts is enabled, then use 22050
+                                        let sample_rate =
+                                            if args.mimic3_tts { 22050 } else { 24000 };
                                         let channels: i32 = 1;
                                         let chunk_size = args.audio_chunk_size
                                             * sample_rate as f32
