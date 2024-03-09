@@ -31,6 +31,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
 
+    let show_status = false;
     let tracing = false;
     let cpu = false;
     let guidance_scale = 3.0;
@@ -52,13 +53,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     } else {
         None
     };
-    println!(
-        "avx: {}, neon: {}, simd128: {}, f16c: {}",
-        candle_core::utils::with_avx(),
-        candle_core::utils::with_neon(),
-        candle_core::utils::with_simd128(),
-        candle_core::utils::with_f16c()
-    );
+
     let device = candle_examples::device(cpu)?;
     let api = Api::new()?;
     let repo = api.model("lmz/candle-metavoice".to_string());
@@ -116,10 +111,10 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let encodec_config = encodec::Config::default();
     let encodec_model = encodec::Model::new(&encodec_config, encodec_vb)?;
 
-    println!("prompt: '{}'", prompt);
+    log::debug!("prompt: '{}'", prompt);
     let prompt_tokens = fs_tokenizer.encode(&prompt)?;
     let mut tokens = prompt_tokens.clone();
-    println!("{tokens:?}");
+    log::debug!("{tokens:?}");
     let spk_emb_file = match &spk_emb {
         Some(w) => std::path::PathBuf::from(w),
         None => repo.get("spk_emb.safetensors")?,
@@ -146,16 +141,20 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
         let logits = logits.to_dtype(DType::F32)?;
         let next_token = logits_processor.sample(&logits)?;
         tokens.push(next_token);
-        print!(".");
+        if show_status {
+            print!(".");
+        }
         std::io::stdout().flush()?;
         if next_token == 2048 {
             break;
         }
     }
-    println!();
+    if show_status {
+        println!("");
+    }
     let fie2c = adapters::FlattenedInterleavedEncodec2Codebook::new(ENCODEC_NTOKENS);
     let (text_ids, ids1, ids2) = fie2c.decode(&tokens);
-    println!("text ids len: {}", text_ids.len());
+    log::debug!("text ids len: {}", text_ids.len());
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed + 1337);
     // TODO: Use the config rather than hardcoding the offset here.
     let encoded_text: Vec<_> = prompt_tokens.iter().map(|v| v - 1024).collect();
@@ -173,7 +172,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let in_x2 = Tensor::new(hierarchies_in2, &device)?;
     let in_x = Tensor::stack(&[in_x1, in_x2], 0)?.unsqueeze(0)?;
     let logits = second_stage_model.forward(&in_x)?;
-    println!("sampling from logits...");
+    log::debug!("sampling from logits...");
     let mut codes = vec![];
     for logits in logits.iter() {
         let logits = logits.squeeze(0)?;
@@ -192,15 +191,15 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
 
     let codes = Tensor::new(codes, &device)?.unsqueeze(0)?;
     let codes = Tensor::cat(&[in_x, codes], 1)?;
-    println!("codes: {codes}");
+    log::debug!("codes: {codes}");
     let tilted_encodec = adapters::TiltedEncodec::new(ENCODEC_NTOKENS);
     let codes = codes.i(0)?.to_vec2::<u32>()?;
     let (text_ids, audio_ids) = tilted_encodec.decode(&codes);
-    println!("text_ids len: {:?}", text_ids.len());
+    log::debug!("text_ids len: {:?}", text_ids.len());
     let audio_ids = Tensor::new(audio_ids, encodec_device)?.unsqueeze(0)?;
-    println!("audio_ids shape: {:?}", audio_ids.shape());
+    log::debug!("audio_ids shape: {:?}", audio_ids.shape());
     let pcm = encodec_model.decode(&audio_ids)?;
-    println!("output pcm shape: {:?}", pcm.shape());
+    log::debug!("output pcm shape: {:?}", pcm.shape());
     let pcm = pcm.i(0)?.i(0)?.to_dtype(DType::F32)?;
     let pcm = candle_examples::audio::normalize_loudness(&pcm, 24_000, true)?;
     let pcm = pcm.to_vec1::<f32>()?;
