@@ -215,6 +215,15 @@ struct Args {
     )]
     mimic3_tts: bool,
 
+    /// MIMIC3_VOICE voice model via text string to use for mimic3 tts, en_US/vctk_low#p326 is a good male voice
+    #[clap(
+        long,
+        env = "MIMIC3_VOICE",
+        default_value = "en_US/vctk_low#p303",
+        help = "MIMIC3_VOICE voice model via text string to use for mimic3 tts. Use en_US/vctk_low#p326 for a male voice, default is female."
+    )]
+    mimic3_voice: String,
+
     /// TTS text to speech enable
     #[clap(
         long,
@@ -1307,6 +1316,7 @@ async fn main() {
                             let paragraph_clone = paragraphs[paragraph_count].clone();
                             let output_id_clone = output_id.clone();
                             let sem_clone_sd_image = semaphore_sd_image.clone();
+                            let mimic3_voice = args.mimic3_voice.clone().to_string();
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
                                 let _permit = if args.sd_image
@@ -1404,10 +1414,8 @@ async fn main() {
                                         // Directly await the TTS operation without spawning a new thread
                                         oai_tts(oai_request, &openai_key).await
                                     } else if args.mimic3_tts {
-                                        let api_request = Mimic3TTSRequest::new(
-                                            input,
-                                            "en_US/vctk_low#p303".to_string(),
-                                        );
+                                        let api_request =
+                                            Mimic3TTSRequest::new(input, mimic3_voice);
                                         // Mimic3 TTS request
                                         mimic3_tts(api_request)
                                             .await
@@ -1539,6 +1547,7 @@ async fn main() {
                 // TODO: do anything needed with the last paragraph bits like TTS sending
                 let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
                 let paragraph_text_clone = paragraph_text.clone();
+                let mimic3_voice = args.mimic3_voice.clone().to_string();
 
                 let output_id_clone = output_id.clone();
 
@@ -1639,8 +1648,7 @@ async fn main() {
                             // Directly await the TTS operation without spawning a new thread
                             oai_tts(oai_request, &openai_key).await
                         } else if args.mimic3_tts {
-                            let api_request =
-                                Mimic3TTSRequest::new(input, "en_US/vctk_low#p303".to_string());
+                            let api_request = Mimic3TTSRequest::new(input, mimic3_voice);
                             // Mimic3 TTS request
                             mimic3_tts(api_request)
                                 .await
