@@ -64,6 +64,15 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
             message
         );
 
+        client
+            .privmsg(
+                msg.channel(),
+                "Currently playing experimental Rust based AI with Google Gemma. Will be back to regular chat soon, enjoy the stories.",
+            )
+            .reply_to(msg.message_id())
+            .send()
+            .await?;
+
         return Ok(());
     }
 
@@ -71,10 +80,11 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
         "Twitch recieved a help message from {}",
         msg.sender().name()
     );
+
     client
         .privmsg(
             msg.channel(),
-            "How to use the chat: !help, !message <message>.",
+            "How to use the chat: !help, !message <message> (Currently under construction, will be back to regular chat soon).",
         )
         .reply_to(msg.message_id())
         .send()
