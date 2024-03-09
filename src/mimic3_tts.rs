@@ -6,15 +6,22 @@ use serde::Serialize;
 
 const ENDPOINT: &str = "http://localhost:59125/api/tts"; // Mimic3 endpoint
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Request {
     text: String,
     voice: String,
-    noise_scale: Option<f32>,
-    noise_w: Option<f32>,
-    length_scale: Option<f32>,
-    ssml: Option<bool>,
+    #[serde(skip)]
+    noise_scale: Option<f32>, // Defaults to 0.333 if None
+    #[serde(skip)]
+    noise_w: Option<f32>, // Defaults to 0.333 if None
+    #[serde(skip)]
+    length_scale: Option<f32>, // Defaults to 1.0 if None
+    #[serde(skip)]
+    ssml: Option<bool>, // Defaults to false if None
+    #[serde(skip)]
+    audio_target: Option<String>, // Defaults to "client" if None
 }
+
 /*
 params = {
             'text': text,
@@ -24,18 +31,19 @@ params = {
             'lengthScale': length_scale or '1.5',
             'ssml': ssml or 'false',
             'audioTarget': audio_target or 'client'
-        }
-        */
+}
+*/
 
 impl Request {
     pub fn new(text: String, voice: String) -> Self {
         Request {
             text,
             voice,
-            noise_scale: Some(0.333),
-            noise_w: Some(0.333),
-            length_scale: Some(1.0),
-            ssml: Some(false),
+            noise_scale: None,  // Default applied later
+            noise_w: None,      // Default applied later
+            length_scale: None, // Default applied later
+            ssml: None,         // Default applied later
+            audio_target: None, // Default applied later
         }
     }
 
@@ -58,19 +66,46 @@ impl Request {
         self.ssml = Some(ssml);
         self
     }
+
+    pub fn audio_target(mut self, target: String) -> Self {
+        self.audio_target = Some(target);
+        self
+    }
 }
 
 pub async fn tts(req: Request) -> Result<Bytes, ApiError> {
     let client = Client::new();
 
-    debug!("Sending TTS request with voice: {} to Mimic3", req.voice);
+    // Applying defaults where None is encountered
+    let noise_scale = req.noise_scale.unwrap_or(0.333);
+    let noise_w = req.noise_w.unwrap_or(0.333);
+    let length_scale = req.length_scale.unwrap_or(1.0);
+    let ssml = req.ssml.unwrap_or(false);
+    let audio_target = req.audio_target.unwrap_or_else(|| "client".to_string());
 
-    let response = client.post(ENDPOINT).json(&req).send().await;
+    let query_params = format!(
+        "text={}&voice={}&noiseScale={}&noiseW={}&lengthScale={}&ssml={}&audioTarget={}",
+        urlencoding::encode(&req.text),
+        urlencoding::encode(&req.voice),
+        noise_scale,
+        noise_w,
+        length_scale,
+        ssml,
+        urlencoding::encode(&audio_target),
+    );
+
+    let url = format!("{}?{}", ENDPOINT, query_params);
+
+    debug!("Sending TTS GET request to URL: {}", url);
+
+    let response = client.get(&url).send().await;
 
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                resp.bytes().await.map_err(ApiError::from)
+                debug!("TTS request successful.");
+                let audio_data = resp.bytes().await.map_err(ApiError::from)?;
+                Ok(audio_data) // Returning the raw audio data as Bytes
             } else {
                 let error_msg = format!("HTTP Error: {}", resp.status());
                 Err(ApiError::Error(error_msg))

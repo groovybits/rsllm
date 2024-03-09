@@ -15,8 +15,6 @@ use image::{
 use log::debug;
 use tokenizers::Tokenizer;
 
-use rand::Rng;
-
 fn scale_image(
     image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     new_width: Option<u32>,
