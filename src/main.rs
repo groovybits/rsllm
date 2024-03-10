@@ -1169,6 +1169,7 @@ async fn main() {
 
         let model_id = args.model_id.clone();
 
+        // Spawn a thread to run the LLM function, to keep the UI responsive streaming the response
         if !args.use_api && !args.use_openai {
             // Capture the start time for performance metrics
             let start = Instant::now();
