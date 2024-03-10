@@ -20,7 +20,9 @@ use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, info};
+use std::sync::Arc;
 use tokenizers::Tokenizer;
+use tokio::sync::Mutex;
 
 enum Model {
     Mistral(Mistral),
@@ -246,25 +248,28 @@ pub fn mistral(
         internal_sender,
     );
 
+    let pipeline = Arc::new(Mutex::new(pipeline));
+
     // Start the text generation in a separate thread
+    let pipeline_clone = pipeline.clone();
+    let prompt_clone = prompt.clone();
     tokio::spawn(async move {
-        pipeline
-            .run(&prompt, sample_len)
-            .await
-            .expect("Failed to run the pipeline");
+        let mut pipeline = pipeline_clone.lock().await;
+        match pipeline.run(&prompt_clone, sample_len).await {
+            Ok(_) => {}
+            Err(e) => log::error!("Failed to run the pipeline: {}", e),
+        }
     });
 
     // Set up a thread to listen on the internal receiver and forward messages to the external sender
     let external_sender_clone = external_sender.clone();
     tokio::spawn(async move {
         while let Some(token) = internal_receiver.recv().await {
-            external_sender_clone
-                .send(token)
-                .await
-                .expect("Failed to send token externally");
+            if let Err(e) = external_sender_clone.send(token).await {
+                log::error!("Failed to send token externally: {}", e);
+            }
         }
     });
 
-    // Additional logic as needed...
     Ok(())
 }
