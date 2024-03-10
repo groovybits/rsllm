@@ -67,7 +67,7 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
         client
             .privmsg(
                 msg.channel(),
-                "Currently playing experimental Rust based AI with Google Gemma. Will be back to regular chat soon, enjoy the stories.",
+                "Currently playing experimental Rust based AI with Candle. Will be back to regular chat soon, enjoy the stories.",
             )
             .reply_to(msg.message_id())
             .send()
