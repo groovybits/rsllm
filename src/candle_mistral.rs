@@ -175,10 +175,12 @@ pub fn mistral(
                 if quantized {
                     "lmz/candle-mistral".to_string()
                 } else {
-                    "mistralai/Mistral-7B-v0.1".to_string()
+                    "mistralai/Mistral-7B-Instruct-v0.2".to_string()
                 }
             } else if model_id.to_lowercase() == "7b-it" {
-                "Mistral-7B-Instruct-v0.2".to_string()
+                "mistralai/Mistral-7B-Instruct-v0.2".to_string()
+            } else if model_id.to_lowercase() == "7b" {
+                "mistralai/Mistral-7B-v0.1".to_string()
             } else {
                 model_id.to_string()
             }
@@ -187,7 +189,7 @@ pub fn mistral(
             if quantized {
                 "lmz/candle-mistral".to_string()
             } else {
-                "mistralai/Mistral-7B-v0.1".to_string()
+                "mistralai/Mistral-7B-Instruct-v0.2".to_string()
             }
         }
     };
