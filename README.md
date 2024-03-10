@@ -10,7 +10,7 @@ The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal 
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
 -   **TTS MetaVoice / Mimic3 TTS API / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support generates very nice speech for a prie if wanting quality/realtime speech generation. Mimic3 TTS API requires running the mimic3-server and is a bit more involved but is a good alternative to OpenAI TTS API since it is free if you have a local system. <https://github.com/MycroftAI/mimic3>
 
-![RSLLM](https://storage.googleapis.com/groovbits/images/rsllm/rsllm.webp)
+![RSLLM](https://storage.cloud.google.com/groovybits/images/rsllm/rsllm.webp)
 
 ## Core Components
 
