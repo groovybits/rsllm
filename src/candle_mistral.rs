@@ -177,6 +177,8 @@ pub fn mistral(
                 } else {
                     "mistralai/Mistral-7B-v0.1".to_string()
                 }
+            } else if model_id.to_lowercase() == "7b-it" {
+                "Mistral-7B-Instruct-v0.2".to_string()
             } else {
                 model_id.to_string()
             }

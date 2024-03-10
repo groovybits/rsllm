@@ -1175,7 +1175,12 @@ async fn main() {
             let start = Instant::now();
 
             let chat_format = if args.candle_llm == "mistral" {
-                "llama2".to_string()
+                // check if model_id includes the string "Instruct" within it
+                if args.model_id.contains("Instruct") {
+                    "llama2".to_string()
+                } else {
+                    "".to_string()
+                }
             } else if args.candle_llm == "gemma" {
                 if args.model_id == "7b-it" {
                     "google".to_string()
@@ -1185,7 +1190,7 @@ async fn main() {
                     "".to_string()
                 }
             } else {
-                "llama2".to_string()
+                "".to_string()
             };
 
             let prompt = format_messages_for_llama2(messages.clone(), chat_format);
