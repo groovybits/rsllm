@@ -98,6 +98,7 @@ pub fn send_images_over_ndi(
     images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     subtitle: &str,
     font_size: f32,
+    image_alignment: &str,
 ) -> Result<()> {
     let mut sender = NDI_SENDER.lock().unwrap();
 
@@ -106,8 +107,13 @@ pub fn send_images_over_ndi(
         let height = image_buffer.height();
         let start_pos = (10, height as i32 - (height as i32 / 3)); // Text start position (x, y)
 
-        let rgba_buffer =
-            convert_rgb_to_rgba_with_text(&image_buffer, subtitle, font_size, start_pos);
+        let rgba_buffer = convert_rgb_to_rgba_with_text(
+            &image_buffer,
+            subtitle,
+            font_size,
+            start_pos,
+            image_alignment,
+        );
 
         let frame = ndi_sdk::send::create_ndi_send_video_frame(
             width as i32,
@@ -172,12 +178,16 @@ fn convert_rgb_to_rgba_with_text(
     text: &str,
     font_size: f32,
     start_pos: (i32, i32), // Text start position (x, y)
+    image_alignment: &str,
 ) -> Vec<u8> {
     // Load the font. Ensure you have the font file at the specified path in your project directory.
     // The path should be relative to the root of your crate; for example, if your font is in the root,
     // the path could simply be "your_font.ttf".
-    //let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf"); // Include your font file in the path
-    let font_data = include_bytes!("/System/Library/Fonts/Hiragino Sans GB.ttc"); // Include your font file in the path
+    //
+    //let font_data = include_bytes!("/System/Library/Fonts/Hiragino Sans GB.ttc");
+    //
+    let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf");
+
     let font = Font::try_from_bytes(font_data as &[u8]).expect("Error constructing Font");
 
     // Create a new ImageBuffer where we'll draw our text. Convert RGB to RGBA by adding an alpha channel.

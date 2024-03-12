@@ -521,7 +521,7 @@ struct Args {
         long,
         env = "SD_MAX_LENGTH",
         default_value_t = 80,
-        help = "SD Max Length for SD Image."
+        help = "SD Max Length for SD Image hardsub text segments. Will be less than this amount."
     )]
     sd_max_length: usize,
 
@@ -613,6 +613,15 @@ struct Args {
         help = "hardsub font size"
     )]
     hardsub_font_size: f32,
+
+    /// Image alignment - left or right, center is default
+    #[clap(
+        long,
+        env = "IMAGE_ALIGNMENT",
+        default_value = "center",
+        help = "Image alignment - left or right, center is default."
+    )]
+    image_alignment: String,
 
     /// enable twitch client
     #[clap(
@@ -1323,6 +1332,8 @@ async fn main() {
                             let output_id_clone = output_id.clone();
                             let sem_clone_sd_image = semaphore_sd_image.clone();
                             let mimic3_voice = args.mimic3_voice.clone().to_string();
+                            let image_alignment = args.image_alignment.clone();
+
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
                                 let _permit = if args.sd_image
@@ -1368,6 +1379,7 @@ async fn main() {
                                                     images.clone(),
                                                     &prompt_clone,
                                                     args.hardsub_font_size,
+                                                    &image_alignment,
                                                 )
                                                 .unwrap();
                                             }
@@ -1559,6 +1571,7 @@ async fn main() {
 
                 // end of the last paragraph image generation
                 let sem_clone_sd_image = semaphore_sd_image.clone();
+                let image_alignment = args.image_alignment.clone();
                 let handle = tokio::spawn(async move {
                     // Declare the permit variable outside the if block to extend its scope
                     let _permit =
@@ -1607,6 +1620,7 @@ async fn main() {
                                         images.clone(),
                                         &prompt_clone,
                                         args.hardsub_font_size,
+                                        &image_alignment,
                                     )
                                     .unwrap();
                                 }
