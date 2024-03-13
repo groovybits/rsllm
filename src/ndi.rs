@@ -215,40 +215,41 @@ fn convert_rgb_to_rgba_with_text(
     image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>,
     text: &str,
     font_size: f32,
-    start_pos: (i32, i32), // Text start position (x, y)
+    start_pos: (i32, i32),
 ) -> Vec<u8> {
-    // Load the font. Ensure you have the font file at the specified path in your project directory.
-    // The path should be relative to the root of your crate; for example, if your font is in the root,
-    // the path could simply be "your_font.ttf".
-    //
-    //let font_data = include_bytes!("/System/Library/Fonts/Hiragino Sans GB.ttc");
-    //
-    //let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf");
-    //
     let font_data = include_bytes!("../fonts/TrebuchetMSBold.ttf");
-
     let font = Font::try_from_bytes(font_data as &[u8]).expect("Error constructing Font");
 
-    // Create a new ImageBuffer where we'll draw our text. Convert RGB to RGBA by adding an alpha channel.
-    let mut image_rgba =
-        ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
-            let pixel = image_buffer.get_pixel(x, y);
-            Rgba([pixel[0], pixel[1], pixel[2], 255]) // Copy the RGB pixel and add full alpha
-        });
+    let mut image_rgba = ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
+        let pixel = image_buffer.get_pixel(x, y);
+        Rgba([pixel[0], pixel[1], pixel[2], 255])
+    });
 
-    // Setup for drawing text
-    let scale = Scale {
-        x: font_size,
-        y: font_size,
-    }; // Adjust the font scale/size as needed
+    let scale = Scale { x: font_size, y: font_size };
     let text_color = Rgba([255, 255, 255, 0xff]);
+    let shadow_color = Rgba([0, 0, 0, 255]);
+    let shadow_offset = 7; // Shadow offset in pixels
 
-    // Wrap text and draw it
-    let max_width = image_buffer.width() as i32 - (start_pos.0 as i32 * 2); // Max width for text before wrapping
-    let wrapped_text = wrap_text(text, &font, scale, max_width);
+    // Draw shadow
+    let wrapped_text_shadow = wrap_text(text, &font, scale, image_buffer.width() as i32 - (start_pos.0 + shadow_offset) * 2);
+    let mut current_height_shadow = start_pos.1 + shadow_offset;
+    for line in &wrapped_text_shadow {
+        draw_text_mut(
+            &mut image_rgba,
+            shadow_color,
+            start_pos.0 + shadow_offset,
+            current_height_shadow,
+            scale,
+            &font,
+            line,
+        );
+        current_height_shadow += font_size as i32;
+    }
 
+    // Draw text
+    let wrapped_text = wrap_text(text, &font, scale, image_buffer.width() as i32 - start_pos.0 * 2);
     let mut current_height = start_pos.1;
-    for line in wrapped_text {
+    for line in &wrapped_text {
         draw_text_mut(
             &mut image_rgba,
             text_color,
@@ -256,19 +257,15 @@ fn convert_rgb_to_rgba_with_text(
             current_height,
             scale,
             &font,
-            &line,
+            line,
         );
-        current_height += font_size as i32; // Adjust based on font size or measured line height
+        current_height += font_size as i32;
     }
 
-    // Convert the modified RGBA image buffer back to a flat Vec<u8>
-    image_rgba
-        .pixels()
-        .flat_map(|pixel| {
-            let Rgba(data) = *pixel;
-            vec![data[0], data[1], data[2], data[3]] // Return the RGBA values including the alpha channel
-        })
-        .collect()
+    image_rgba.pixels().flat_map(|pixel| {
+        let Rgba(data) = *pixel;
+        vec![data[0], data[1], data[2], data[3]]
+    }).collect()
 }
 
 #[cfg(feature = "ndi")]

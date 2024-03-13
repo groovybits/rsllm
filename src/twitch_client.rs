@@ -67,7 +67,7 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
         client
             .privmsg(
                 msg.channel(),
-                "Currently playing experimental Rust based AI with Candle. Will be back to regular chat soon, enjoy the stories.",
+                "Currently building a Rust based system which will be way better with realtime streaming my chat! Right now I am a WIP experimental Rust based AI with Candle. Will allow chat input again within a few days, enjoy the stories.",
             )
             .reply_to(msg.message_id())
             .send()
@@ -84,7 +84,7 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
     client
         .privmsg(
             msg.channel(),
-            "How to use the chat: !help, !message <message> (Currently under construction, will be back to regular chat soon).",
+            "Sorry for the lack of interactive messaging, for now please chat with me directly in chat :)", // How to use the chat: !help, !message <message>.",
         )
         .reply_to(msg.message_id())
         .send()
