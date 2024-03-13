@@ -134,7 +134,7 @@ pub fn gemma(
     let config_file: Option<String> = None;
     let weight_files: Option<String> = None;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 64; //prompt.len();
+    let repeat_last_n = (sample_len / 4) + prompt.len();
 
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::prelude::*;
@@ -146,7 +146,7 @@ pub fn gemma(
     } else {
         None
     };
-    info!(
+    debug!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
