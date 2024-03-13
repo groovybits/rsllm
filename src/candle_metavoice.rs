@@ -12,6 +12,7 @@ use std::io::Write;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::encodec;
 use candle_transformers::models::metavoice::{adapters, gpt, tokenizers, transformer};
+use candle_transformers::models::quantized_metavoice::transformer as qtransformer;
 
 use candle_core::{DType, IndexOp, Tensor};
 use candle_nn::VarBuilder;
@@ -26,6 +27,11 @@ enum ArgDType {
     F32,
     F16,
     Bf16,
+}
+
+enum Transformer {
+    Normal(transformer::Model),
+    Quantized(qtransformer::Model),
 }
 
 pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
@@ -46,6 +52,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let encodec_weights: Option<String> = None;
     let spk_emb: Option<String> = None;
     let dtype = ArgDType::F32;
+    let quantized = true;
 
     if seed.is_none() {
         seed = Some(rand::random());
@@ -77,10 +84,6 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     };
     let fs_tokenizer = tokenizers::BPE::from_json(first_stage_tokenizer, 512)?;
 
-    let first_stage_weights = match &first_stage_weights {
-        Some(w) => std::path::PathBuf::from(w),
-        None => repo.get("first_stage.safetensors")?,
-    };
     let second_stage_weights = match &second_stage_weights {
         Some(w) => std::path::PathBuf::from(w),
         None => repo.get("second_stage.safetensors")?,
@@ -96,10 +99,26 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
         ArgDType::F16 => DType::F16,
         ArgDType::Bf16 => DType::BF16,
     };
-    let first_stage_vb =
-        unsafe { VarBuilder::from_mmaped_safetensors(&[first_stage_weights], dtype, &device)? };
     let first_stage_config = transformer::Config::cfg1b_v0_1();
-    let mut first_stage_model = transformer::Model::new(&first_stage_config, first_stage_vb)?;
+    let mut first_stage_model = if quantized {
+        let filename = match &first_stage_weights {
+            Some(w) => std::path::PathBuf::from(w),
+            None => repo.get("first_stage_q4k.gguf")?,
+        };
+        let vb =
+            candle_transformers::quantized_var_builder::VarBuilder::from_gguf(filename, &device)?;
+        let first_stage_model = qtransformer::Model::new(&first_stage_config, vb)?;
+        Transformer::Quantized(first_stage_model)
+    } else {
+        let first_stage_weights = match &first_stage_weights {
+            Some(w) => std::path::PathBuf::from(w),
+            None => repo.get("first_stage.safetensors")?,
+        };
+        let first_stage_vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[first_stage_weights], dtype, &device)? };
+        let first_stage_model = transformer::Model::new(&first_stage_config, first_stage_vb)?;
+        Transformer::Normal(first_stage_model)
+    };
 
     let second_stage_vb =
         unsafe { VarBuilder::from_mmaped_safetensors(&[second_stage_weights], dtype, &device)? };
@@ -140,7 +159,12 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
         let ctxt = &tokens[start_pos..];
         let input = Tensor::new(ctxt, &device)?;
         let input = Tensor::stack(&[&input, &input], 0)?;
-        let logits = first_stage_model.forward(&input, &spk_emb, tokens.len() - context_size)?;
+        let logits = match &mut first_stage_model {
+            Transformer::Normal(m) => m.forward(&input, &spk_emb, tokens.len() - context_size)?,
+            Transformer::Quantized(m) => {
+                m.forward(&input, &spk_emb, tokens.len() - context_size)?
+            }
+        };
         let logits0 = logits.i((0, 0))?;
         let logits1 = logits.i((1, 0))?;
         let logits = ((logits0 * guidance_scale)? + logits1 * (1. - guidance_scale))?;

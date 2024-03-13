@@ -98,22 +98,38 @@ pub fn send_images_over_ndi(
     images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>,
     subtitle: &str,
     font_size: f32,
-    image_alignment: &str,
+    subtitle_position: &str,
 ) -> Result<()> {
     let mut sender = NDI_SENDER.lock().unwrap();
 
     for image_buffer in images {
         let width = image_buffer.width();
         let height = image_buffer.height();
-        let start_pos = (10, height as i32 - (height as i32 / 3)); // Text start position (x, y)
 
-        let rgba_buffer = convert_rgb_to_rgba_with_text(
-            &image_buffer,
-            subtitle,
-            font_size,
-            start_pos,
-            image_alignment,
-        );
+        // adjust height depending on subtitle_postion as top, center, bottom with respect to the image height
+        let mut subtitle_height = height as i32 - (height as i32 / 3);
+        if subtitle_position == "top" {
+            subtitle_height = 10;
+        } else if subtitle_position == "mid-top" {
+            subtitle_height = height as i32 - (height as i32 / 2) / 2;
+        } else if subtitle_position == "center" || subtitle_position == "middle" {
+            subtitle_height = height as i32 - (height as i32 / 2);
+        } else if subtitle_position == "mid-bottom" {
+            subtitle_height = height as i32 - (height as i32 / 3);
+        } else if subtitle_position == "bottom" {
+            subtitle_height = height as i32 - ((height as i32 / 4) + (font_size as i32 * 2));
+        } else {
+            log::error!(
+                "Invalid subtitle position '{}', using default position bottome as value {} instead.",
+                subtitle_position,
+                subtitle_height
+            );
+        }
+
+        let start_pos = ((font_size as i32 * 1) as i32, subtitle_height); // Text start position (x, y)
+
+        let rgba_buffer =
+            convert_rgb_to_rgba_with_text(&image_buffer, subtitle, font_size, start_pos);
 
         let frame = ndi_sdk::send::create_ndi_send_video_frame(
             width as i32,
@@ -157,6 +173,28 @@ fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -> Ve
         }
     }
 
+    // go through lines and break any that exceed our max length into smaller lines and adjust proceeding lines
+    // force break without wrap_text function since we are not breaking by spaces but by characters instead
+    let mut i = 0;
+    while i < lines.len() {
+        let line = &lines[i];
+        if text_width(line, font, scale) > max_width as f32 {
+            // break line into smaller lines by character not by spaces
+            let mut new_lines = Vec::new();
+            let mut current_line = String::new();
+            for c in line.chars() {
+                let char_width = font.glyph(c).scaled(scale).h_metrics().advance_width;
+                if text_width(&current_line, font, scale) + char_width <= max_width as f32 {
+                    current_line.push(c);
+                } else {
+                    new_lines.push(current_line);
+                    current_line = String::from(c);
+                }
+            }
+        }
+        i += 1;
+    }
+
     if !current_line.is_empty() {
         lines.push(current_line);
     }
@@ -178,7 +216,6 @@ fn convert_rgb_to_rgba_with_text(
     text: &str,
     font_size: f32,
     start_pos: (i32, i32), // Text start position (x, y)
-    image_alignment: &str,
 ) -> Vec<u8> {
     // Load the font. Ensure you have the font file at the specified path in your project directory.
     // The path should be relative to the root of your crate; for example, if your font is in the root,
@@ -205,7 +242,7 @@ fn convert_rgb_to_rgba_with_text(
     let text_color = Rgba([255, 255, 255, 0xff]);
 
     // Wrap text and draw it
-    let max_width = image_buffer.width() as i32 - start_pos.0; // Max width for text before wrapping
+    let max_width = image_buffer.width() as i32 - (start_pos.0 as i32 * 2); // Max width for text before wrapping
     let wrapped_text = wrap_text(text, &font, scale, max_width);
 
     let mut current_height = start_pos.1;

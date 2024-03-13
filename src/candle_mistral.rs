@@ -146,7 +146,7 @@ pub fn mistral(
     let tokenizer_file: Option<String> = None;
     let weight_files: Option<String> = None;
     let repeat_penalty = 1.1;
-    let repeat_last_n = 64; //prompt.len();
+    let repeat_last_n = (sample_len / 4) + prompt.len();
 
     let _guard = if tracing {
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
@@ -155,14 +155,14 @@ pub fn mistral(
     } else {
         None
     };
-    info!(
+    debug!(
         "avx: {}, neon: {}, simd128: {}, f16c: {}",
         candle_core::utils::with_avx(),
         candle_core::utils::with_neon(),
         candle_core::utils::with_simd128(),
         candle_core::utils::with_f16c()
     );
-    debug!(
+    info!(
         "temp: {:.2} repeat-penalty: {:.2} repeat-last-n: {}",
         temperature, repeat_penalty, repeat_last_n
     );

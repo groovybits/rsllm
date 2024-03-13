@@ -19,6 +19,7 @@ fn scale_image(
     image: ImageBuffer<Rgb<u8>, Vec<u8>>,
     new_width: Option<u32>,
     new_height: Option<u32>,
+    image_position: Option<String>,
 ) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
     if let (Some(target_width), Some(target_height)) = (new_width, new_height) {
         if target_width == 0 || target_height == 0 {
@@ -37,13 +38,20 @@ fn scale_image(
         // Create a new image with the target dimensions filled with black pixels.
         let mut new_image = ImageBuffer::from_pixel(target_width, target_height, Rgb([0, 0, 0]));
 
-        // Calculate the offsets to center the scaled image.
-        let x_offset = (target_width - scaled_width) / 2;
+        // Calculate the offsets to position the scaled image based on image_position.
+        let x_offset = match image_position.as_deref() {
+            Some("left") => 0,
+            Some("right") => target_width - scaled_width,
+            _ => (target_width - scaled_width) / 2, // Default to center if it's not "left" or "right"
+        };
         let y_offset = (target_height - scaled_height) / 2;
 
         // Copy the scaled image onto the new image at the calculated offset.
         for (x, y, pixel) in scaled_image.enumerate_pixels() {
-            new_image.put_pixel(x + x_offset, y + y_offset, *pixel);
+            // Ensure the pixel is within the bounds of the target image dimensions.
+            if x + x_offset < target_width && y + y_offset < target_height {
+                new_image.put_pixel(x + x_offset, y + y_offset, *pixel);
+            }
         }
 
         new_image
@@ -300,6 +308,7 @@ pub struct SDConfig {
     pub img2img_strength: f64,
     pub scaled_width: Option<u32>,
     pub scaled_height: Option<u32>,
+    pub image_position: Option<String>,
     pub seed: Option<u32>,
 }
 
@@ -329,6 +338,7 @@ impl SDConfig {
             img2img_strength: 0.8,
             scaled_width: None,
             scaled_height: None,
+            image_position: None,
             seed: None,
         }
     }
@@ -578,7 +588,14 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
 
     let scaled_images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> = images
         .into_iter()
-        .map(|image| scale_image(image, config.scaled_width, config.scaled_height))
+        .map(|image| {
+            scale_image(
+                image,
+                config.scaled_width,
+                config.scaled_height,
+                config.image_position.clone(),
+            )
+        })
         .collect();
 
     Ok(scaled_images)

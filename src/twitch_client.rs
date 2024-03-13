@@ -12,14 +12,14 @@ pub async fn setup(nick: String, token: String, channel: Vec<String>) -> Result<
         .map(tmi::Channel::parse)
         .collect::<Result<Vec<_>, _>>()?;
 
-    println!("Connecting as {}", credentials.nick);
+    log::info!("Connecting as {}", credentials.nick);
     let mut client = tmi::Client::builder()
         .credentials(credentials)
         .connect()
         .await?;
 
     client.join_all(&channels).await?;
-    println!("Joined the following channels: {}", channels.join(", "));
+    log::info!("Joined the following channels: {}", channels.join(", "));
 
     run(client, channels).await
 }
@@ -40,7 +40,7 @@ async fn run(mut client: tmi::Client, channels: Vec<tmi::Channel>) -> Result<()>
 }
 
 async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
-    println!("\nTwitch Message: {:?}", msg);
+    log::debug!("\nTwitch Message: {:?}", msg);
     log::info!(
         "Twitch Message from {}: {}",
         msg.sender().name(),

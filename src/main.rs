@@ -525,6 +525,15 @@ struct Args {
     )]
     sd_max_length: usize,
 
+    /// SD Paragraph segment minimum
+    #[clap(
+        long,
+        env = "SD_PARAGRAPH_MIN",
+        default_value_t = 40,
+        help = "SD Min Length for text segments generating Images. Will force past this value before segmenting text."
+    )]
+    sd_text_min: usize,
+
     /// Save Images - save images from the LLM messages
     #[clap(
         long,
@@ -622,6 +631,15 @@ struct Args {
         help = "Image alignment - left or right, center is default."
     )]
     image_alignment: String,
+
+    /// Subtitle position - top, mid-top, center, mid-bottom, bottom - bottom is default
+    #[clap(
+        long,
+        env = "SUBTITLE_POSITION",
+        default_value = "bottom",
+        help = "Subtitle position."
+    )]
+    subtitle_position: String,
 
     /// enable twitch client
     #[clap(
@@ -1244,11 +1262,12 @@ async fn main() {
 
             // Count tokens and collect output
             let mut token_count = 0;
+            let mut terminal_token_len = 0;
             let mut answers = Vec::new();
             let mut paragraphs: Vec<String> = Vec::new();
             let mut current_paragraph: Vec<String> = Vec::new();
             let mut paragraph_count = 0;
-            let min_paragraph_len = 40; // Minimum length of a paragraph to generate an image
+            let min_paragraph_len = args.sd_text_min; // Minimum length of a paragraph to generate an image
             let mut image_spawn_handles = Vec::new();
 
             // Stable Diffusion number of tasks max
@@ -1260,6 +1279,7 @@ async fn main() {
 
             while let Some(received) = external_receiver.recv().await {
                 token_count += 1;
+                terminal_token_len += received.len();
 
                 // Store the received token
                 answers.push(received.clone());
@@ -1271,7 +1291,7 @@ async fn main() {
                             || received.contains('?')
                             || received.contains('\n')
                             || received.contains('!'))
-                        || (current_paragraph.join("").len() > (2 * args.sd_max_length)
+                        || (current_paragraph.join("").len() >= (2.5 * args.sd_max_length as f32) as usize
                             && (received.contains(' '))))
                 {
                     // Join the current paragraph tokens into a single String without adding extra spaces
@@ -1282,7 +1302,7 @@ async fn main() {
                         // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
                         // Safely handle split at the newline character
                         let mut split_pos = received.len();
-                        for delimiter in ['\n', '.', '?', '!'] {
+                        for delimiter in ['\n', '.', ',', '?', '!'] {
                             if let Some(pos) = received.find(delimiter) {
                                 // Adjust position to keep the delimiter with the first part, except for '\n'
                                 let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
@@ -1303,10 +1323,13 @@ async fn main() {
                         let (mut first, mut second) = received.split_at(split_pos);
 
                         // If splitting on '\n', adjust 'first' and 'second' to not include '\n' in 'first'
+                        let mut nl:bool = false;
                         if first.ends_with('\n') {
                             first = &first[..first.len() - 1];
+                            nl = true;
                         } else if second.starts_with('\n') {
                             second = &second[1..];
+                            nl = true;
                         }
 
                         // Store the first part of the split token into the current paragraph
@@ -1315,15 +1338,22 @@ async fn main() {
                         let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
                         paragraphs.push(paragraph_text.clone());
 
+                        // Token output to stdout in real-time
+                        print!("{}", first);
+                        if nl {
+                            print!("\n");
+                            terminal_token_len = 0;
+                        } else if current_paragraph.len() >= 80 {
+                            print!("\n");
+                            terminal_token_len = 0;
+                        }
+                        std::io::stdout().flush().unwrap();
+
                         // Clear current paragraph for the next one
                         current_paragraph.clear(); // Clear current paragraph for the next one
 
                         // Store the second part of the split token into the answers and current_paragraph
                         current_paragraph.push(second.to_string());
-
-                        // Token output to stdout in real-time
-                        print!("{}", first);
-                        std::io::stdout().flush().unwrap();
 
                         // Check if image generation is enabled and proceed
                         if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
@@ -1333,6 +1363,7 @@ async fn main() {
                             let sem_clone_sd_image = semaphore_sd_image.clone();
                             let mimic3_voice = args.mimic3_voice.clone().to_string();
                             let image_alignment = args.image_alignment.clone();
+                            let subtitle_position = args.subtitle_position.clone();
 
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
@@ -1352,6 +1383,7 @@ async fn main() {
                                 sd_config.prompt = paragraph_clone;
                                 sd_config.height = Some(args.sd_height);
                                 sd_config.width = Some(args.sd_width);
+                                sd_config.image_position = Some(image_alignment);
                                 if args.sd_scaled_height > 0 {
                                     sd_config.scaled_height = Some(args.sd_scaled_height);
                                 }
@@ -1379,7 +1411,7 @@ async fn main() {
                                                     images.clone(),
                                                     &prompt_clone,
                                                     args.hardsub_font_size,
-                                                    &image_alignment,
+                                                    &subtitle_position,
                                                 )
                                                 .unwrap();
                                             }
@@ -1543,20 +1575,92 @@ async fn main() {
 
                         paragraph_count += 1; // Increment paragraph count for the next paragraph
                     } else {
+                        // store the token in the current paragraph
+                        current_paragraph.push(received.clone());
+
+                        // new line if too long
+                        if terminal_token_len > 80 {
+                            std::io::stdout().flush().unwrap();
+
+                            // Handle ' ' delimiter separately
+                            let mut split_pos = received.len();
+                            let mut found: bool = false;
+                            for delimiter in ['\n', '.', ',', '?', '!'] {
+                                if let Some(pos) = received.find(delimiter) {
+                                    // Adjust position to keep the delimiter with the first part, except for '\n'
+                                    let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
+                                    split_pos = split_pos.min(end_pos);
+                                    found = true;
+                                    break; // Break after finding the first delimiter
+                                }
+                            }
+                            if split_pos == received.len() {
+                                if let Some(pos) = received.find(' ') {
+                                    // Adjust position to keep the delimiter with the first part, except for '\n'
+                                    let end_pos = pos + 1;
+                                    split_pos = split_pos.min(end_pos);
+                                    found = true;
+                                }
+                            }
+
+                            // Split 'received' at the determined position, handling '\n' specifically
+                            if found {
+                                let (first, second) = received.split_at(split_pos);
+                                print!("{}\n{}", first, second);
+                                terminal_token_len = 0;
+                            } else {
+                                print!("{}", received);
+                            }
+                            std::io::stdout().flush().unwrap();
+                        } else {
+                            // Token output to stdout in real-time
+                            print!("{}", received);
+                            std::io::stdout().flush().unwrap();
+                        }
+                    }
+                } else {
+                    // store the token in the current paragraph
+                    current_paragraph.push(received.clone());
+
+                    // new line if too long
+                    if terminal_token_len >= 80 {
+                        std::io::stdout().flush().unwrap();
+
+                        // Handle ' ' delimiter separately
+                        let mut split_pos = received.len();
+                        let mut found: bool = false;
+                        for delimiter in ['\n', '.', ',', '?', '!'] {
+                            if let Some(pos) = received.find(delimiter) {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
+                                split_pos = split_pos.min(end_pos);
+                                found = true;
+                                break; // Break after finding the first delimiter
+                            }
+                        }
+                        if split_pos == received.len() {
+                            if let Some(pos) = received.find(' ') {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = pos + 1;
+                                split_pos = split_pos.min(end_pos);
+                                found = true;
+                            }
+                        }
+
+                        // Split 'received' at the determined position, handling '\n' specifically
+                        if found {
+                            let (first, second) = received.split_at(split_pos);
+                            print!("{}\n{}", first, second);
+                            terminal_token_len = 0;
+                        } else {
+                            print!("{}", received);
+                        }
+                        std::io::stdout().flush().unwrap();
+                    } else {
                         // Token output to stdout in real-time
                         print!("{}", received);
                         std::io::stdout().flush().unwrap();
-
-                        // store the token in the current paragraph
-                        current_paragraph.push(received.clone());
                     }
-                } else {
-                    // Token output to stdout in real-time
-                    print!("{}", received);
-                    std::io::stdout().flush().unwrap();
-
-                    // store the token in the current paragraph
-                    current_paragraph.push(received.clone());
                 }
             }
 
@@ -1572,6 +1676,7 @@ async fn main() {
                 // end of the last paragraph image generation
                 let sem_clone_sd_image = semaphore_sd_image.clone();
                 let image_alignment = args.image_alignment.clone();
+                let subtitle_position = args.subtitle_position.clone();
                 let handle = tokio::spawn(async move {
                     // Declare the permit variable outside the if block to extend its scope
                     let _permit =
@@ -1592,6 +1697,7 @@ async fn main() {
                     sd_config.prompt = paragraph_text_clone;
                     sd_config.height = Some(args.sd_height);
                     sd_config.width = Some(args.sd_width);
+                    sd_config.image_position = Some(image_alignment);
                     if args.sd_scaled_height > 0 {
                         sd_config.scaled_height = Some(args.sd_scaled_height);
                     }
@@ -1620,7 +1726,7 @@ async fn main() {
                                         images.clone(),
                                         &prompt_clone,
                                         args.hardsub_font_size,
-                                        &image_alignment,
+                                        &subtitle_position,
                                     )
                                     .unwrap();
                                 }
