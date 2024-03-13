@@ -223,7 +223,9 @@ fn convert_rgb_to_rgba_with_text(
     //
     //let font_data = include_bytes!("/System/Library/Fonts/Hiragino Sans GB.ttc");
     //
-    let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf");
+    //let font_data = include_bytes!("/System/Library/Fonts/Monaco.ttf");
+    //
+    let font_data = include_bytes!("../fonts/TrebuchetMSBold.ttf");
 
     let font = Font::try_from_bytes(font_data as &[u8]).expect("Error constructing Font");
 

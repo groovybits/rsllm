@@ -618,7 +618,7 @@ struct Args {
     #[clap(
         long,
         env = "HARDSUB_FONT_SIZE",
-        default_value = "80.0",
+        default_value = "60.0",
         help = "hardsub font size"
     )]
     hardsub_font_size: f32,
