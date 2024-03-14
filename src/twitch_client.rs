@@ -1,5 +1,5 @@
 use anyhow::Result;
-use tokio::select;
+use std::io::Write;
 
 pub async fn setup(nick: String, token: String, channel: Vec<String>) -> Result<()> {
     let credentials = match Some(nick).zip(Some(token)) {
@@ -58,11 +58,13 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
     if msg.text().starts_with("!message") {
         let message = msg.text().splitn(2, ' ').nth(1).unwrap_or("");
         // TODO: send message to the LLM through mpsc channels
+        std::io::stdout().flush().unwrap();
         log::info!(
             "Twitch recieved an LLM message from {}: {}",
             msg.sender().name(),
             message
         );
+        std::io::stdout().flush().unwrap();
 
         client
             .privmsg(
@@ -76,10 +78,12 @@ async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {
         return Ok(());
     }
 
+    std::io::stdout().flush().unwrap();
     log::info!(
         "Twitch recieved a help message from {}",
         msg.sender().name()
     );
+    std::io::stdout().flush().unwrap();
 
     client
         .privmsg(

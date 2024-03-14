@@ -231,7 +231,7 @@ fn convert_rgb_to_rgba_with_text(
     let shadow_offset = 7; // Shadow offset in pixels
 
     // Draw shadow
-    let wrapped_text_shadow = wrap_text(text, &font, scale, image_buffer.width() as i32 - (start_pos.0 + shadow_offset) * 2);
+    let wrapped_text_shadow = wrap_text(text, &font, scale, image_buffer.width() as i32 - start_pos.0 * 2);
     let mut current_height_shadow = start_pos.1 + shadow_offset;
     for line in &wrapped_text_shadow {
         draw_text_mut(

@@ -205,7 +205,7 @@ pub fn gemma(
 
     let (internal_sender, mut internal_receiver) = tokio::sync::mpsc::channel::<String>(32); // Example buffer size
 
-    let mut pipeline = TextGeneration::new(
+    let pipeline = TextGeneration::new(
         model,
         tokenizer,
         seed,

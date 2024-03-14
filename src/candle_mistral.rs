@@ -240,7 +240,7 @@ pub fn mistral(
     let (internal_sender, mut internal_receiver) = mpsc::channel(32768);
 
     // Pass both the internal and external senders to TextGeneration
-    let mut pipeline = TextGeneration::new(
+    let pipeline = TextGeneration::new(
         model,
         tokenizer,
         seed,              // seed

@@ -122,3 +122,19 @@ pub fn remove_prompt_from_output(prompt: &str, output: String) -> String {
         output.to_string()
     }
 }
+
+pub fn adjust_caps(paragraph: &str) -> String {
+    paragraph
+        .split_whitespace()
+        .map(|word| {
+            let mut c = word.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => {
+                    f.to_uppercase().collect::<String>() + c.as_str().to_lowercase().as_str()
+                }
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(" ")
+}
