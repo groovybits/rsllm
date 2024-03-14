@@ -7,7 +7,7 @@ Chris Kennedy @2024 MIT license
 use crate::ndi::send_images_over_ndi;
 use crate::stable_diffusion::{sd, SDConfig};
 use bytes::Bytes;
-use chrono::NaiveDateTime;
+use chrono::{TimeZone, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -349,9 +349,15 @@ pub async fn stream_completion(
                                 // check if we got the created date from res.created, if so convert it to naivedatatime for usage else use a default value
                                 let created_date = match res.created {
                                     Some(created_timestamp) => {
-                                        NaiveDateTime::from_timestamp_opt(created_timestamp, 0)
-                                            .map(|dt| dt.to_string())
-                                            .unwrap_or_else(|| "unknown".to_string())
+                                        // Convert the timestamp to UTC DateTime first, then to NaiveDateTime.
+                                        let naive_datetime = Utc
+                                            .timestamp_opt(created_timestamp, 0)
+                                            .single() // This attempts to resolve the Option<T>
+                                            .map(|dt| dt.naive_utc()) // Convert DateTime<Utc> to NaiveDateTime
+                                            .map(|ndt| ndt.to_string()) // Convert NaiveDateTime to String
+                                            .unwrap_or_else(|| "unknown".to_string());
+
+                                        naive_datetime
                                     }
                                     None => "unknown".to_string(),
                                 };

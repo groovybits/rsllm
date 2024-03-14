@@ -22,13 +22,6 @@ use rand::{distributions::Distribution, SeedableRng};
 
 pub const ENCODEC_NTOKENS: u32 = 1024;
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq)]
-enum ArgDType {
-    F32,
-    F16,
-    Bf16,
-}
-
 enum Transformer {
     Normal(transformer::Model),
     Quantized(qtransformer::Model),
@@ -51,7 +44,7 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
     let second_stage_weights: Option<String> = None;
     let encodec_weights: Option<String> = None;
     let spk_emb: Option<String> = None;
-    let dtype = ArgDType::F32;
+    let dtype = DType::F32;
     let quantized = true;
 
     if seed.is_none() {
@@ -93,11 +86,6 @@ pub async fn metavoice(prompt: String) -> Result<Bytes, Error> {
         None => Api::new()?
             .model("facebook/encodec_24khz".to_string())
             .get("model.safetensors")?,
-    };
-    let dtype = match dtype {
-        ArgDType::F32 => DType::F32,
-        ArgDType::F16 => DType::F16,
-        ArgDType::Bf16 => DType::BF16,
     };
     let first_stage_config = transformer::Config::cfg1b_v0_1();
     let mut first_stage_model = if quantized {
