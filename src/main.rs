@@ -99,32 +99,30 @@ async fn main() {
         content: args.system_prompt.to_string(),
     };
 
-    // Task submission channel
-    let (task_sender, mut task_receiver) = mpsc::channel::<MessageData>(100);
+    // Channels for image and speech tasks
+    let (image_task_sender, mut image_task_receiver) = mpsc::channel::<MessageData>(100);
+    let (speech_task_sender, mut speech_task_receiver) = mpsc::channel::<MessageData>(100);
 
     // Processed data channel
     let (processed_sender, mut processed_receiver) = mpsc::channel::<ProcessedData>(100);
 
-    // Shared state for maintaining task order and synchronization
-    let processed_data_queue: Arc<Mutex<Vec<ProcessedData>>> = Arc::new(Mutex::new(Vec::new()));
-
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
 
+    // Image processing task
     let image_processing_task = {
         let image_sem = Arc::clone(&image_sem);
         let processed_sender = processed_sender.clone();
         tokio::spawn(async move {
-            while let Some(message_data) = task_receiver.recv().await {
+            while let Some(message_data) = image_task_receiver.recv().await {
                 let images = process_image(message_data.clone(), Arc::clone(&image_sem)).await;
-                // Construct ProcessedData and send
                 let processed_data = ProcessedData {
-                    paragraph: message_data.paragraph,
+                    paragraph: message_data.paragraph.clone(),
                     image_data: Some(images),
-                    audio_data: None, // This will be filled in by the speech processing task
+                    audio_data: None,
                     paragraph_count: message_data.paragraph_count,
-                    subtitle_position: message_data.subtitle_position,
-                    time_stamp: 0, // Assign appropriate timestamp
+                    subtitle_position: message_data.subtitle_position.clone(),
+                    time_stamp: 0,
                 };
                 processed_sender
                     .send(processed_data)
@@ -134,63 +132,39 @@ async fn main() {
         })
     };
 
+    // Speech processing task
     let speech_processing_task = {
         let speech_sem = Arc::clone(&speech_sem);
         let processed_sender = processed_sender.clone();
         tokio::spawn(async move {
-            while let Some(message_data) = task_receiver.recv().await {
+            while let Some(message_data) = speech_task_receiver.recv().await {
                 let speech_data =
                     process_speech(message_data.clone(), Arc::clone(&speech_sem)).await;
-                // Update the corresponding ProcessedData in the queue or create a new entry if necessary
-                let mut queue = processed_data_queue.lock().await;
-
-                // Check if there's an existing entry for this paragraph count
-                if let Some(entry) = queue
-                    .iter_mut()
-                    .find(|data| data.paragraph_count == message_data.paragraph_count)
-                {
-                    // Update the existing entry with speech data
-                    entry.audio_data = Some(speech_data);
-                } else {
-                    // No existing entry, create a new one
-                    let processed_data = ProcessedData {
-                        paragraph: message_data.paragraph,
-                        image_data: None, // This will be filled by the image processing task
-                        audio_data: Some(speech_data),
-                        paragraph_count: message_data.paragraph_count,
-                        subtitle_position: message_data.subtitle_position,
-                        time_stamp: 0, // Assign appropriate timestamp
-                    };
-                    // Send this new entry directly to the processed_sender
-                    processed_sender
-                        .send(processed_data)
-                        .await
-                        .expect("Failed to send processed data");
-                }
+                let processed_data = ProcessedData {
+                    paragraph: message_data.paragraph.clone(),
+                    image_data: None,
+                    audio_data: Some(speech_data),
+                    paragraph_count: message_data.paragraph_count,
+                    subtitle_position: message_data.subtitle_position.clone(),
+                    time_stamp: 0,
+                };
+                processed_sender
+                    .send(processed_data)
+                    .await
+                    .expect("Failed to send processed data");
             }
         })
     };
 
-    let ndi_sync_task = {
-        let processed_data_queue = Arc::clone(&processed_data_queue);
-        let args_clone = args.clone();
-        tokio::spawn(async move {
-            while let Some(processed_data) = processed_receiver.recv().await {
-                let mut queue = processed_data_queue.lock().await;
-                queue.push(processed_data);
-                // Sort or manage queue based on time_stamp or paragraph_count for ordering
-
-                // Once an image-audio pair is ready, send to NDI
-                if let Some(pair) = queue
-                    .iter()
-                    .find(|data| data.audio_data.is_some() && data.image_data.is_some())
-                {
-                    send_to_ndi(pair.clone(), &args_clone).await;
-                    // Remove the pair from the queue
-                }
-            }
-        })
-    };
+    // NDI sync task
+    let args_clone = args.clone();
+    let ndi_sync_task = tokio::spawn(async move {
+        while let Some(processed_data) = processed_receiver.recv().await {
+            // Logic to match and pair image and speech data
+            // Once a pair is ready, call send_to_ndi
+            send_to_ndi(processed_data, &args_clone).await;
+        }
+    });
 
     let mut llm_host = args.llm_host;
     if args.use_openai {
