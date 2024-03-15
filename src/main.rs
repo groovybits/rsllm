@@ -16,7 +16,6 @@
 */
 
 use clap::Parser;
-use image::{ImageBuffer, Rgb};
 use log::{debug, error, info};
 use rsllm::adjust_caps;
 use rsllm::args::Args;
@@ -35,6 +34,8 @@ use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, 
 use rsllm::openai_tts::tts as oai_tts;
 use rsllm::openai_tts::Request as OAITTSRequest;
 use rsllm::openai_tts::Voice as OAITTSVoice;
+//use rsllm::pipeline::MessageData;
+//use rsllm::pipeline::ProcessedData;
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -54,191 +55,9 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tokio::time::Duration;
 use uuid::Uuid;
-
-// Message Data for Image and Speech generation functions to use
-struct MessageData {
-    paragraph: String,
-    output_id: String,
-    paragraph_count: usize,
-    sd_config: SDConfig,
-    mimic3_voice: String,
-    subtitle_position: String,
-    args: Args,
-}
-
-// Function to process image generation
-async fn process_image(
-    data: MessageData,
-    image_sem: Arc<Semaphore>,
-) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> {
-    let _permit = image_sem
-        .acquire()
-        .await
-        .expect("Failed to acquire image semaphore permit");
-
-    if data.args.sd_image {
-        debug!("Generating images with prompt: {}", data.sd_config.prompt);
-        match sd(data.sd_config).await {
-            // Ensure `sd` function is async and await its result
-            Ok(images) => {
-                // Save images to disk
-                if data.args.save_images {
-                    for (index, image_bytes) in images.iter().enumerate() {
-                        let image_file = format!(
-                            "images/{}_{}_{}_.png",
-                            data.output_id, data.paragraph_count, index
-                        );
-                        debug!(
-                            "Image {} {}/{} saving to {}",
-                            data.output_id, data.paragraph_count, index, image_file
-                        );
-                        image_bytes
-                            .save(image_file)
-                            .map_err(candle_core::Error::wrap)
-                            .unwrap(); // And this as well
-                    }
-                }
-                return images.clone();
-            }
-            Err(e) => {
-                eprintln!("Error generating images for {}: {:?}", data.output_id, e);
-            }
-        }
-    }
-    // Return an empty vector of images of type Vec<ImageBuffer<Rgb<u8>, ...>>
-    let images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> = Vec::new();
-    images
-}
-
-// Function to process speech generation
-async fn process_speech(data: MessageData, speech_sem: Arc<Semaphore>) -> Vec<u8> {
-    let _permit = speech_sem
-        .acquire()
-        .await
-        .expect("Failed to acquire speech semaphore permit");
-
-    if data.args.mimic3_tts || data.args.oai_tts || data.args.tts_enable {
-        let input = data.sd_config.prompt.clone(); // Ensure this uses the appropriate text for TTS
-
-        // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
-        let input = adjust_caps(&input);
-
-        let bytes_result = if data.args.oai_tts {
-            // OpenAI TTS request
-            let model = String::from("tts-1");
-            let voice = OAITTSVoice::Nova;
-            let oai_request = OAITTSRequest::new(model, input, voice);
-
-            let openai_key =
-                std::env::var("OPENAI_API_KEY").expect("TTS Thread: OPENAI_API_KEY not found");
-
-            // Directly await the TTS operation without spawning a new thread
-            oai_tts(oai_request, &openai_key).await
-        } else if data.args.mimic3_tts {
-            let api_request = Mimic3TTSRequest::new(input, data.mimic3_voice);
-            // Mimic3 TTS request
-            mimic3_tts(api_request)
-                .await
-                .map_err(|e| ApiError::Error(e.to_string()))
-        } else {
-            // Candle TTS request
-            metavoice(input)
-                .await
-                .map_err(|e| ApiError::Error(e.to_string()))
-        };
-
-        match bytes_result {
-            Ok(bytes) => {
-                if data.args.ndi_audio {
-                    return bytes.to_vec();
-                } else {
-                    // Example code to play audio directly, replace with your actual audio playback logic
-                    println!("Playing TTS audio");
-                    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-                    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
-                    let cursor = std::io::Cursor::new(bytes);
-                    let source = rodio::Decoder::new_mp3(cursor).expect("Error decoding MP3");
-                    sink.append(source);
-                    sink.sleep_until_end();
-                }
-            }
-            Err(e) => eprintln!("Error in TTS request: {}", e),
-        }
-    }
-    // return empty samples_f32 if no TTS is enabled
-    Vec::new()
-}
-
-// Struct to hold the processed audio and image data
-struct ProcessedData {
-    paragraph: String,
-    image_data: Option<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>>, // Updated to hold a vector of ImageBuffer
-    audio_data: Option<Vec<u8>>,
-    paragraph_count: usize,
-    subtitle_position: String,
-    time_stamp: u64,
-}
-
-// Function to send audio/video pairs to NDI
-async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
-    if let Some(image_data) = processed_data.image_data {
-        if args.ndi_images {
-            #[cfg(feature = "ndi")]
-            {
-                debug!("Sending images over NDI");
-                send_images_over_ndi(
-                    image_data,
-                    &processed_data.paragraph,
-                    args.hardsub_font_size,
-                    &processed_data.subtitle_position,
-                )
-                .unwrap();
-            }
-        }
-    }
-
-    if let Some(audio_data) = processed_data.audio_data {
-        if args.ndi_audio {
-            #[cfg(feature = "ndi")]
-            {
-                let samples_result = if args.oai_tts {
-                    rsllm::ndi::mp3_to_f32(audio_data)
-                } else {
-                    rsllm::ndi::wav_to_f32(audio_data)
-                };
-
-                if let Ok(samples_f32) = samples_result {
-                    let sample_rate = if args.mimic3_tts { 22050 } else { 24000 };
-                    let channels: i32 = 1;
-                    let chunk_size = args.audio_chunk_size * sample_rate as f32 * channels as f32;
-                    let delay_ms =
-                        (chunk_size as f32 / channels as f32 / sample_rate as f32 * 1000.0) as u64;
-
-                    debug!(
-                        "Sending {} ms duration {} audio samples",
-                        delay_ms, chunk_size
-                    );
-
-                    for chunk_samples in samples_f32.chunks(chunk_size as usize) {
-                        let mut chunk_vec = chunk_samples.to_vec();
-
-                        if chunk_samples.len() < chunk_size as usize {
-                            chunk_vec.resize(chunk_size as usize, 0.0);
-                        }
-
-                        send_audio_samples_over_ndi(chunk_vec, sample_rate, channels)
-                            .expect("Failed to send audio samples over NDI");
-
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -292,6 +111,7 @@ async fn main() {
     let ai_network_stats = args.ai_network_stats;
 
     // Create a queue to hold the MessageData structs
+    /*
     let message_queue: Arc<Mutex<Vec<MessageData>>> = Arc::new(Mutex::new(Vec::new()));
 
     // Create a queue to hold the processed audio and image data
@@ -300,6 +120,7 @@ async fn main() {
     // Create semaphores for image generation and speech generation
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
+    */
 
     if args.use_openai {
         // set the llm_host to the openai api

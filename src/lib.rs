@@ -17,6 +17,7 @@ pub mod ndi;
 pub mod network_capture;
 pub mod openai_api;
 pub mod openai_tts;
+pub mod pipeline;
 pub mod stable_diffusion;
 pub mod stream_data;
 pub mod system_stats;
