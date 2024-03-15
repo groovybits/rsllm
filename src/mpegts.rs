@@ -420,10 +420,10 @@ pub fn reader_thread(debug_nal_types: String, debug_nals: bool) {
     let running_decoder = running.clone();
     let running_demuxer = running.clone();
     // Setup demuxer async processing thread
-    let (dtx, mut drx) = mpsc::channel::<Vec<StreamData>>(decoder_channel_size);
-    let (dmtx, mut dmrx) = mpsc::channel::<Vec<u8>>(demuxer_channel_size);
+    let (_dtx, mut drx) = mpsc::channel::<Vec<StreamData>>(decoder_channel_size);
+    let (dmtx, _dmrx) = mpsc::channel::<Vec<u8>>(demuxer_channel_size);
     // Setup asynchronous demuxer processing thread
-    let (sync_dmtx, mut sync_dmrx) = mpsc::channel::<Vec<u8>>(demuxer_channel_size);
+    let (_sync_dmtx, mut sync_dmrx) = mpsc::channel::<Vec<u8>>(demuxer_channel_size);
     let parse_short_nals = true;
     let decode_video = true;
     let mpegts_reader = true;
@@ -628,7 +628,7 @@ pub fn reader_thread(debug_nal_types: String, debug_nals: bool) {
     });
 
     // Spawn a new thread for Decoder communication
-    let decoder_thread = tokio::spawn(async move {
+    let _decoder_thread = tokio::spawn(async move {
         loop {
             if !running_decoder.load(Ordering::SeqCst) {
                 debug!("Decoder thread received stop signal.");

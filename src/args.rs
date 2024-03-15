@@ -1,10 +1,10 @@
 use clap::Parser;
 
 /// RScap Probe Configuration
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[clap(
     author = "Chris Kennedy",
-    version = "0.3.0",
+    version = "0.4.0",
     about = "Rust LLM Stream Analyzer and Content Generator"
 )]
 pub struct Args {
@@ -192,7 +192,7 @@ pub struct Args {
     #[clap(
         long,
         env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
-        default_value = "1",
+        default_value = "8",
         help = "max_concurrent_sd_image_tasks for the sd image semaphore."
     )]
     pub max_concurrent_sd_image_tasks: usize,
@@ -201,7 +201,7 @@ pub struct Args {
     #[clap(
         long,
         env = "IMAGE_CONCURRENCY",
-        default_value = "1",
+        default_value = "8",
         help = "Image concurrency - max concurrent image tasks."
     )]
     pub image_concurrency: usize,
@@ -210,7 +210,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SPEECH_CONCURRENCY",
-        default_value = "1",
+        default_value = "8",
         help = "Speech concurrency - max concurrent speech tasks."
     )]
     pub speech_concurrency: usize,

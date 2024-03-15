@@ -17,36 +17,24 @@
 
 use clap::Parser;
 use log::{debug, error, info};
-use rsllm::adjust_caps;
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
-use rsllm::candle_metavoice::metavoice;
 use rsllm::candle_mistral::mistral;
 use rsllm::handle_long_string;
-use rsllm::mimic3_tts::tts as mimic3_tts;
-use rsllm::mimic3_tts::Request as Mimic3TTSRequest;
-#[cfg(feature = "ndi")]
-use rsllm::ndi::send_audio_samples_over_ndi;
-#[cfg(feature = "ndi")]
-use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
-use rsllm::openai_tts::tts as oai_tts;
-use rsllm::openai_tts::Request as OAITTSRequest;
-use rsllm::openai_tts::Voice as OAITTSVoice;
-//use rsllm::pipeline::MessageData;
-//use rsllm::pipeline::ProcessedData;
-use rsllm::stable_diffusion::{sd, SDConfig};
+use rsllm::pipeline::{process_image, process_speech, send_to_ndi, MessageData, ProcessedData};
+use rsllm::stable_diffusion::SDConfig;
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
 use rsllm::twitch_client::setup as twitch_setup;
-use rsllm::ApiError;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
+use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::sync::{
@@ -55,7 +43,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::time::Duration;
 use uuid::Uuid;
 
@@ -98,19 +86,107 @@ async fn main() {
         content: args.system_prompt.to_string(),
     };
 
-    // Create a queue to hold the MessageData structs
-    /*
-    let message_queue: Arc<Mutex<Vec<MessageData>>> = Arc::new(Mutex::new(Vec::new()));
+    let processed_data_store: Arc<Mutex<HashMap<usize, ProcessedData>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
-    // Create a queue to hold the processed audio and image data
-    let processed_data_queue: Arc<Mutex<Vec<ProcessedData>>> = Arc::new(Mutex::new(Vec::new()));
+    // Channels for image and speech tasks
+    let (image_task_sender, mut image_task_receiver) = mpsc::channel::<MessageData>(100);
+    let (speech_task_sender, mut speech_task_receiver) = mpsc::channel::<MessageData>(100);
 
-    // Create semaphores for image generation and speech generation
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
-    */
 
-    let mut llm_host = args.llm_host;
+    // Image processing task
+    let image_processing_task = {
+        let image_sem = Arc::clone(&image_sem);
+        let processed_data_store = processed_data_store.clone();
+        tokio::spawn(async move {
+            while let Some(message_data) = image_task_receiver.recv().await {
+                let images = process_image(message_data.clone(), Arc::clone(&image_sem)).await;
+                let mut store = processed_data_store.lock().await;
+
+                match store.entry(message_data.paragraph_count) {
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(ProcessedData {
+                            paragraph: message_data.paragraph.clone(),
+                            image_data: Some(images),
+                            audio_data: None,
+                            paragraph_count: message_data.paragraph_count,
+                            subtitle_position: message_data.subtitle_position.clone(),
+                            time_stamp: 0,
+                        });
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        let entry = e.get_mut();
+                        entry.image_data = Some(images);
+                    }
+                }
+            }
+        })
+    };
+
+    // Speech processing task
+    let speech_processing_task = {
+        let speech_sem = Arc::clone(&speech_sem);
+        let processed_data_store = processed_data_store.clone();
+        tokio::spawn(async move {
+            while let Some(message_data) = speech_task_receiver.recv().await {
+                let speech_data =
+                    process_speech(message_data.clone(), Arc::clone(&speech_sem)).await;
+                let mut store = processed_data_store.lock().await;
+
+                match store.entry(message_data.paragraph_count) {
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(ProcessedData {
+                            paragraph: message_data.paragraph.clone(),
+                            image_data: None,
+                            audio_data: Some(speech_data),
+                            paragraph_count: message_data.paragraph_count,
+                            subtitle_position: message_data.subtitle_position.clone(),
+                            time_stamp: 0,
+                        });
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        let entry = e.get_mut();
+                        entry.audio_data = Some(speech_data);
+                    }
+                }
+            }
+        })
+    };
+
+    // NDI sync task
+    let processed_data_store_for_ndi = processed_data_store.clone();
+    let args_for_ndi = args.clone();
+
+    let ndi_sync_task = tokio::spawn(async move {
+        loop {
+            // Artificial delay for demonstration; adjust as needed
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+            let keys_to_remove = {
+                let store = processed_data_store_for_ndi.lock().await;
+                store
+                    .iter()
+                    .filter_map(|(&key, data)| {
+                        if data.image_data.is_some() && data.audio_data.is_some() {
+                            Some(key)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            for key in keys_to_remove {
+                if let Some(data) = processed_data_store_for_ndi.lock().await.remove(&key) {
+                    send_to_ndi(data, &args_for_ndi).await;
+                }
+            }
+        }
+    });
+
+    let mut llm_host = args.llm_host.clone();
     if args.use_openai {
         // set the llm_host to the openai api
         llm_host = "https://api.openai.com".to_string();
@@ -375,7 +451,7 @@ async fn main() {
             twitch_username_clone
         );
 
-        let twitch_handle = tokio::spawn(async move {
+        let _twitch_handle = tokio::spawn(async move {
             match twitch_setup(
                 twitch_username_clone.clone(),
                 twitch_auth_clone,
@@ -757,6 +833,10 @@ async fn main() {
                             let mimic3_voice = args.mimic3_voice.clone().to_string();
                             let image_alignment = args.image_alignment.clone();
                             let subtitle_position = args.subtitle_position.clone();
+                            let args = args.clone();
+
+                            let image_task_sender_clone = image_task_sender.clone();
+                            let speech_task_sender_clone = speech_task_sender.clone();
 
                             let handle = tokio::spawn(async move {
                                 // Declare the permit variable outside the if block to extend its scope
@@ -784,186 +864,46 @@ async fn main() {
                                     sd_config.scaled_width = Some(args.sd_scaled_width);
                                 }
 
-                                let prompt_clone = sd_config.prompt.clone();
+                                let args_clone = args.clone();
+                                let mimic3_voice_clone = mimic3_voice.clone();
+                                let subtitle_position_clone = subtitle_position.clone();
 
                                 if args.sd_image {
                                     debug!("Generating images with prompt: {}", sd_config.prompt);
-                                    /* TODO: use functions here */
-                                    match sd(sd_config).await {
-                                        // Ensure `sd` function is async and await its result
-                                        Ok(images) => {
-                                            // Send images over NDI
-                                            #[cfg(feature = "ndi")]
-                                            if args.ndi_images {
-                                                #[cfg(feature = "ndi")]
-                                                if args.ndi_images {
-                                                    debug!("Sending images over NDI");
-                                                }
 
-                                                #[cfg(feature = "ndi")]
-                                                send_images_over_ndi(
-                                                    images.clone(),
-                                                    &prompt_clone,
-                                                    args.hardsub_font_size,
-                                                    &subtitle_position,
-                                                )
-                                                .unwrap();
-                                            }
-
-                                            // Save images to disk
-                                            if args.save_images {
-                                                for (index, image_bytes) in
-                                                    images.iter().enumerate()
-                                                {
-                                                    let image_file = format!(
-                                                        "images/{}_{}_{}.png",
-                                                        output_id_clone, paragraph_count, index
-                                                    );
-                                                    debug!(
-                                                        "Image {} {}/{} saving to {}",
-                                                        output_id_clone,
-                                                        paragraph_count,
-                                                        index,
-                                                        image_file
-                                                    );
-                                                    image_bytes
-                                                        .save(image_file)
-                                                        .map_err(candle_core::Error::wrap)
-                                                        .unwrap(); // And this as well
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            eprintln!(
-                                                "Error generating images for {}: {:?}",
-                                                output_id_clone, e
-                                            );
-                                        }
-                                    }
-                                    /* TODO: use functions here */
-                                }
-
-                                // Integrate TTS processing here, directly after image generation
-                                if args.mimic3_tts || args.oai_tts || args.tts_enable {
-                                    let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
-
-                                    // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
-                                    let input = adjust_caps(&input);
-
-                                    /* TODO: use functions here */
-                                    let bytes_result = if args.oai_tts {
-                                        // OpenAI TTS request
-                                        let model = String::from("tts-1");
-                                        let voice = OAITTSVoice::Nova;
-                                        let oai_request = OAITTSRequest::new(model, input, voice);
-
-                                        let openai_key = std::env::var("OPENAI_API_KEY")
-                                            .expect("TTS Thread: OPENAI_API_KEY not found");
-
-                                        // Directly await the TTS operation without spawning a new thread
-                                        oai_tts(oai_request, &openai_key).await
-                                    } else if args.mimic3_tts {
-                                        let api_request =
-                                            Mimic3TTSRequest::new(input, mimic3_voice);
-                                        // Mimic3 TTS request
-                                        mimic3_tts(api_request)
-                                            .await
-                                            .map_err(|e| ApiError::Error(e.to_string()))
-                                    } else {
-                                        // Candle TTS request
-                                        metavoice(input)
-                                            .await
-                                            .map_err(|e| ApiError::Error(e.to_string()))
+                                    // Create MessageData for image task
+                                    let message_data_for_image = MessageData {
+                                        paragraph: sd_config.prompt.clone(), // Clone for the image task
+                                        output_id: output_id_clone.clone(),
+                                        paragraph_count,
+                                        sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                                        mimic3_voice: mimic3_voice_clone.clone(),
+                                        subtitle_position: subtitle_position_clone.clone(),
+                                        args: args_clone.clone(),
                                     };
 
-                                    match bytes_result {
-                                        Ok(bytes) => {
-                                            if args.ndi_audio {
-                                                // Determine the format based on TTS source
-                                                #[cfg(feature = "ndi")]
-                                                let samples_result = if args.oai_tts {
-                                                    // OpenAI TTS returns MP3, convert MP3 bytes to f32 samples
-                                                    rsllm::ndi::mp3_to_f32(bytes.to_vec())
-                                                } else {
-                                                    // Candle TTS (`metavoice`) returns WAV, directly convert WAV PCM to f32 samples
-                                                    rsllm::ndi::wav_to_f32(bytes.to_vec())
-                                                };
-
-                                                // Send audio samples over NDI with pacing
-                                                #[cfg(feature = "ndi")]
-                                                if let Ok(samples_f32) = samples_result {
-                                                    // use 24000 unless mimic3_tts is enabled, then use 22050
-                                                    let sample_rate =
-                                                        if args.mimic3_tts { 22050 } else { 24000 };
-                                                    let channels: i32 = 1;
-                                                    // Define chunk size and delay
-                                                    let chunk_size = args.audio_chunk_size
-                                                        * sample_rate as f32
-                                                        * channels as f32; // 100ms of audio at 24kHz sample rate
-                                                    let delay_ms = (chunk_size as f32
-                                                        / channels as f32
-                                                        / sample_rate as f32
-                                                        * 1000.0)
-                                                        as u64;
-
-                                                    debug!(
-                                                        "Sending {} ms duration {} audio samples",
-                                                        delay_ms, chunk_size
-                                                    );
-
-                                                    // Iterate over samples_f32 in chunks
-                                                    for chunk_samples in
-                                                        samples_f32.chunks(chunk_size as usize)
-                                                    {
-                                                        // Convert the chunk into the format expected by send_audio_samples_over_ndi
-                                                        let mut chunk_vec = chunk_samples.to_vec();
-
-                                                        // Check if this is the last chunk and it's smaller than the chunk_size
-                                                        if chunk_samples.len() < chunk_size as usize
-                                                        {
-                                                            // pad with silence if necessary
-                                                            chunk_vec
-                                                                .resize(chunk_size as usize, 0.0);
-                                                            // Pad with silence
-                                                        }
-
-                                                        // Send the chunk over NDI
-                                                        send_audio_samples_over_ndi(
-                                                            chunk_vec,
-                                                            sample_rate,
-                                                            channels,
-                                                        )
-                                                        .expect(
-                                                            "Failed to send audio samples over NDI",
-                                                        );
-
-                                                        // Await to introduce a delay simulating real-time streaming
-                                                        tokio::time::sleep(
-                                                            tokio::time::Duration::from_millis(
-                                                                delay_ms,
-                                                            ),
-                                                        )
-                                                        .await;
-                                                    }
-                                                }
-                                            } else {
-                                                // Example code to play audio directly, replace with your actual audio playback logic
-                                                println!("Playing TTS audio");
-                                                let (_stream, stream_handle) =
-                                                    rodio::OutputStream::try_default().unwrap();
-                                                let sink =
-                                                    rodio::Sink::try_new(&stream_handle).unwrap();
-                                                let cursor = std::io::Cursor::new(bytes);
-                                                let source = rodio::Decoder::new_mp3(cursor)
-                                                    .expect("Error decoding MP3");
-                                                sink.append(source);
-                                                sink.sleep_until_end();
-                                            }
-                                        }
-                                        Err(e) => eprintln!("Error in TTS request: {}", e),
-                                    }
-                                    /* TODO: use functions here */
+                                    // For image tasks
+                                    image_task_sender_clone
+                                        .send(message_data_for_image)
+                                        .await
+                                        .expect("Failed to send image task");
                                 }
+
+                                let message_data_for_speech = MessageData {
+                                    paragraph: sd_config.prompt.clone(), // Already cloned above
+                                    output_id: output_id_clone.clone(), // Clone again for speech task
+                                    paragraph_count,
+                                    sd_config: sd_config.clone(), // Clone again if necessary
+                                    mimic3_voice: mimic3_voice_clone, // Already cloned above
+                                    subtitle_position: subtitle_position_clone, // Already cloned above
+                                    args: args_clone, // Already cloned above
+                                };
+
+                                // For speech tasks
+                                speech_task_sender_clone
+                                    .send(message_data_for_speech)
+                                    .await
+                                    .expect("Failed to send speech task");
                             });
 
                             image_spawn_handles.push(handle);
@@ -997,211 +937,100 @@ async fn main() {
 
             // Join the last paragraph tokens into a single String without adding extra spaces
             if current_paragraph.len() > 0 {
-                // TODO: do anything needed with the last paragraph bits like TTS sending
-                let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
-                let paragraph_text_clone = paragraph_text.clone();
-                let mimic3_voice = args.mimic3_voice.clone().to_string();
+                // ** Start of TTS and Image Generation **
+                // Check if image generation is enabled and proceed
+                if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                    // Clone necessary data for use in the async block
+                    let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                    let paragraph_clone = paragraph_text.clone();
+                    let output_id_clone = output_id.clone();
+                    let sem_clone_sd_image = semaphore_sd_image.clone();
+                    let mimic3_voice = args.mimic3_voice.clone().to_string();
+                    let image_alignment = args.image_alignment.clone();
+                    let subtitle_position = args.subtitle_position.clone();
+                    let args = args.clone();
 
-                let output_id_clone = output_id.clone();
+                    let image_task_sender_clone = image_task_sender.clone();
+                    let speech_task_sender_clone = speech_task_sender.clone();
 
-                // end of the last paragraph image generation
-                let sem_clone_sd_image = semaphore_sd_image.clone();
-                let image_alignment = args.image_alignment.clone();
-                let subtitle_position = args.subtitle_position.clone();
-
-                let handle = tokio::spawn(async move {
-                    // Declare the permit variable outside the if block to extend its scope
-                    let _permit =
-                        if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
-                            // Conditionally acquire the permit and store it in an Option
-                            Some(
-                                sem_clone_sd_image
-                                    .acquire()
-                                    .await
-                                    .expect("Stable Diffusion: Failed to acquire semaphore permit"),
-                            )
-                        } else {
-                            // If the condition is not met, no permit is acquired, and None is stored
-                            None
-                        };
-
-                    let mut sd_config = SDConfig::new();
-                    sd_config.prompt = paragraph_text_clone;
-                    sd_config.height = Some(args.sd_height);
-                    sd_config.width = Some(args.sd_width);
-                    sd_config.image_position = Some(image_alignment);
-                    if args.sd_scaled_height > 0 {
-                        sd_config.scaled_height = Some(args.sd_scaled_height);
-                    }
-                    if args.sd_scaled_width > 0 {
-                        sd_config.scaled_width = Some(args.sd_scaled_width);
-                    }
-
-                    let prompt_clone = sd_config.prompt.clone();
-
-                    if args.sd_image {
-                        debug!("Generating images with prompt: {}", sd_config.prompt);
-
-                        match sd(sd_config).await {
-                            // Ensure `sd` function is async and await its result
-                            Ok(images) => {
-                                // Send images over NDI
-                                if args.ndi_images {
-                                    debug!("Sending images over NDI");
-                                }
-                                #[cfg(feature = "ndi")]
-                                if args.ndi_images {
-                                    #[cfg(feature = "ndi")]
-                                    send_images_over_ndi(
-                                        images.clone(),
-                                        &prompt_clone,
-                                        args.hardsub_font_size,
-                                        &subtitle_position,
-                                    )
-                                    .unwrap();
-                                }
-                                // Save images to disk
-                                if args.save_images {
-                                    for (index, image_bytes) in images.iter().enumerate() {
-                                        let image_file = format!(
-                                            "images/{}_{}_{}.png",
-                                            output_id_clone, paragraph_count, index
-                                        );
-                                        debug!(
-                                            "\nImage {} {}/{} saving to {}",
-                                            output_id_clone, paragraph_count, index, image_file
-                                        );
-                                        image_bytes
-                                            .save(image_file)
-                                            .map_err(candle_core::Error::wrap)
-                                            .unwrap(); // And this as well
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                std::io::stdout().flush().unwrap();
-                                eprintln!(
-                                    "Error generating images for {}: {:?}",
-                                    output_id_clone, e
-                                );
-                            }
-                        }
-                    }
-
-                    // Integrate TTS processing here, directly after image generation
-                    if args.tts_enable || args.oai_tts || args.mimic3_tts {
-                        let input = prompt_clone.clone(); // Ensure this uses the appropriate text for TTS
-
-                        // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
-                        let input = adjust_caps(&input);
-
-                        let bytes_result = if args.oai_tts {
-                            // OpenAI TTS request
-                            let model = String::from("tts-1");
-                            let voice = OAITTSVoice::Nova;
-                            let oai_request = OAITTSRequest::new(model, input, voice);
-
-                            let openai_key = std::env::var("OPENAI_API_KEY")
-                                .expect("TTS Thread: OPENAI_API_KEY not found");
-
-                            // Directly await the TTS operation without spawning a new thread
-                            oai_tts(oai_request, &openai_key).await
-                        } else if args.mimic3_tts {
-                            let api_request = Mimic3TTSRequest::new(input, mimic3_voice);
-                            // Mimic3 TTS request
-                            mimic3_tts(api_request)
-                                .await
-                                .map_err(|e| ApiError::Error(e.to_string()))
-                        } else {
-                            // Candle TTS request
-                            metavoice(input)
-                                .await
-                                .map_err(|e| ApiError::Error(e.to_string()))
-                        };
-
-                        match bytes_result {
-                            Ok(bytes) => {
-                                if args.ndi_audio {
-                                    // Determine the format based on TTS source
-                                    #[cfg(feature = "ndi")]
-                                    let samples_result = if args.oai_tts {
-                                        // OpenAI TTS returns MP3, convert MP3 bytes to f32 samples
-                                        rsllm::ndi::mp3_to_f32(bytes.to_vec())
-                                    } else {
-                                        // Candle TTS (`metavoice`) returns WAV, directly convert WAV PCM to f32 samples
-                                        rsllm::ndi::wav_to_f32(bytes.to_vec())
-                                    };
-
-                                    // Send audio samples over NDI with pacing
-                                    #[cfg(feature = "ndi")]
-                                    if let Ok(samples_f32) = samples_result {
-                                        // use 24000 unless mimic3_tts is enabled, then use 22050
-                                        let sample_rate =
-                                            if args.mimic3_tts { 22050 } else { 24000 };
-                                        let channels: i32 = 1;
-                                        let chunk_size = args.audio_chunk_size
-                                            * sample_rate as f32
-                                            * channels as f32;
-
-                                        // calculate delay of chunk_size samples at sample rate
-                                        let delay_ms = (chunk_size as f32
-                                            / channels as f32
-                                            / sample_rate as f32
-                                            * 1000.0)
-                                            as u64;
-
-                                        debug!(
-                                            "Sending {} ms duration {} audio samples",
-                                            delay_ms, chunk_size
-                                        );
-
-                                        // Iterate over samples_f32 in chunks
-                                        for chunk_samples in samples_f32.chunks(chunk_size as usize)
-                                        {
-                                            // Convert the chunk into the format expected by send_audio_samples_over_ndi
-                                            let mut chunk_vec = chunk_samples.to_vec();
-
-                                            // Check if this is the last chunk and it's smaller than the chunk_size
-                                            if chunk_samples.len() < chunk_size as usize {
-                                                // Could pad with silence if necessary
-                                                chunk_vec.resize(chunk_size as usize, 0.0);
-                                                // Pad with silence
-                                            }
-
-                                            // Send the chunk over NDI
-                                            send_audio_samples_over_ndi(
-                                                chunk_vec,
-                                                sample_rate,
-                                                channels,
-                                            )
-                                            .expect("Failed to send audio samples over NDI");
-
-                                            // Await to introduce a delay simulating real-time streaming
-                                            tokio::time::sleep(tokio::time::Duration::from_millis(
-                                                delay_ms,
-                                            ))
-                                            .await;
-                                        }
-                                    }
+                    let handle =
+                        tokio::spawn(async move {
+                            // Declare the permit variable outside the if block to extend its scope
+                            let _permit =
+                                if args.sd_image
+                                    || (args.mimic3_tts || args.oai_tts || args.tts_enable)
+                                {
+                                    // Conditionally acquire the permit and store it in an Option
+                                    Some(sem_clone_sd_image.acquire().await.expect(
+                                        "Stable Diffusion: Failed to acquire semaphore permit",
+                                    ))
                                 } else {
-                                    // Example code to play audio directly, replace with your actual audio playback logic
-                                    println!("Playing TTS audio");
-                                    let (_stream, stream_handle) =
-                                        rodio::OutputStream::try_default().unwrap();
-                                    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
-                                    let cursor = std::io::Cursor::new(bytes);
-                                    let source = rodio::Decoder::new_mp3(cursor)
-                                        .expect("Error decoding MP3");
-                                    sink.append(source);
-                                    sink.sleep_until_end();
-                                }
-                            }
-                            Err(e) => eprintln!("Error in TTS request: {}", e),
-                        }
-                    }
-                });
+                                    // If the condition is not met, no permit is acquired, and None is stored
+                                    None
+                                };
 
-                image_spawn_handles.push(handle);
+                            let mut sd_config = SDConfig::new();
+                            sd_config.prompt = paragraph_clone;
+                            sd_config.height = Some(args.sd_height);
+                            sd_config.width = Some(args.sd_width);
+                            sd_config.image_position = Some(image_alignment);
+                            if args.sd_scaled_height > 0 {
+                                sd_config.scaled_height = Some(args.sd_scaled_height);
+                            }
+                            if args.sd_scaled_width > 0 {
+                                sd_config.scaled_width = Some(args.sd_scaled_width);
+                            }
+
+                            let args_clone = args.clone();
+                            let mimic3_voice_clone = mimic3_voice.clone();
+                            let subtitle_position_clone = subtitle_position.clone();
+
+                            if args.sd_image {
+                                debug!("Generating images with prompt: {}", sd_config.prompt);
+
+                                // Create MessageData for image task
+                                let message_data_for_image = MessageData {
+                                    paragraph: sd_config.prompt.clone(), // Clone for the image task
+                                    output_id: output_id_clone.clone(),
+                                    paragraph_count,
+                                    sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                                    mimic3_voice: mimic3_voice_clone.clone(),
+                                    subtitle_position: subtitle_position_clone.clone(),
+                                    args: args_clone.clone(),
+                                };
+
+                                // For image tasks
+                                image_task_sender_clone
+                                    .send(message_data_for_image)
+                                    .await
+                                    .expect("Failed to send image task");
+                            }
+
+                            let message_data_for_speech = MessageData {
+                                paragraph: sd_config.prompt.clone(), // Already cloned above
+                                output_id: output_id_clone.clone(),  // Clone again for speech task
+                                paragraph_count,
+                                sd_config: sd_config.clone(), // Clone again if necessary
+                                mimic3_voice: mimic3_voice_clone, // Already cloned above
+                                subtitle_position: subtitle_position_clone, // Already cloned above
+                                args: args_clone,             // Already cloned above
+                            };
+
+                            // For speech tasks
+                            speech_task_sender_clone
+                                .send(message_data_for_speech)
+                                .await
+                                .expect("Failed to send speech task");
+                        });
+
+                    image_spawn_handles.push(handle);
+                }
+                // ** End of TTS and Image Generation **
+
+                // Token output to stdout in real-time
+                print!("{}", current_paragraph.join(""));
+                std::io::stdout().flush().unwrap();
+
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
@@ -1287,6 +1116,11 @@ async fn main() {
 
             // Await the completion of background tasks
             let _ = processing_handle.await;
+
+            // wait for the image speech and ndi tasks to finish
+            let _ = image_processing_task.await;
+            let _ = speech_processing_task.await;
+            let _ = ndi_sync_task.await;
 
             break;
         }
