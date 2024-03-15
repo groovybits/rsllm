@@ -17,37 +17,24 @@
 
 use clap::Parser;
 use log::{debug, error, info};
-use rsllm::adjust_caps;
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
-use rsllm::candle_metavoice::metavoice;
 use rsllm::candle_mistral::mistral;
 use rsllm::handle_long_string;
-use rsllm::mimic3_tts::tts as mimic3_tts;
-use rsllm::mimic3_tts::Request as Mimic3TTSRequest;
-#[cfg(feature = "ndi")]
-use rsllm::ndi::send_audio_samples_over_ndi;
-#[cfg(feature = "ndi")]
-use rsllm::ndi::send_images_over_ndi;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
-use rsllm::openai_tts::tts as oai_tts;
-use rsllm::openai_tts::Request as OAITTSRequest;
-use rsllm::openai_tts::Voice as OAITTSVoice;
-//use rsllm::pipeline::MessageData;
-//use rsllm::pipeline::ProcessedData;
 use rsllm::pipeline::{process_image, process_speech, send_to_ndi, MessageData, ProcessedData};
-use rsllm::stable_diffusion::{sd, SDConfig};
+use rsllm::stable_diffusion::SDConfig;
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
 use rsllm::twitch_client::setup as twitch_setup;
-use rsllm::ApiError;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
+use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::sync::{
@@ -56,7 +43,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::time::Duration;
 use uuid::Uuid;
 
@@ -99,70 +86,103 @@ async fn main() {
         content: args.system_prompt.to_string(),
     };
 
+    let processed_data_store: Arc<Mutex<HashMap<usize, ProcessedData>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
     // Channels for image and speech tasks
     let (image_task_sender, mut image_task_receiver) = mpsc::channel::<MessageData>(100);
     let (speech_task_sender, mut speech_task_receiver) = mpsc::channel::<MessageData>(100);
-
-    // Processed data channel
-    let (processed_sender, mut processed_receiver) = mpsc::channel::<ProcessedData>(100);
 
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
 
     // Image processing task
-    let image_processing_task = {
+    let _image_processing_task = {
         let image_sem = Arc::clone(&image_sem);
-        let processed_sender = processed_sender.clone();
+        let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
             while let Some(message_data) = image_task_receiver.recv().await {
                 let images = process_image(message_data.clone(), Arc::clone(&image_sem)).await;
-                let processed_data = ProcessedData {
-                    paragraph: message_data.paragraph.clone(),
-                    image_data: Some(images),
-                    audio_data: None,
-                    paragraph_count: message_data.paragraph_count,
-                    subtitle_position: message_data.subtitle_position.clone(),
-                    time_stamp: 0,
-                };
-                processed_sender
-                    .send(processed_data)
-                    .await
-                    .expect("Failed to send processed data");
+                let mut store = processed_data_store.lock().await;
+
+                match store.entry(message_data.paragraph_count) {
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(ProcessedData {
+                            paragraph: message_data.paragraph.clone(),
+                            image_data: Some(images),
+                            audio_data: None,
+                            paragraph_count: message_data.paragraph_count,
+                            subtitle_position: message_data.subtitle_position.clone(),
+                            time_stamp: 0,
+                        });
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        let entry = e.get_mut();
+                        entry.image_data = Some(images);
+                    }
+                }
             }
         })
     };
 
     // Speech processing task
-    let speech_processing_task = {
+    let _speech_processing_task = {
         let speech_sem = Arc::clone(&speech_sem);
-        let processed_sender = processed_sender.clone();
+        let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
             while let Some(message_data) = speech_task_receiver.recv().await {
                 let speech_data =
                     process_speech(message_data.clone(), Arc::clone(&speech_sem)).await;
-                let processed_data = ProcessedData {
-                    paragraph: message_data.paragraph.clone(),
-                    image_data: None,
-                    audio_data: Some(speech_data),
-                    paragraph_count: message_data.paragraph_count,
-                    subtitle_position: message_data.subtitle_position.clone(),
-                    time_stamp: 0,
-                };
-                processed_sender
-                    .send(processed_data)
-                    .await
-                    .expect("Failed to send processed data");
+                let mut store = processed_data_store.lock().await;
+
+                match store.entry(message_data.paragraph_count) {
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(ProcessedData {
+                            paragraph: message_data.paragraph.clone(),
+                            image_data: None,
+                            audio_data: Some(speech_data),
+                            paragraph_count: message_data.paragraph_count,
+                            subtitle_position: message_data.subtitle_position.clone(),
+                            time_stamp: 0,
+                        });
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        let entry = e.get_mut();
+                        entry.audio_data = Some(speech_data);
+                    }
+                }
             }
         })
     };
 
     // NDI sync task
-    let args_clone = args.clone();
-    let ndi_sync_task = tokio::spawn(async move {
-        while let Some(processed_data) = processed_receiver.recv().await {
-            // Logic to match and pair image and speech data
-            // Once a pair is ready, call send_to_ndi
-            send_to_ndi(processed_data, &args_clone).await;
+    let processed_data_store_for_ndi = processed_data_store.clone();
+    let args_for_ndi = args.clone();
+
+    let _ndi_sync_task = tokio::spawn(async move {
+        loop {
+            // Artificial delay for demonstration; adjust as needed
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+            let keys_to_remove = {
+                let store = processed_data_store_for_ndi.lock().await;
+                store
+                    .iter()
+                    .filter_map(|(&key, data)| {
+                        if data.image_data.is_some() && data.audio_data.is_some() {
+                            Some(key)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            for key in keys_to_remove {
+                if let Some(data) = processed_data_store_for_ndi.lock().await.remove(&key) {
+                    send_to_ndi(data, &args_for_ndi).await;
+                }
+            }
         }
     });
 
@@ -431,7 +451,7 @@ async fn main() {
             twitch_username_clone
         );
 
-        let twitch_handle = tokio::spawn(async move {
+        let _twitch_handle = tokio::spawn(async move {
             match twitch_setup(
                 twitch_username_clone.clone(),
                 twitch_auth_clone,
