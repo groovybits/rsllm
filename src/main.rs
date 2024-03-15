@@ -36,6 +36,7 @@ use rsllm::openai_tts::Request as OAITTSRequest;
 use rsllm::openai_tts::Voice as OAITTSVoice;
 //use rsllm::pipeline::MessageData;
 //use rsllm::pipeline::ProcessedData;
+use rsllm::pipeline::{process_image, process_speech, send_to_ndi, MessageData, ProcessedData};
 use rsllm::stable_diffusion::{sd, SDConfig};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -55,7 +56,7 @@ use std::sync::{
 };
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::time::Duration;
 use uuid::Uuid;
 
@@ -98,17 +99,98 @@ async fn main() {
         content: args.system_prompt.to_string(),
     };
 
-    // Create a queue to hold the MessageData structs
-    /*
-    let message_queue: Arc<Mutex<Vec<MessageData>>> = Arc::new(Mutex::new(Vec::new()));
+    // Task submission channel
+    let (task_sender, mut task_receiver) = mpsc::channel::<MessageData>(100);
 
-    // Create a queue to hold the processed audio and image data
+    // Processed data channel
+    let (processed_sender, mut processed_receiver) = mpsc::channel::<ProcessedData>(100);
+
+    // Shared state for maintaining task order and synchronization
     let processed_data_queue: Arc<Mutex<Vec<ProcessedData>>> = Arc::new(Mutex::new(Vec::new()));
 
-    // Create semaphores for image generation and speech generation
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
-    */
+
+    let image_processing_task = {
+        let image_sem = Arc::clone(&image_sem);
+        let processed_sender = processed_sender.clone();
+        tokio::spawn(async move {
+            while let Some(message_data) = task_receiver.recv().await {
+                let images = process_image(message_data.clone(), Arc::clone(&image_sem)).await;
+                // Construct ProcessedData and send
+                let processed_data = ProcessedData {
+                    paragraph: message_data.paragraph,
+                    image_data: Some(images),
+                    audio_data: None, // This will be filled in by the speech processing task
+                    paragraph_count: message_data.paragraph_count,
+                    subtitle_position: message_data.subtitle_position,
+                    time_stamp: 0, // Assign appropriate timestamp
+                };
+                processed_sender
+                    .send(processed_data)
+                    .await
+                    .expect("Failed to send processed data");
+            }
+        })
+    };
+
+    let speech_processing_task = {
+        let speech_sem = Arc::clone(&speech_sem);
+        let processed_sender = processed_sender.clone();
+        tokio::spawn(async move {
+            while let Some(message_data) = task_receiver.recv().await {
+                let speech_data =
+                    process_speech(message_data.clone(), Arc::clone(&speech_sem)).await;
+                // Update the corresponding ProcessedData in the queue or create a new entry if necessary
+                let mut queue = processed_data_queue.lock().await;
+
+                // Check if there's an existing entry for this paragraph count
+                if let Some(entry) = queue
+                    .iter_mut()
+                    .find(|data| data.paragraph_count == message_data.paragraph_count)
+                {
+                    // Update the existing entry with speech data
+                    entry.audio_data = Some(speech_data);
+                } else {
+                    // No existing entry, create a new one
+                    let processed_data = ProcessedData {
+                        paragraph: message_data.paragraph,
+                        image_data: None, // This will be filled by the image processing task
+                        audio_data: Some(speech_data),
+                        paragraph_count: message_data.paragraph_count,
+                        subtitle_position: message_data.subtitle_position,
+                        time_stamp: 0, // Assign appropriate timestamp
+                    };
+                    // Send this new entry directly to the processed_sender
+                    processed_sender
+                        .send(processed_data)
+                        .await
+                        .expect("Failed to send processed data");
+                }
+            }
+        })
+    };
+
+    let ndi_sync_task = {
+        let processed_data_queue = Arc::clone(&processed_data_queue);
+        let args_clone = args.clone();
+        tokio::spawn(async move {
+            while let Some(processed_data) = processed_receiver.recv().await {
+                let mut queue = processed_data_queue.lock().await;
+                queue.push(processed_data);
+                // Sort or manage queue based on time_stamp or paragraph_count for ordering
+
+                // Once an image-audio pair is ready, send to NDI
+                if let Some(pair) = queue
+                    .iter()
+                    .find(|data| data.audio_data.is_some() && data.image_data.is_some())
+                {
+                    send_to_ndi(pair.clone(), &args_clone).await;
+                    // Remove the pair from the queue
+                }
+            }
+        })
+    };
 
     let mut llm_host = args.llm_host;
     if args.use_openai {

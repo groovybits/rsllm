@@ -285,6 +285,7 @@ fn image_preprocess<T: AsRef<std::path::Path>>(path: T) -> anyhow::Result<Tensor
     Ok(img)
 }
 
+#[derive(Clone)]
 pub struct SDConfig {
     pub prompt: String,
     pub uncond_prompt: String,

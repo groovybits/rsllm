@@ -1,7 +1,7 @@
 use clap::Parser;
 
 /// RScap Probe Configuration
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[clap(
     author = "Chris Kennedy",
     version = "0.3.0",

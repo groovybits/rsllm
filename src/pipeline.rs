@@ -22,14 +22,15 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 // Message Data for Image and Speech generation functions to use
+#[derive(Clone)]
 pub struct MessageData {
-    paragraph: String,
-    output_id: String,
-    paragraph_count: usize,
-    sd_config: SDConfig,
-    mimic3_voice: String,
-    subtitle_position: String,
-    args: Args,
+    pub paragraph: String,
+    pub output_id: String,
+    pub paragraph_count: usize,
+    pub sd_config: SDConfig,
+    pub mimic3_voice: String,
+    pub subtitle_position: String,
+    pub args: Args,
 }
 
 // Function to process image generation
@@ -136,13 +137,14 @@ pub async fn process_speech(data: MessageData, speech_sem: Arc<Semaphore>) -> Ve
 }
 
 // Struct to hold the processed audio and image data
+#[derive(Clone)]
 pub struct ProcessedData {
-    paragraph: String,
-    image_data: Option<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>>, // Updated to hold a vector of ImageBuffer
-    audio_data: Option<Vec<u8>>,
-    paragraph_count: usize,
-    subtitle_position: String,
-    time_stamp: u64,
+    pub paragraph: String,
+    pub image_data: Option<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>>, // Updated to hold a vector of ImageBuffer
+    pub audio_data: Option<Vec<u8>>,
+    pub paragraph_count: usize,
+    pub subtitle_position: String,
+    pub time_stamp: u64,
 }
 
 // Function to send audio/video pairs to NDI
