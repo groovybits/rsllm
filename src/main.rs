@@ -61,13 +61,16 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().ok(); // read .env file
-                           // Initialize logging
+    // Read .env file
+    dotenv::dotenv().ok();
+
+    // Initialize logging
     let _ = env_logger::try_init();
 
+    // Parse command line arguments
     let args = Args::parse();
 
-    // set Rust log level with --loglevel if it is set
+    // Set Rust log level with --loglevel if it is set
     let loglevel = args.loglevel.to_lowercase();
     match loglevel.as_str() {
         "error" => {
@@ -90,25 +93,10 @@ async fn main() {
         }
     }
 
-    let system_prompt = args.system_prompt;
-
     let system_message = Message {
         role: "system".to_string(),
-        content: system_prompt.to_string(),
+        content: args.system_prompt.to_string(),
     };
-
-    // add these values to the input for completions endpoint
-    let temperature = args.temperature;
-    let top_p = args.top_p;
-    let presence_penalty = args.presence_penalty;
-    let frequency_penalty = args.frequency_penalty;
-    let max_tokens = args.max_tokens;
-    let model = args.model;
-    let mut llm_host = args.llm_host;
-    let llm_path = args.llm_path;
-    let debug_inline = args.debug_inline;
-    let ai_os_stats = args.ai_os_stats;
-    let ai_network_stats = args.ai_network_stats;
 
     // Create a queue to hold the MessageData structs
     /*
@@ -122,6 +110,7 @@ async fn main() {
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
     */
 
+    let mut llm_host = args.llm_host;
     if args.use_openai {
         // set the llm_host to the openai api
         llm_host = "https://api.openai.com".to_string();
@@ -161,7 +150,7 @@ async fn main() {
     let mut messages = vec![system_message];
 
     // Initialize the network capture if ai_network_stats is true
-    if ai_network_stats {
+    if args.ai_network_stats {
         network_capture(&mut network_capture_config, ptx);
     }
 
@@ -181,7 +170,7 @@ async fn main() {
         let mut packet_last_sent_ts = Instant::now();
         let mut count = 0;
         while running_processor_clone.load(Ordering::SeqCst) {
-            if ai_network_stats {
+            if args.ai_network_stats {
                 debug!("Capturing network packets...");
                 while let Some(packet) = prx.recv().await {
                     count += 1;
@@ -444,7 +433,7 @@ async fn main() {
         count += 1;
 
         // OS and Network stats message
-        let system_stats_json = if ai_os_stats {
+        let system_stats_json = if args.ai_os_stats {
             get_stats_as_json(StatsType::System).await
         } else {
             // Default input message
@@ -452,7 +441,7 @@ async fn main() {
         };
 
         // Add the system stats to the messages
-        if !ai_os_stats && !ai_network_stats {
+        if !args.ai_os_stats && !args.ai_network_stats {
             let query_clone = args.query.clone();
 
             let user_message = Message {
@@ -460,7 +449,7 @@ async fn main() {
                 content: query_clone.to_string(),
             };
             messages.push(user_message.clone());
-        } else if ai_network_stats {
+        } else if args.ai_network_stats {
             // create nework packet dump message from collected stream_data in decode_batch
             // Try to receive new packet batches if available
             let mut msg_count = 0;
@@ -489,7 +478,7 @@ async fn main() {
                     break;
                 }
             }
-        } else if ai_os_stats {
+        } else if args.ai_os_stats {
             let pretty_date_time = format!(
                 "#{}: {} - ",
                 count,
@@ -638,8 +627,8 @@ async fn main() {
                 tokio::spawn(async move {
                     if let Err(e) = mistral(
                         prompt_clone,
-                        max_tokens as usize,
-                        temperature as f64,
+                        args.max_tokens as usize,
+                        args.temperature as f64,
                         args.quantized,
                         Some(model_id),
                         external_sender,
@@ -651,8 +640,8 @@ async fn main() {
                 tokio::spawn(async move {
                     if let Err(e) = gemma(
                         prompt_clone,
-                        max_tokens as usize,
-                        temperature as f64,
+                        args.max_tokens as usize,
+                        args.temperature as f64,
                         args.quantized,
                         Some(model_id),
                         external_sender,
@@ -1244,13 +1233,13 @@ async fn main() {
             // Stream API Completion
             let stream = !args.no_stream;
             let open_ai_request = OpenAIRequest {
-                model: &model,
-                max_tokens: &max_tokens, // add this field to the request struct
+                model: &args.model,
+                max_tokens: &args.max_tokens, // add this field to the request struct
                 messages: messages.clone(),
-                temperature: &temperature, // add this field to the request struct
-                top_p: &top_p,             // add this field to the request struct
-                presence_penalty: &presence_penalty, // add this field to the request struct
-                frequency_penalty: &frequency_penalty, // add this field to the request struct
+                temperature: &args.temperature, // add this field to the request struct
+                top_p: &args.top_p,             // add this field to the request struct
+                presence_penalty: &args.presence_penalty, // add this field to the request struct
+                frequency_penalty: &args.frequency_penalty, // add this field to the request struct
                 stream: &stream,
             };
 
@@ -1259,8 +1248,8 @@ async fn main() {
                 open_ai_request,
                 &openai_key.clone(),
                 &llm_host,
-                &llm_path,
-                debug_inline,
+                &args.llm_path,
+                args.debug_inline,
                 args.show_output_errors,
                 args.break_line_length,
                 args.sd_image,
@@ -1287,7 +1276,7 @@ async fn main() {
             || (args.max_iterations > 1 && args.max_iterations == count)
         {
             // stop the running threads
-            if ai_network_stats {
+            if args.ai_network_stats {
                 network_capture_config
                     .running
                     .store(false, Ordering::SeqCst);
