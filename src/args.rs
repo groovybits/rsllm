@@ -201,7 +201,7 @@ pub struct Args {
     #[clap(
         long,
         env = "IMAGE_CONCURRENCY",
-        default_value = "8",
+        default_value = "1",
         help = "Image concurrency - max concurrent image tasks."
     )]
     pub image_concurrency: usize,
@@ -210,7 +210,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SPEECH_CONCURRENCY",
-        default_value = "8",
+        default_value = "1",
         help = "Speech concurrency - max concurrent speech tasks."
     )]
     pub speech_concurrency: usize,
