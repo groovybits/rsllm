@@ -97,7 +97,7 @@ async fn main() {
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
 
     // Image processing task
-    let _image_processing_task = {
+    let image_processing_task = {
         let image_sem = Arc::clone(&image_sem);
         let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
@@ -126,7 +126,7 @@ async fn main() {
     };
 
     // Speech processing task
-    let _speech_processing_task = {
+    let speech_processing_task = {
         let speech_sem = Arc::clone(&speech_sem);
         let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
@@ -159,7 +159,7 @@ async fn main() {
     let processed_data_store_for_ndi = processed_data_store.clone();
     let args_for_ndi = args.clone();
 
-    let _ndi_sync_task = tokio::spawn(async move {
+    let ndi_sync_task = tokio::spawn(async move {
         loop {
             // Artificial delay for demonstration; adjust as needed
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -1116,6 +1116,11 @@ async fn main() {
 
             // Await the completion of background tasks
             let _ = processing_handle.await;
+
+            // wait for the image speech and ndi tasks to finish
+            let _ = image_processing_task.await;
+            let _ = speech_processing_task.await;
+            let _ = ndi_sync_task.await;
 
             break;
         }
