@@ -22,6 +22,7 @@ use rsllm::adjust_caps;
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_metavoice::metavoice;
 use rsllm::candle_mistral::mistral;
+use rsllm::handle_long_string;
 use rsllm::mimic3_tts::tts as mimic3_tts;
 use rsllm::mimic3_tts::Request as Mimic3TTSRequest;
 #[cfg(feature = "ndi")]
@@ -868,52 +869,6 @@ async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
                 }
             }
         }
-    }
-}
-
-/// Modifies the provided string if it exceeds 80 characters, splitting it according to specified delimiters,
-/// and updates the `terminal_token_len` based on the operation performed.
-///
-/// # Arguments
-///
-/// * `received` - The string to potentially modify.
-/// * `terminal_token_len` - The current length of the terminal token, to be updated.
-fn handle_long_string(received: &str, terminal_token_len: &mut usize) {
-    if *terminal_token_len >= 80 {
-        std::io::stdout().flush().unwrap();
-
-        // Initialize split position to the end of the string by default
-        let mut split_pos = received.len();
-        let mut found = false;
-        for delimiter in ['\n', '.', ',', '?', '!'] {
-            if let Some(pos) = received.find(delimiter) {
-                // Adjust position to keep the delimiter with the first part, except for '\n'
-                let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
-                split_pos = split_pos.min(end_pos);
-                found = true;
-                break;
-            }
-        }
-        if split_pos == received.len() {
-            if let Some(pos) = received.find(' ') {
-                // Adjust position to keep the delimiter with the first part, except for '\n'
-                let end_pos = pos + 1;
-                split_pos = split_pos.min(end_pos);
-                found = true;
-            }
-        }
-
-        if found {
-            let (first, second) = received.split_at(split_pos);
-            print!("{}\n{}", first, second); // Use println! for simplicity to handle the newline
-            *terminal_token_len = 0; //second.len(); // Update terminal_token_len with the length of the second part
-        } else {
-            print!("{}", received);
-        }
-        std::io::stdout().flush().unwrap();
-    } else {
-        print!("{}", received);
-        std::io::stdout().flush().unwrap();
     }
 }
 
