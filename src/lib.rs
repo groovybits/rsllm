@@ -7,6 +7,7 @@
  * for RsLLM.
 */
 
+pub mod args;
 pub mod candle_metavoice;
 pub mod candle_mistral;
 pub mod mimic3_tts;
