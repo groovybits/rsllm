@@ -24,7 +24,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --model-id $MODEL_ID \
     --image-alignment right \
     --temperature 0.8 \
-    --image-concurrency 4 \
+    --image-concurrency 1 \
     --speech-concurrency 1\
     --max-concurrent-sd-image-tasks 8 \
     --daemon \
