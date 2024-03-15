@@ -10,4 +10,5 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --mimic3-tts \
     --image-alignment right \
     --temperature 0.8 \
+    --daemon \
     --max-tokens 1200 $@
