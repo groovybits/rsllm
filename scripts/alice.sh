@@ -8,9 +8,16 @@
 #
 #
 
-BUILD_TYPE=debug
+BUILD_TYPE=release
 MODEL=mistral
 MODEL_ID=7b-it
+MAX_TOKENS=1000
+ALIGNMENT=right
+TEMPERATURE=0.8
+POLL_INTERVAL=10
+IMAGE_CONCURRENCY=1
+SPEECH_CONCURRENCY=1
+CONTEXT_SIZE=3000
 DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     RUST_BACKTRACE=full target/${BUILD_TYPE}/rsllm \
     --query "create a story based on an anime About Alice an adult twitch streaming girl who lives in AI Wonderland. Have it vary off the title 'Alice in AI Wonderland' with a random plotline you create based on classic anime characters appearing in the wonderland. Alices AI Wonderland is a  happy fun show where Alice goes through experiences similar to Alice in Wonderland where she grows small or large depending one what she eats. Add in AI technology twists. Have it fully formatted like a transcript with the character speaking parts mostly speaking in first person, minimal narration. create a whole episode full length with classic anime characters with Alice the main character of AI Wonderland." \
@@ -22,10 +29,11 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --ndi-images \
     --mimic3-tts \
     --model-id $MODEL_ID \
-    --image-alignment right \
-    --temperature 0.8 \
-    --image-concurrency 1 \
-    --speech-concurrency 1\
-    --max-concurrent-sd-image-tasks 8 \
+    --image-alignment $ALIGNMENT \
+    --temperature $TEMPERATURE \
+    --image-concurrency $IMAGE_CONCURRENCY \
+    --speech-concurrency $SPEECH_CONCURRENCY \
+    --poll-interval $POLL_INTERVAL \
+    --llm-history-size $CONTEXT_SIZE \
     --daemon \
-    --max-tokens 1200 $@
+    --max-tokens $MAX_TOKENS $@

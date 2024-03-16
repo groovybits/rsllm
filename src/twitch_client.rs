@@ -1,7 +1,14 @@
 use anyhow::Result;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-pub async fn setup(nick: String, token: String, channel: Vec<String>) -> Result<()> {
+pub async fn setup(
+    nick: String,
+    token: String,
+    channel: Vec<String>,
+    running: Arc<AtomicBool>,
+) -> Result<()> {
     let credentials = match Some(nick).zip(Some(token)) {
         Some((nick, token)) => tmi::client::Credentials::new(nick, token),
         None => tmi::client::Credentials::anon(),
@@ -21,11 +28,15 @@ pub async fn setup(nick: String, token: String, channel: Vec<String>) -> Result<
     client.join_all(&channels).await?;
     log::info!("Joined the following channels: {}", channels.join(", "));
 
-    run(client, channels).await
+    run(client, channels, running).await
 }
 
-async fn run(mut client: tmi::Client, channels: Vec<tmi::Channel>) -> Result<()> {
-    loop {
+async fn run(
+    mut client: tmi::Client,
+    channels: Vec<tmi::Channel>,
+    running: Arc<AtomicBool>,
+) -> Result<()> {
+    while running.load(Ordering::SeqCst) {
         let msg = client.recv().await?;
         match msg.as_typed()? {
             tmi::Message::Privmsg(msg) => on_msg(&mut client, msg).await?,
@@ -37,6 +48,7 @@ async fn run(mut client: tmi::Client, channels: Vec<tmi::Channel>) -> Result<()>
             _ => {}
         };
     }
+    Ok(())
 }
 
 async fn on_msg(client: &mut tmi::Client, msg: tmi::Privmsg<'_>) -> Result<()> {

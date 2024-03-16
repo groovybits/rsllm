@@ -148,7 +148,19 @@ pub struct ProcessedData {
 }
 
 // Function to send audio/video pairs to NDI
-pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
+pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args, ndi_sem: Arc<Semaphore>) {
+    let _permit = ndi_sem
+        .acquire()
+        .await
+        .expect("Failed to acquire ndi semaphore permit");
+
+    // check if args.subtitles is true, if so defined the processed_data.paragraph as a variable, if not have it be an empty string
+    let subtitle = if args.subtitles {
+        processed_data.paragraph
+    } else {
+        String::new()
+    };
+
     if let Some(image_data) = processed_data.image_data {
         if args.ndi_images {
             #[cfg(feature = "ndi")]
@@ -156,7 +168,7 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
                 debug!("Sending images over NDI");
                 send_images_over_ndi(
                     image_data,
-                    &processed_data.paragraph,
+                    &subtitle,
                     args.hardsub_font_size,
                     &processed_data.subtitle_position,
                 )
