@@ -17,7 +17,7 @@ pub struct Args {
     )]
     pub system_prompt: String,
 
-    /// System prompt
+    /// Prompt
     #[clap(
         long,
         env = "QUERY",
@@ -595,6 +595,15 @@ pub struct Args {
         help = "Image alignment - left or right, center is default."
     )]
     pub image_alignment: String,
+
+    /// Subtitles - enable subtitles
+    #[clap(
+        long,
+        env = "SUBTITLES",
+        default_value_t = false,
+        help = "Subtitles - enable subtitles."
+    )]
+    pub subtitles: bool,
 
     /// Subtitle position - top, mid-top, center, mid-bottom, bottom - bottom is default
     #[clap(
