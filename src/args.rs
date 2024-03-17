@@ -125,6 +125,24 @@ pub struct Args {
     )]
     pub llm_history_size: usize,
 
+    /// Clear History - clear the history of the LLM each iteration
+    #[clap(
+        long,
+        env = "CLEAR_HISTORY",
+        default_value = "false",
+        help = "Clear History - clear the history of the LLM each iteration."
+    )]
+    pub no_history: bool,
+
+    /// Interactive mode - command line input
+    #[clap(
+        long,
+        env = "INTERACTIVE",
+        default_value = "false",
+        help = "Interactive mode - command line input."
+    )]
+    pub interactive: bool,
+
     /// Don't stream output
     #[clap(
         long,

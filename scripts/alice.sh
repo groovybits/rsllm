@@ -8,6 +8,7 @@
 #
 #
 
+# === CONFIGURATION ===
 BUILD_TYPE=release
 MODEL=mistral
 MODEL_ID=7b-it
@@ -16,17 +17,24 @@ ALIGNMENT=right
 TEMPERATURE=0.8
 POLL_INTERVAL=10000
 PIPELINE_CONCURRENCY=1
-CONTEXT_SIZE=3000
+CONTEXT_SIZE=9000
 SUBTITLES=1
 DAEMON=1
-
+KEEP_HISTORY=1
+# === END OF CONFIGURATION ===
+#
+#
 SUBTITLE_CMD=
 DAEMON_CMD=
+NO_HISTORY_CMD=
 if [ "$SUBTITLES" == 1 ]; then
     SUBTITLE_CMD="--subtitles"
 fi
 if [ "$DAEMON" == 1 ]; then
     DAEMON_CMD="--daemon"
+fi
+if [ "$KEEP_HISTORY" == 1 ]; then
+    NO_HISTORY_CMD="--no-history"
 fi
 DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     RUST_BACKTRACE=full target/${BUILD_TYPE}/rsllm \
@@ -46,4 +54,5 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --llm-history-size $CONTEXT_SIZE \
     $SUBTITLE_CMD \
     $DAEMON_CMD \
+    $NO_HISTORY_CMD \
     --max-tokens $MAX_TOKENS $@

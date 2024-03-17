@@ -250,7 +250,7 @@ async fn main() {
     };
 
     // Initialize messages with system_message outside the loop
-    let mut messages = vec![system_message];
+    let mut messages = vec![system_message.clone()];
 
     // Initialize the network capture if ai_network_stats is true
     if args.ai_network_stats {
@@ -541,6 +541,12 @@ async fn main() {
             std::process::exit(1);
         }
 
+        // clear messages from previous iteration if no_history is set to true
+        if args.no_history {
+            messages.clear();
+            messages.push(system_message.clone());
+        }
+
         packet_count += 1;
 
         // OS and Network stats message
@@ -553,13 +559,33 @@ async fn main() {
 
         // Add the system stats to the messages
         if !args.ai_os_stats && !args.ai_network_stats {
-            let query_clone = args.query.clone();
-
-            let user_message = Message {
-                role: "user".to_string(),
-                content: query_clone.to_string(),
-            };
-            messages.push(user_message.clone());
+            if !args.interactive && !args.query.is_empty() {
+                let query_clone = args.query.clone();
+                let user_message = Message {
+                    role: "user".to_string(),
+                    content: query_clone.to_string(),
+                };
+                messages.push(user_message.clone());
+            } else {
+                // output a prompt and wait for input, create a user message and add it to the messages
+                print!("> ");
+                std::io::stdout().flush().expect("Could not flush stdout");
+                let mut prompt = String::new();
+                std::io::stdin()
+                    .read_line(&mut prompt)
+                    .expect("Could not read line");
+                if prompt.ends_with('\n') {
+                    prompt.pop();
+                    if prompt.ends_with('\r') {
+                        prompt.pop();
+                    }
+                }
+                let user_message = Message {
+                    role: "user".to_string(),
+                    content: prompt.to_string(),
+                };
+                messages.push(user_message.clone());
+            }
         } else if args.ai_network_stats {
             // create nework packet dump message from collected stream_data in decode_batch
             // Try to receive new packet batches if available
@@ -635,7 +661,11 @@ async fn main() {
             non_system_messages.iter().map(|m| m.content.len()).sum();
 
         // If non-system messages alone exceed the limit, we need to trim
-        if llm_history_size_bytes > 0 && total_non_system_size > llm_history_size_bytes {
+        if !args.no_history
+            && args.daemon
+            && llm_history_size_bytes > 0
+            && total_non_system_size > llm_history_size_bytes
+        {
             let mut excess_size = total_non_system_size - llm_history_size_bytes;
 
             info!(
@@ -1022,11 +1052,17 @@ async fn main() {
             );
             println!("============= END RESPONSE ============");
 
-            // add answers to the messages as an assistant role message with the content
-            messages.push(Message {
-                role: "assistant".to_string(),
-                content: answers_str.clone(),
-            });
+            // check if we got any tokens, if not clear and reset message history
+            if token_count == 0 {
+                messages.clear();
+                messages.push(system_message.clone());
+            } else {
+                // add answers to the messages as an assistant role message with the content
+                messages.push(Message {
+                    role: "assistant".to_string(),
+                    content: answers_str.clone(),
+                });
+            }
         } else {
             // Stream API Completion
             let stream = !args.no_stream;
