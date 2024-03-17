@@ -508,12 +508,6 @@ async fn main() {
                 }
             }
         });
-
-        //TODO: put this at the end.
-        // wait for the running_processor to be set to false
-        /*if let Err(e) = twitch_handle.await {
-        error!("Error waiting for Twitch channel: {}", e);
-        }*/
     }
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
@@ -1069,39 +1063,45 @@ async fn main() {
             info!("Network Processing handle complete.");
 
             // set a flag to stop the pipeline processing task with the message shutdown field
+            let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = args.shutdown_msg.clone();
+            sd_config.height = Some(args.sd_height);
+            sd_config.width = Some(args.sd_width);
+            sd_config.image_position = Some(args.image_alignment.clone());
+            if args.sd_scaled_height > 0 {
+                sd_config.scaled_height = Some(args.sd_scaled_height);
+            }
+            if args.sd_scaled_width > 0 {
+                sd_config.scaled_width = Some(args.sd_scaled_width);
+            }
             pipeline_task_sender
                 .send(MessageData {
-                    paragraph: "shutdown".to_string(),
-                    output_id: "shutdown".to_string(),
+                    paragraph: args.shutdown_msg.to_string(),
+                    output_id: output_id.to_string(),
                     paragraph_count: 0,
-                    sd_config: SDConfig::new(),
-                    mimic3_voice: "".to_string(),
-                    subtitle_position: "".to_string(),
+                    sd_config,
+                    mimic3_voice: args.mimic3_voice.to_string(),
+                    subtitle_position: args.subtitle_position.to_string(),
                     args: args.clone(),
                     shutdown: true,
                 })
                 .await
                 .expect("Failed to send last audio/speech pipeline task");
 
-            // NDI await completion
-            /*info!("waiting for ndi handle to complete...");
-            let _ = ndi_sync_task.await;
-            info!("ndi handle completed.");*/
-
             // Pipeline await completion
-            /*info!("waiting for pipline handle to complete...");
+            info!("waiting for pipline handle to complete...");
             let _ = pipeline_processing_task.await;
-            info!("pipeline handle completed.");*/
+            info!("pipeline handle completed.");
 
-            // sleep and let the pipeline finish and exit the program
-            info!("Waiting for pipeline to finish before exiting...");
-            loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
+            // NDI await completion
+            info!("waiting for ndi handle to complete...");
+            let _ = ndi_sync_task.await;
+            info!("ndi handle completed.");
 
-            //info!("Exiting main loop...");
-
-            //break;
+            // exit here
+            info!("Exiting main loop...");
+            std::process::exit(0);
         }
 
         // Calculate elapsed time since last start

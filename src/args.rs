@@ -587,6 +587,15 @@ pub struct Args {
     )]
     pub image_alignment: String,
 
+    /// shutdown_msg - message to send when shutting down
+    #[clap(
+        long,
+        env = "SHUTDOWN_MSG",
+        default_value = "Shutting down now, brought to you by GroovyLife.AI created by The Groovy Organization.",
+        help = "shutdown_msg - message to send when shutting down."
+    )]
+    pub shutdown_msg: String,
+
     /// Subtitles - enable subtitles
     #[clap(
         long,
