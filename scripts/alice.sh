@@ -33,7 +33,7 @@ fi
 if [ "$DAEMON" == 1 ]; then
     DAEMON_CMD="--daemon"
 fi
-if [ "$KEEP_HISTORY" == 1 ]; then
+if [ "$KEEP_HISTORY" == 0 ]; then
     NO_HISTORY_CMD="--no-history"
 fi
 DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
