@@ -999,7 +999,7 @@ async fn main() {
 
             let answers_str = answers.join("").to_string();
 
-            println!("\n=========================");
+            println!("\n=======================================");
             println!(
                 "#[{}] ({}) {}/{}/{} imgs/tkns/chrs in {:.2?}s @ {:.2}tps",
                 packet_count,
@@ -1010,7 +1010,7 @@ async fn main() {
                 elapsed,
                 tokens_per_second
             );
-            println!("\n=========================");
+            println!("============= END RESPONSE ============");
 
             // add answers to the messages as an assistant role message with the content
             messages.push(Message {
