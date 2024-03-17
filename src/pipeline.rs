@@ -31,6 +31,7 @@ pub struct MessageData {
     pub mimic3_voice: String,
     pub subtitle_position: String,
     pub args: Args,
+    pub shutdown: bool,
 }
 
 // Function to process image generation
@@ -145,6 +146,7 @@ pub struct ProcessedData {
     pub paragraph_count: usize,
     pub subtitle_position: String,
     pub time_stamp: u64,
+    pub shutdown: bool,
 }
 
 // Function to send audio/video pairs to NDI

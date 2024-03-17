@@ -131,6 +131,7 @@ async fn main() {
                                 paragraph_count: message_data_clone.paragraph_count,
                                 subtitle_position: message_data_clone.subtitle_position.clone(),
                                 time_stamp: 0,
+                                shutdown: message_data_clone.shutdown.clone(),
                             });
                         }
                         std::collections::hash_map::Entry::Occupied(mut e) => {
@@ -149,10 +150,28 @@ async fn main() {
     let args_for_ndi = args.clone();
 
     let running_processor_ndi = Arc::new(AtomicBool::new(true));
-    let running_processor_clone = running_processor_ndi.clone();
+    let running_processor_ndi_clone = running_processor_ndi.clone();
     let ndi_sync_task = tokio::spawn(async move {
         let ndi_sem = Arc::clone(&ndi_sem);
-        while running_processor_clone.load(Ordering::SeqCst) {
+        while running_processor_ndi_clone.load(Ordering::SeqCst) {
+            // check if the shutdown field is set for this message and we need to exit the loop
+            let shutdown = {
+                let store = processed_data_store_for_ndi.lock().await;
+                store
+                    .iter()
+                    .filter_map(|(_, data)| {
+                        if data.shutdown {
+                            Some(data.shutdown.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+            if shutdown.contains(&true) {
+                running_processor_ndi_clone.store(false, Ordering::SeqCst);
+                break;
+            }
             let keys_to_remove = {
                 let store = processed_data_store_for_ndi.lock().await;
                 store
@@ -225,8 +244,8 @@ async fn main() {
         network_capture(&mut network_capture_config, ptx);
     }
 
-    let running_processor = Arc::new(AtomicBool::new(true));
-    let running_processor_clone = running_processor.clone();
+    let running_processor_network = Arc::new(AtomicBool::new(true));
+    let running_processor_network_clone = running_processor_network.clone();
 
     let processing_handle = tokio::spawn(async move {
         let mut decode_batch = Vec::new();
@@ -240,7 +259,7 @@ async fn main() {
 
         let mut packet_last_sent_ts = Instant::now();
         let mut count = 0;
-        while running_processor_clone.load(Ordering::SeqCst) {
+        while running_processor_network_clone.load(Ordering::SeqCst) {
             if args.ai_network_stats {
                 debug!("Capturing network packets...");
                 while let Some(packet) = prx.recv().await {
@@ -438,7 +457,7 @@ async fn main() {
         let twitch_auth_clone = twitch_auth.clone(); // Assuming twitch_auth is clonable and you want to use it within the closure.
 
         // TODO: add mpsc channels for communication between the twitch setup and the main thread
-        let running_processor_clone = running_processor_twitch.clone();
+        let running_processor_twitch_clone = running_processor_twitch.clone();
         let _twitch_handle = tokio::spawn(async move {
             info!(
                 "Setting up Twitch channel {} for user {}",
@@ -457,7 +476,7 @@ async fn main() {
                 twitch_username_clone.clone(),
                 twitch_auth_clone,
                 twitch_channel_clone.clone(),
-                running_processor_clone,
+                running_processor_twitch_clone,
             )
             .await
             {
@@ -861,6 +880,7 @@ async fn main() {
                                 mimic3_voice: mimic3_voice_clone.clone(),
                                 subtitle_position: subtitle_position_clone.clone(),
                                 args: args_clone.clone(),
+                                shutdown: false,
                             };
 
                             // For image tasks
@@ -928,7 +948,7 @@ async fn main() {
                     let mimic3_voice_clone = mimic3_voice.clone();
                     let subtitle_position_clone = subtitle_position.clone();
 
-                    // Create MessageData for image task
+                    // Create MessageData for pipeline task
                     let message_data_for_pipeline = MessageData {
                         paragraph: sd_config.prompt.clone(), // Clone for the image task
                         output_id: output_id_clone.clone(),
@@ -937,9 +957,10 @@ async fn main() {
                         mimic3_voice: mimic3_voice_clone.clone(),
                         subtitle_position: subtitle_position_clone.clone(),
                         args: args_clone.clone(),
+                        shutdown: false,
                     };
 
-                    // For image tasks
+                    // For pipeline task
                     pipeline_task_sender_clone
                         .send(message_data_for_pipeline)
                         .await
@@ -1027,14 +1048,41 @@ async fn main() {
             }
 
             // stop the running threads
-            running_processor.store(false, Ordering::SeqCst);
-            running_processor_ndi.store(false, Ordering::SeqCst);
+            info!("Signaling background tasks to complete...");
+            running_processor_network.store(false, Ordering::SeqCst);
             running_processor_twitch.store(false, Ordering::SeqCst);
 
             // Await the completion of background tasks
+            info!("waiting for network capture handle to complete...");
             let _ = processing_handle.await;
-            let _ = pipeline_processing_task.await;
+            info!("Network Processing handle complete.");
+
+            // set a flag to stop the pipeline processing task with the message shutdown field
+            pipeline_task_sender
+                .send(MessageData {
+                    paragraph: "shutdown".to_string(),
+                    output_id: "shutdown".to_string(),
+                    paragraph_count: 0,
+                    sd_config: SDConfig::new(),
+                    mimic3_voice: "".to_string(),
+                    subtitle_position: "".to_string(),
+                    args: args.clone(),
+                    shutdown: true,
+                })
+                .await
+                .expect("Failed to send last audio/speech pipeline task");
+
+            // NDI await completion
+            info!("waiting for ndi handle to complete...");
             let _ = ndi_sync_task.await;
+            info!("ndi handle completed.");
+
+            // Pipeline await completion
+            info!("waiting for pipline handle to complete...");
+            let _ = pipeline_processing_task.await;
+            info!("pipeline handle completed.");
+
+            info!("Exiting main loop...");
 
             break;
         }
