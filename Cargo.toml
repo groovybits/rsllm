@@ -10,9 +10,21 @@ keywords = [
     "zeromq",
     "stable-diffusion",
     "llm",
+    "tts",
+    "mimic3",
+    "ndi",
+    "text-to-speech",
+    "openai",
+    "artificialintelligence",
+    "twitch",
+    "chatbot",
+    "analyzer",
+    "metal",
+    "candle"
 ]
 categories = ["command-line-utilities"]
 readme = "README.md"
+documentation = "https://docs.rs/rsllm"
 license-file = "LICENSE"
 homepage = "https://github.com/groovybits/rsllm/wiki"
 repository = "https://github.com/groovybits/rsllm"
