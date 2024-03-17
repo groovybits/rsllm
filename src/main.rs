@@ -22,7 +22,7 @@ use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
 use rsllm::handle_long_string;
 use rsllm::network_capture::{network_capture, NetworkCapture};
-use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
+use rsllm::openai_api::{format_messages_for_llm, stream_completion, Message, OpenAIRequest};
 #[cfg(feature = "ndi")]
 use rsllm::pipeline::send_to_ndi;
 use rsllm::pipeline::{process_image, process_speech, MessageData, ProcessedData};
@@ -623,9 +623,9 @@ async fn main() {
 
         // measure size of messages in bytes and print it out
         let messages_size = bincode::serialize(&messages).unwrap().len();
-        debug!("Initial Messages size: {}", messages_size);
+        info!("Initial Messages size: {}", messages_size);
 
-        let llm_history_size_bytes: usize = args.llm_history_size; // Your defined max size in bytes
+        let llm_history_size_bytes: usize = args.llm_history_size; // max history size in bytes
 
         // Separate system messages to preserve them
         let (system_messages, mut non_system_messages): (Vec<_>, Vec<_>) =
@@ -637,6 +637,11 @@ async fn main() {
         // If non-system messages alone exceed the limit, we need to trim
         if llm_history_size_bytes > 0 && total_non_system_size > llm_history_size_bytes {
             let mut excess_size = total_non_system_size - llm_history_size_bytes;
+
+            info!(
+                "Pruning excess history size: removing {} of {} bytes to {} bytes.",
+                excess_size, total_non_system_size, llm_history_size_bytes
+            );
 
             // Reverse iterate to trim from the end
             for message in non_system_messages.iter_mut().rev() {
@@ -656,6 +661,15 @@ async fn main() {
                     break; // After truncation, we should be within the limit
                 }
             }
+
+            info!(
+                "Pruning complete. New history size: {} bytes for {} messages.",
+                non_system_messages
+                    .iter()
+                    .map(|m| m.content.len())
+                    .sum::<usize>(),
+                non_system_messages.len()
+            );
         }
 
         // Reassemble messages, ensuring system messages are preserved at their original position
@@ -693,7 +707,7 @@ async fn main() {
             }
         }
 
-        // Setup mpsc channels for internal communication within the mistral function
+        // Setup mpsc channels for internal communication within the llm function
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
 
         let model_id = args.model_id.clone();
@@ -722,7 +736,7 @@ async fn main() {
                 "".to_string()
             };
 
-            let prompt = format_messages_for_llama2(messages.clone(), chat_format);
+            let prompt = format_messages_for_llm(messages.clone(), chat_format);
 
             debug!("\nPrompt: {}", prompt);
 

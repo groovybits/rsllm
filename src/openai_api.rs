@@ -91,7 +91,7 @@ fn process_and_print_token(token: &str, current_line_length: &mut usize, break_l
     }
 }
 
-pub fn format_messages_for_llama2(messages: Vec<Message>, chat_format: String) -> String {
+pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> String {
     let mut formatted_history = String::new();
     // Begin/End Stream Tokens
     let eos_token = if chat_format == "llama2" { "</s>" } else { "" };
