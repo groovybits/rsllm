@@ -3,24 +3,10 @@ name = "rsllm"
 description = "Rust LLM Stream Analyzer and Content Generator"
 keywords = [
     "ai",
-    "broadcast",
-    "mpegts",
-    "capture",
-    "pcap",
-    "zeromq",
     "stable-diffusion",
-    "llm",
-    "tts",
-    "mimic3",
     "ndi",
     "text-to-speech",
-    "openai",
-    "artificialintelligence",
     "twitch",
-    "chatbot",
-    "analyzer",
-    "metal",
-    "candle"
 ]
 categories = ["command-line-utilities"]
 readme = "README.md"
