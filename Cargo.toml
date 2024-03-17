@@ -18,6 +18,9 @@ authors = ["Chris Kennedy"]
 version = "0.4.3"
 edition = "2021"
 
+[package.metadata.docs.rs]
+default-target = "x86_64-apple-darwin"
+
 [lib]
 path = "src/lib.rs"
 
