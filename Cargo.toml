@@ -27,9 +27,10 @@ path = "src/lib.rs"
 [features]
 default = []
 dpdk_enabled = ["capsule"]
-metal = ["candle-core/metal", "candle-nn/metal"]
+mps = ["candle-core/metal", "candle-nn/metal"]
 ndi = ["ndi-sdk-rsllm"]
 metavoice = []
+audioplayer = ["rodio"]
 
 [profile.release-with-debug]
 inherits = "release"
@@ -69,7 +70,7 @@ pcap = { version = "1.1.0", features = ["all-features", "capture-stream"] }
 anyhow = "1.0.79"
 lazy_static = "1.4.0"
 rtp-rs = "0.6.0"
-ahash = "0.8.7"
+ahash = "0.8.11"
 mpeg2ts-reader = "0.15.0"
 scte35-reader = "0.14.0"
 h264-reader = "0.7.0"
@@ -81,7 +82,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 uuid = { version = "1.7.0", features = ["v4"] }
 imageproc = "0.23.0"
 rusttype = "0.9.3"
-rodio = "0.17.3"
+rodio = { version = "0.17.3", features = ["wav", "mp3"], optional = true }
 minimp3 = "0.5.1"
 tmi = "0.5.0"
 pin-utils = "0.1.0"

@@ -123,13 +123,18 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
                     return bytes.to_vec();
                 } else {
                     // Example code to play audio directly, replace with your actual audio playback logic
-                    println!("Playing TTS audio");
-                    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-                    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
-                    let cursor = std::io::Cursor::new(bytes);
-                    let source = rodio::Decoder::new_mp3(cursor).expect("Error decoding MP3");
-                    sink.append(source);
-                    sink.sleep_until_end();
+                    #[cfg(feature = "audioplayer")]
+                    {
+                        println!("Playing TTS audio");
+                        let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+                        let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+                        let cursor = std::io::Cursor::new(bytes);
+                        let source = rodio::Decoder::new_mp3(cursor).expect("Error decoding MP3");
+                        sink.append(source);
+                        sink.sleep_until_end();
+                    }
+                    #[cfg(not(feature = "audioplayer"))]
+                    log::info!("Feature rodio isn't enabled for audio playback");
                 }
             }
             Err(e) => eprintln!("Error in TTS request: {}", e),
