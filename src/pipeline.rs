@@ -18,8 +18,6 @@ use crate::ApiError;
 use image::ImageBuffer;
 use image::Rgb;
 use log::debug;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
 
 // Message Data for Image and Speech generation functions to use
 #[derive(Clone)]
@@ -31,18 +29,11 @@ pub struct MessageData {
     pub mimic3_voice: String,
     pub subtitle_position: String,
     pub args: Args,
+    pub shutdown: bool,
 }
 
 // Function to process image generation
-pub async fn process_image(
-    data: MessageData,
-    image_sem: Arc<Semaphore>,
-) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> {
-    let _permit = image_sem
-        .acquire()
-        .await
-        .expect("Failed to acquire image semaphore permit");
-
+pub async fn process_image(data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> {
     if data.args.sd_image {
         debug!("Generating images with prompt: {}", data.sd_config.prompt);
         match sd(data.sd_config).await {
@@ -78,12 +69,7 @@ pub async fn process_image(
 }
 
 // Function to process speech generation
-pub async fn process_speech(data: MessageData, speech_sem: Arc<Semaphore>) -> Vec<u8> {
-    let _permit = speech_sem
-        .acquire()
-        .await
-        .expect("Failed to acquire speech semaphore permit");
-
+pub async fn process_speech(data: MessageData) -> Vec<u8> {
     if data.args.mimic3_tts || data.args.oai_tts || data.args.tts_enable {
         let input = data.sd_config.prompt.clone(); // Ensure this uses the appropriate text for TTS
 
@@ -145,15 +131,12 @@ pub struct ProcessedData {
     pub paragraph_count: usize,
     pub subtitle_position: String,
     pub time_stamp: u64,
+    pub shutdown: bool,
 }
 
 // Function to send audio/video pairs to NDI
-pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args, ndi_sem: Arc<Semaphore>) {
-    let _permit = ndi_sem
-        .acquire()
-        .await
-        .expect("Failed to acquire ndi semaphore permit");
-
+#[cfg(feature = "ndi")]
+pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
     // check if args.subtitles is true, if so defined the processed_data.paragraph as a variable, if not have it be an empty string
     let subtitle = if args.subtitles {
         processed_data.paragraph
@@ -163,7 +146,6 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args, ndi_sem: Ar
 
     if let Some(image_data) = processed_data.image_data {
         if args.ndi_images {
-            #[cfg(feature = "ndi")]
             {
                 debug!("Sending images over NDI");
                 send_images_over_ndi(
@@ -179,7 +161,6 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args, ndi_sem: Ar
 
     if let Some(audio_data) = processed_data.audio_data {
         if args.ndi_audio {
-            #[cfg(feature = "ndi")]
             {
                 let samples_result = if args.oai_tts {
                     crate::ndi::mp3_to_f32(audio_data)

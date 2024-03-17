@@ -4,7 +4,7 @@ use clap::Parser;
 #[derive(Parser, Debug, Clone)]
 #[clap(
     author = "Chris Kennedy",
-    version = "0.4.1",
+    version = "0.4.2",
     about = "Rust LLM Stream Analyzer and Content Generator"
 )]
 pub struct Args {
@@ -197,23 +197,14 @@ pub struct Args {
     )]
     pub max_concurrent_sd_image_tasks: usize,
 
-    /// Image concurrency - max concurrent image tasks
+    /// Pipeline concurrency - max concurrent pipeline tasks
     #[clap(
         long,
-        env = "IMAGE_CONCURRENCY",
+        env = "PIPELINE_CONCURRENCY",
         default_value = "1",
-        help = "Image concurrency - max concurrent image tasks."
+        help = "Pipeline concurrency - max concurrent pipeline tasks."
     )]
-    pub image_concurrency: usize,
-
-    /// Speech concurrency - max concurrent speech tasks
-    #[clap(
-        long,
-        env = "SPEECH_CONCURRENCY",
-        default_value = "1",
-        help = "Speech concurrency - max concurrent speech tasks."
-    )]
-    pub speech_concurrency: usize,
+    pub pipeline_concurrency: usize,
 
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
@@ -595,6 +586,15 @@ pub struct Args {
         help = "Image alignment - left or right, center is default."
     )]
     pub image_alignment: String,
+
+    /// shutdown_msg - message to send when shutting down
+    #[clap(
+        long,
+        env = "SHUTDOWN_MSG",
+        default_value = "Shutting down now, brought to you by GroovyLife.AI created by The Groovy Organization.",
+        help = "shutdown_msg - message to send when shutting down."
+    )]
+    pub shutdown_msg: String,
 
     /// Subtitles - enable subtitles
     #[clap(
