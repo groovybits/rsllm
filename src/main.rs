@@ -220,6 +220,7 @@ async fn main() {
 
     // start time
     let start_time = current_unix_timestamp_ms().unwrap_or(0);
+    let mut total_paragraph_count = 0;
 
     // Perform TR 101 290 checks
     let mut tr101290_errors = Tr101290Errors::new();
@@ -527,7 +528,7 @@ async fn main() {
     } else {
         println!("Running RsLLM for [{}] iterations...", args.max_iterations);
     }
-    let mut count = 0;
+    let mut packet_count = 0;
     loop {
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
@@ -540,7 +541,7 @@ async fn main() {
             std::process::exit(1);
         }
 
-        count += 1;
+        packet_count += 1;
 
         // OS and Network stats message
         let system_stats_json = if args.ai_os_stats {
@@ -570,7 +571,7 @@ async fn main() {
                 // get current pretty date and time
                 let pretty_date_time = format!(
                     "#{}: {} -",
-                    count,
+                    packet_count,
                     chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
                 );
                 let network_stats_message = Message {
@@ -591,7 +592,7 @@ async fn main() {
         } else if args.ai_os_stats {
             let pretty_date_time = format!(
                 "#{}: {} - ",
-                count,
+                packet_count,
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
             );
             let system_stats_message = Message {
@@ -853,7 +854,7 @@ async fn main() {
                         current_paragraph.push(second.to_string());
 
                         // ** Start of TTS and Image Generation **
-                        // Check if image generation is enabled and proceed
+                        // Check if image generation or speech is enabled and proceed
                         if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                             // Clone necessary data for use in the async block
                             let paragraph_clone = paragraphs[paragraph_count].clone();
@@ -885,10 +886,10 @@ async fn main() {
 
                             // Create MessageData for image task
                             let message_data_for_pipeline = MessageData {
-                                paragraph: sd_config.prompt.clone(), // Clone for the image task
+                                paragraph: sd_config.prompt.clone(),
                                 output_id: output_id_clone.clone(),
                                 paragraph_count,
-                                sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                                sd_config: sd_config.clone(),
                                 mimic3_voice: mimic3_voice_clone.clone(),
                                 subtitle_position: subtitle_position_clone.clone(),
                                 args: args_clone.clone(),
@@ -908,6 +909,7 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         paragraph_count += 1; // Increment paragraph count for the next paragraph
+                        total_paragraph_count += 1; // Increment paragraph count for the next paragraph
                     } else {
                         // store the token in the current paragraph
                         current_paragraph.push(received.clone());
@@ -964,7 +966,7 @@ async fn main() {
                     let message_data_for_pipeline = MessageData {
                         paragraph: sd_config.prompt.clone(), // Clone for the image task
                         output_id: output_id_clone.clone(),
-                        paragraph_count,
+                        paragraph_count: total_paragraph_count,
                         sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
                         mimic3_voice: mimic3_voice_clone.clone(),
                         subtitle_position: subtitle_position_clone.clone(),
@@ -985,6 +987,7 @@ async fn main() {
                 std::io::stdout().flush().unwrap();
 
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
+                total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
             // Wait for the LLM thread to finish
@@ -996,10 +999,18 @@ async fn main() {
 
             let answers_str = answers.join("").to_string();
 
+            println!("\n=========================");
             println!(
-                "\n================================\n#{} Generated {}/{}/{} paragraphs/tokens/chars in {:.2?} seconds ({:.2} tokens/second)\n================================\n",
-                output_id, paragraph_count, token_count, answers_str.len(), elapsed, tokens_per_second
+                "#[{}] ({}) {}/{}/{} imgs/tkns/chrs in {:.2?}s @ {:.2}tps",
+                packet_count,
+                output_id,
+                paragraph_count,
+                token_count,
+                answers_str.len(),
+                elapsed,
+                tokens_per_second
             );
+            println!("\n=========================");
 
             // add answers to the messages as an assistant role message with the content
             messages.push(Message {
@@ -1047,7 +1058,7 @@ async fn main() {
 
         // break the loop if we are not running as a daemon or hit max iterations
         if (!args.daemon && args.max_iterations <= 1)
-            || (args.max_iterations > 1 && args.max_iterations == count)
+            || (args.max_iterations > 1 && args.max_iterations == packet_count)
         {
             // stop the running threads
             if args.ai_network_stats {
@@ -1083,7 +1094,7 @@ async fn main() {
                 .send(MessageData {
                     paragraph: args.shutdown_msg.to_string(),
                     output_id: output_id.to_string(),
-                    paragraph_count: 0,
+                    paragraph_count: total_paragraph_count,
                     sd_config,
                     mimic3_voice: args.mimic3_voice.to_string(),
                     subtitle_position: args.subtitle_position.to_string(),
@@ -1118,11 +1129,15 @@ async fn main() {
         if elapsed < poll_interval_duration {
             // Sleep only if the elapsed time is less than the poll interval
             println!(
-                "Sleeping for {} ms...",
+                "Finished loop #{} Sleeping for {} ms...",
+                packet_count,
                 poll_interval_duration.as_millis() - elapsed.as_millis()
             );
             tokio::time::sleep(poll_interval_duration - elapsed).await;
-            println!("Running after sleeping...");
+            println!(
+                "Continuing after sleeping with loop #{}...",
+                packet_count + 1
+            );
         }
 
         // Update start time for the next iteration
