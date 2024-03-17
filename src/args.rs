@@ -12,7 +12,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SYSTEM_PROMPT",
-        default_value = "You will recieve data in the prompt to analzye. You are able to say green or red depending on the data streams health determined from various forms of analysis as needed. The data is either system os stats or mpegts packets, you will know by the format and content which it is.",
+        default_value = "You are RsLLM the AI Analyzer. You carry on conversations and help people with their tasks. You are very friendly and polite. You are a good listener and always try to help people feel better.",
         help = "System prompt"
     )]
     pub system_prompt: String,
@@ -21,8 +21,8 @@ pub struct Args {
     #[clap(
         long,
         env = "QUERY",
-        default_value = "Determine if the stream is healthy or sick, diagnose the issue if possible or give details about it. Use the historical view to see bigger trends of the stream of data shown above. It will be in older to newer order per sample period shown by the timestamps per period.",
-        help = "Query to generate completions for"
+        default_value = "",
+        help = "Query to generate completions for, empty is interactive mode."
     )]
     pub query: String,
 

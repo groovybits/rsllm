@@ -568,7 +568,7 @@ async fn main() {
                 messages.push(user_message.clone());
             } else {
                 // output a prompt and wait for input, create a user message and add it to the messages
-                print!("> ");
+                print!("#{} rsllm> ", packet_count);
                 std::io::stdout().flush().expect("Could not flush stdout");
                 let mut prompt = String::new();
                 std::io::stdin()
