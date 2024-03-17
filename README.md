@@ -50,7 +50,7 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
 3. **Compile with Metal GPU Support and NDI SDK support**:
     ```bash
     # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-    # cargo build --release --features=metal,ndi
+    # cargo build --release --features=mps,ndi,audioplayer,metavoice
     ## run the compile.sh which basically does the above command + gets the libndi.dylib.
     ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
     ```
@@ -77,7 +77,7 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 -   **Running with Candle and OS Stats for AI System Analysis**:
     ```bash
-    cargo run --release --features ndi,metal -- \
+    cargo run --release --features ndi,mps,metavoice,audioplayer -- \
       --candle_llm gemma \
       --model-id "2b-it" \
       --max-tokens 1000 \
