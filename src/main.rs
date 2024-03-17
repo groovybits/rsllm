@@ -93,10 +93,7 @@ async fn main() {
     let (pipeline_task_sender, mut pipeline_task_receiver) =
         mpsc::channel::<MessageData>(args.pipeline_concurrency * 2);
 
-    let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
-    let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
-    let ndi_sem = Arc::new(Semaphore::new(1));
 
     // Pipeline processing task for image and speech together as a single task
     let pipeline_processing_task = {
@@ -107,8 +104,6 @@ async fn main() {
                 let pipeline_sem = Arc::clone(&pipeline_sem);
                 let processed_data_store = processed_data_store.clone();
                 let message_data_clone = message_data.clone();
-                let image_sem = Arc::clone(&image_sem);
-                let speech_sem = Arc::clone(&speech_sem);
                 let pipeline_sem = Arc::clone(&pipeline_sem);
                 tokio::spawn(async move {
                     let _permit = pipeline_sem
@@ -116,10 +111,8 @@ async fn main() {
                         .await
                         .expect("Failed to acquire pipeline semaphore permit");
 
-                    let images =
-                        process_image(message_data_clone.clone(), Arc::clone(&image_sem)).await;
-                    let speech_data =
-                        process_speech(message_data_clone.clone(), Arc::clone(&speech_sem)).await;
+                    let images = process_image(message_data_clone.clone()).await;
+                    let speech_data = process_speech(message_data_clone.clone()).await;
                     let mut store = processed_data_store.lock().await;
 
                     match store.entry(message_data_clone.paragraph_count) {
@@ -152,7 +145,6 @@ async fn main() {
     let running_processor_ndi = Arc::new(AtomicBool::new(true));
     let running_processor_ndi_clone = running_processor_ndi.clone();
     let ndi_sync_task = tokio::spawn(async move {
-        let ndi_sem = Arc::clone(&ndi_sem);
         while running_processor_ndi_clone.load(Ordering::SeqCst) {
             // check if the shutdown field is set for this message and we need to exit the loop
             let shutdown = {
@@ -194,7 +186,7 @@ async fn main() {
 
             for key in keys_to_remove {
                 if let Some(data) = processed_data_store_for_ndi.lock().await.remove(&key) {
-                    send_to_ndi(data, &args_for_ndi, Arc::clone(&ndi_sem)).await;
+                    send_to_ndi(data, &args_for_ndi).await;
                 }
             }
         }
