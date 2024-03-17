@@ -3,9 +3,6 @@ Implement the OpenAI API generically for any LLM following it
 Chris Kennedy @2024 MIT license
 */
 
-#[cfg(feature = "ndi")]
-use crate::ndi::send_images_over_ndi;
-use crate::stable_diffusion::{sd, SDConfig};
 use bytes::Bytes;
 use chrono::{TimeZone, Utc};
 use log::{debug, error, info};
@@ -212,9 +209,6 @@ pub async fn stream_completion(
     debug_inline: bool,
     show_output_errors: bool,
     break_line_length: usize,
-    sd_image: bool,
-    ndi_images: bool,
-    font_size: f32,
 ) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
     let client = Client::new();
 
@@ -507,44 +501,6 @@ pub async fn stream_completion(
             role: "assistant".to_string(),
             content: answers.join(""),
         });
-
-        // Assuming `sd_image` is true and `sd(sd_config)` returns `Result<Vec<Vec<u8>>>`
-        if sd_image {
-            let mut sd_config = SDConfig::new();
-            sd_config.prompt = answers.join("");
-            sd_config.height = Some(512);
-            sd_config.width = Some(512);
-
-            let images_result = sd(sd_config); // This call returns `Result<Vec<Vec<u8>>>`
-
-            match images_result.await {
-                Ok(images) => {
-                    // Send images over NDI
-                    if ndi_images {
-                        debug!("Sending images over NDI");
-                    }
-                    #[cfg(feature = "ndi")]
-                    if ndi_images {
-                        send_images_over_ndi(
-                            images.clone(),
-                            &answers.join("").clone(),
-                            font_size,
-                            &"center",
-                        )?;
-                    }
-
-                    // Save images to disk
-                    for (index, image_bytes) in images.iter().enumerate() {
-                        let image_file = format!("{}.png", index);
-                        println!("Image {} saving to {}", index + 1, image_file);
-                        image_bytes
-                            .save(image_file)
-                            .map_err(candle_core::Error::wrap)?;
-                    }
-                }
-                Err(e) => eprintln!("Error generating images: {:?}", e),
-            }
-        }
     }
 
     // After processing all chunks/responses

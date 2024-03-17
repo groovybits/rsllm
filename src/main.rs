@@ -23,7 +23,9 @@ use rsllm::candle_mistral::mistral;
 use rsllm::handle_long_string;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llama2, stream_completion, Message, OpenAIRequest};
-use rsllm::pipeline::{process_image, process_speech, send_to_ndi, MessageData, ProcessedData};
+#[cfg(feature = "ndi")]
+use rsllm::pipeline::send_to_ndi;
+use rsllm::pipeline::{process_image, process_speech, MessageData, ProcessedData};
 use rsllm::stable_diffusion::SDConfig;
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
@@ -144,11 +146,16 @@ async fn main() {
     };
 
     // NDI sync task
+    #[cfg(feature = "ndi")]
     let processed_data_store_for_ndi = processed_data_store.clone();
+    #[cfg(feature = "ndi")]
     let args_for_ndi = args.clone();
 
+    #[cfg(feature = "ndi")]
     let running_processor_ndi = Arc::new(AtomicBool::new(true));
+    #[cfg(feature = "ndi")]
     let running_processor_ndi_clone = running_processor_ndi.clone();
+    #[cfg(feature = "ndi")]
     let ndi_sync_task = tokio::spawn(async move {
         while running_processor_ndi_clone.load(Ordering::SeqCst) {
             // check if the shutdown field is set for this message and we need to exit the loop
@@ -1022,9 +1029,6 @@ async fn main() {
                 args.debug_inline,
                 args.show_output_errors,
                 args.break_line_length,
-                args.sd_image,
-                args.ndi_images,
-                args.hardsub_font_size,
             )
             .await
             .unwrap_or_else(|_| Vec::new());
@@ -1095,8 +1099,11 @@ async fn main() {
             info!("pipeline handle completed.");
 
             // NDI await completion
+            #[cfg(feature = "ndi")]
             info!("waiting for ndi handle to complete...");
+            #[cfg(feature = "ndi")]
             let _ = ndi_sync_task.await;
+            #[cfg(feature = "ndi")]
             info!("ndi handle completed.");
 
             // exit here

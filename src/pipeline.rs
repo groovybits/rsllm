@@ -135,6 +135,7 @@ pub struct ProcessedData {
 }
 
 // Function to send audio/video pairs to NDI
+#[cfg(feature = "ndi")]
 pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
     // check if args.subtitles is true, if so defined the processed_data.paragraph as a variable, if not have it be an empty string
     let subtitle = if args.subtitles {
@@ -145,7 +146,6 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
 
     if let Some(image_data) = processed_data.image_data {
         if args.ndi_images {
-            #[cfg(feature = "ndi")]
             {
                 debug!("Sending images over NDI");
                 send_images_over_ndi(
@@ -161,7 +161,6 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
 
     if let Some(audio_data) = processed_data.audio_data {
         if args.ndi_audio {
-            #[cfg(feature = "ndi")]
             {
                 let samples_result = if args.oai_tts {
                     crate::ndi::mp3_to_f32(audio_data)
