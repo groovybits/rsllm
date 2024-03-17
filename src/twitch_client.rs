@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-pub async fn setup(
+pub async fn daemon(
     nick: String,
     token: String,
     channel: Vec<String>,

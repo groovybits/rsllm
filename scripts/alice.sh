@@ -15,9 +15,7 @@ MAX_TOKENS=1000
 ALIGNMENT=right
 TEMPERATURE=0.8
 POLL_INTERVAL=10
-IMAGE_CONCURRENCY=2
-SPEECH_CONCURRENCY=2
-PIPELINE_CONCURRENCY=2
+PIPELINE_CONCURRENCY=1
 CONTEXT_SIZE=3000
 SUBTITLES=1
 DAEMON=0
@@ -43,9 +41,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --model-id $MODEL_ID \
     --image-alignment $ALIGNMENT \
     --temperature $TEMPERATURE \
-    --image-concurrency $IMAGE_CONCURRENCY \
-    --speech-concurrency $SPEECH_CONCURRENCY \
-    --pipeline-concurrency $SPEECH_CONCURRENCY \
+    --pipeline-concurrency $PIPELINE_CONCURRENCY \
     --poll-interval $POLL_INTERVAL \
     --llm-history-size $CONTEXT_SIZE \
     $SUBTITLE_CMD \

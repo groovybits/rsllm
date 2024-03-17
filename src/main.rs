@@ -30,7 +30,7 @@ use rsllm::stream_data::{
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
 };
 use rsllm::stream_data::{process_mpegts_packet, process_smpte2110_packet};
-use rsllm::twitch_client::setup as twitch_setup;
+use rsllm::twitch_client::daemon as twitch_daemon;
 use rsllm::{current_unix_timestamp_ms, hexdump, hexdump_ascii};
 use rsllm::{get_stats_as_json, StatsType};
 use serde_json::{self, json};
@@ -91,7 +91,7 @@ async fn main() {
 
     // Channels for image and speech tasks
     let (pipeline_task_sender, mut pipeline_task_receiver) =
-        mpsc::channel::<MessageData>(args.pipeline_concurrency * 2);
+        mpsc::channel::<MessageData>(args.pipeline_concurrency);
 
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
 
@@ -101,7 +101,6 @@ async fn main() {
         let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
             while let Some(message_data) = pipeline_task_receiver.recv().await {
-                let pipeline_sem = Arc::clone(&pipeline_sem);
                 let processed_data_store = processed_data_store.clone();
                 let message_data_clone = message_data.clone();
                 let pipeline_sem = Arc::clone(&pipeline_sem);
@@ -109,7 +108,7 @@ async fn main() {
                     let _permit = pipeline_sem
                         .acquire()
                         .await
-                        .expect("Failed to acquire pipeline semaphore permit");
+                        .expect("failed to acquire pipeline semaphore permit");
 
                     let images = process_image(message_data_clone.clone()).await;
                     let speech_data = process_speech(message_data_clone.clone()).await;
@@ -134,6 +133,12 @@ async fn main() {
                         }
                     }
                 });
+
+                // check if shutdown is requested from the message shutdown flag
+                if message_data.shutdown {
+                    info!("Shutdown requested from message data for pipeline processing task.");
+                    break;
+                }
             }
         })
     };
@@ -160,10 +165,7 @@ async fn main() {
                     })
                     .collect::<Vec<_>>()
             };
-            if shutdown.contains(&true) {
-                running_processor_ndi_clone.store(false, Ordering::SeqCst);
-                break;
-            }
+
             let keys_to_remove = {
                 let store = processed_data_store_for_ndi.lock().await;
                 store
@@ -189,7 +191,18 @@ async fn main() {
                     send_to_ndi(data, &args_for_ndi).await;
                 }
             }
+
+            // SHUTDOWN Signal
+            if shutdown.contains(&true) {
+                running_processor_ndi_clone.store(false, Ordering::SeqCst);
+                info!("Shutting down NDI sync task on shutdown signal.");
+                break;
+            }
         }
+
+        // exit the loop
+        info!("Exiting NDI sync task.");
+        std::process::exit(0);
     });
 
     let mut llm_host = args.llm_host.clone();
@@ -464,28 +477,34 @@ async fn main() {
                 std::process::exit(1);
             }
 
-            match twitch_setup(
-                twitch_username_clone.clone(),
-                twitch_auth_clone,
-                twitch_channel_clone.clone(),
-                running_processor_twitch_clone,
-            )
-            .await
-            {
-                Ok(_) => {
-                    info!(
-                        "Twitch setup successful for channel {} username {}",
-                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
-                        twitch_username_clone
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Error setting up Twitch channel {} for user {}: {}",
-                        twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
-                        twitch_username_clone,
-                        e
-                    );
+            loop {
+                match twitch_daemon(
+                    twitch_username_clone.clone(),
+                    twitch_auth_clone.clone(),
+                    twitch_channel_clone.clone(),
+                    running_processor_twitch_clone.clone(),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Twitch client exiting for channel {} username {}",
+                            twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                            twitch_username_clone
+                        );
+                        break;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Error setting up Twitch channel {} for user {}: {}",
+                            twitch_channel_clone.join(", "), // Assuming it's a Vec<String>
+                            twitch_username_clone,
+                            e
+                        );
+
+                        // exit the loop
+                        std::process::exit(1);
+                    }
                 }
             }
         });
@@ -505,7 +524,7 @@ async fn main() {
             poll_interval_duration.as_secs()
         );
     } else {
-        println!("Running RsLLM #{} iterations...", args.max_iterations);
+        println!("Running RsLLM for [{}] iterations...", args.max_iterations);
     }
     let mut count = 0;
     loop {
@@ -1065,18 +1084,24 @@ async fn main() {
                 .expect("Failed to send last audio/speech pipeline task");
 
             // NDI await completion
-            info!("waiting for ndi handle to complete...");
+            /*info!("waiting for ndi handle to complete...");
             let _ = ndi_sync_task.await;
-            info!("ndi handle completed.");
+            info!("ndi handle completed.");*/
 
             // Pipeline await completion
-            info!("waiting for pipline handle to complete...");
+            /*info!("waiting for pipline handle to complete...");
             let _ = pipeline_processing_task.await;
-            info!("pipeline handle completed.");
+            info!("pipeline handle completed.");*/
 
-            info!("Exiting main loop...");
+            // sleep and let the pipeline finish and exit the program
+            info!("Waiting for pipeline to finish before exiting...");
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
 
-            break;
+            //info!("Exiting main loop...");
+
+            //break;
         }
 
         // Calculate elapsed time since last start

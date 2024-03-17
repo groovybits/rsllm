@@ -197,24 +197,6 @@ pub struct Args {
     )]
     pub max_concurrent_sd_image_tasks: usize,
 
-    /// Image concurrency - max concurrent image tasks
-    #[clap(
-        long,
-        env = "IMAGE_CONCURRENCY",
-        default_value = "1",
-        help = "Image concurrency - max concurrent image tasks."
-    )]
-    pub image_concurrency: usize,
-
-    /// Speech concurrency - max concurrent speech tasks
-    #[clap(
-        long,
-        env = "SPEECH_CONCURRENCY",
-        default_value = "1",
-        help = "Speech concurrency - max concurrent speech tasks."
-    )]
-    pub speech_concurrency: usize,
-
     /// Pipeline concurrency - max concurrent pipeline tasks
     #[clap(
         long,
