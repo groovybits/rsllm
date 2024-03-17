@@ -982,10 +982,6 @@ async fn main() {
                 }
                 // ** End of TTS and Image Generation **
 
-                // Token output to stdout in real-time
-                print!("{}", current_paragraph.join(""));
-                std::io::stdout().flush().unwrap();
-
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
