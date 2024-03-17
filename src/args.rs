@@ -161,6 +161,15 @@ pub struct Args {
     )]
     pub use_openai: bool,
 
+    /// MetaVoice as text to speech
+    #[clap(
+        long,
+        env = "METAVOICE_TTS",
+        default_value = "false",
+        help = "MetaVoice as text to speech."
+    )]
+    pub metavoice_tts: bool,
+
     /// OAI_TTS as text to speech from openai
     #[clap(
         long,

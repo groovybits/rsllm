@@ -3,6 +3,7 @@
 */
 use crate::adjust_caps;
 use crate::args::Args;
+#[cfg(feature = "metavoice")]
 use crate::candle_metavoice::metavoice;
 use crate::mimic3_tts::tts as mimic3_tts;
 use crate::mimic3_tts::Request as Mimic3TTSRequest;
@@ -70,7 +71,8 @@ pub async fn process_image(data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8
 
 // Function to process speech generation
 pub async fn process_speech(data: MessageData) -> Vec<u8> {
-    if data.args.mimic3_tts || data.args.oai_tts || data.args.tts_enable {
+    if data.args.mimic3_tts || data.args.oai_tts || data.args.tts_enable || data.args.metavoice_tts
+    {
         let input = data.sd_config.prompt.clone(); // Ensure this uses the appropriate text for TTS
 
         // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
@@ -87,17 +89,32 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
 
             // Directly await the TTS operation without spawning a new thread
             oai_tts(oai_request, &openai_key).await
-        } else if data.args.mimic3_tts {
+        } else if data.args.mimic3_tts || data.args.tts_enable {
             let api_request = Mimic3TTSRequest::new(input, data.mimic3_voice);
             // Mimic3 TTS request
             mimic3_tts(api_request)
                 .await
                 .map_err(|e| ApiError::Error(e.to_string()))
-        } else {
+        } else if data.args.metavoice_tts {
             // Candle TTS request
-            metavoice(input)
-                .await
-                .map_err(|e| ApiError::Error(e.to_string()))
+            #[cfg(feature = "metavoice")]
+            {
+                match metavoice(input).await {
+                    Ok(bytes) => return bytes.to_vec(),
+                    Err(e) => {
+                        eprintln!("Metavoice TTS error: {}", e);
+                        return Vec::new(); // Return an empty Vec<u8> in case of an error
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "metavoice"))]
+            {
+                eprintln!("Metavoice feature not enabled");
+                return Vec::new(); // Return an empty Vec<u8> if the feature is not enabled
+            }
+        } else {
+            Err(ApiError::Error("TTS type not implemented".to_string()))
         };
 
         match bytes_result {
