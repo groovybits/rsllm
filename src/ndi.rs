@@ -2,9 +2,9 @@ use image::{ImageBuffer, Rgb, Rgba};
 use imageproc::drawing::draw_text_mut;
 use minimp3::{Decoder, Frame};
 #[cfg(feature = "ndi")]
-use ndi_sdk::send::{SendColorFormat, SendInstance};
+use ndi_sdk_rsllm::send::{SendColorFormat, SendInstance};
 #[cfg(feature = "ndi")]
-use ndi_sdk::NDIInstance;
+use ndi_sdk_rsllm::NDIInstance;
 use once_cell::sync::Lazy;
 use rusttype::{Font, Scale};
 use std::io::Cursor;
@@ -80,7 +80,7 @@ pub fn mp3_to_f32(mp3_data: Vec<u8>) -> Result<Vec<f32>> {
 // Use Mutex to ensure thread-safety for NDIInstance and SendInstance
 #[cfg(feature = "ndi")]
 static NDI_INSTANCE: Lazy<Mutex<NDIInstance>> = Lazy::new(|| {
-    let instance = ndi_sdk::load().expect("Failed to construct NDI instance");
+    let instance = ndi_sdk_rsllm::load().expect("Failed to construct NDI instance");
     Mutex::new(instance)
 });
 
@@ -131,10 +131,10 @@ pub fn send_images_over_ndi(
         let rgba_buffer =
             convert_rgb_to_rgba_with_text(&image_buffer, subtitle, font_size, start_pos);
 
-        let frame = ndi_sdk::send::create_ndi_send_video_frame(
+        let frame = ndi_sdk_rsllm::send::create_ndi_send_video_frame(
             width as i32,
             height as i32,
-            ndi_sdk::send::FrameFormatType::Progressive,
+            ndi_sdk_rsllm::send::FrameFormatType::Progressive,
         )
         .with_data(rgba_buffer, width as i32 * 4, SendColorFormat::Rgba)
         .build()
@@ -293,7 +293,7 @@ pub fn send_audio_samples_over_ndi(
         sample_rate
     );
 
-    let frame = ndi_sdk::send::create_ndi_send_audio_frame(no_channels, sample_rate)
+    let frame = ndi_sdk_rsllm::send::create_ndi_send_audio_frame(no_channels, sample_rate)
         .with_data(samples, sample_rate)
         .build()
         .expect("Expected audio sample to be created");
