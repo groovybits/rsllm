@@ -90,78 +90,56 @@ async fn main() {
         Arc::new(Mutex::new(HashMap::new()));
 
     // Channels for image and speech tasks
-    let (image_task_sender, mut image_task_receiver) = mpsc::channel::<MessageData>(100);
-    let (speech_task_sender, mut speech_task_receiver) = mpsc::channel::<MessageData>(100);
+    let (pipeline_task_sender, mut pipeline_task_receiver) =
+        mpsc::channel::<MessageData>(args.pipeline_concurrency * 2);
 
     let image_sem = Arc::new(Semaphore::new(args.image_concurrency));
     let speech_sem = Arc::new(Semaphore::new(args.speech_concurrency));
+    let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
     let ndi_sem = Arc::new(Semaphore::new(1));
 
-    // Image processing task
-    let running_processor_images = Arc::new(AtomicBool::new(true));
-    let image_processing_task = {
-        let image_sem = Arc::clone(&image_sem);
+    // Pipeline processing task for image and speech together as a single task
+    let pipeline_processing_task = {
+        let pipeline_sem = Arc::clone(&pipeline_sem);
         let processed_data_store = processed_data_store.clone();
-        let running_processor_clone = running_processor_images.clone();
         tokio::spawn(async move {
-            while running_processor_clone.load(Ordering::SeqCst) {
-                while let Some(message_data) = image_task_receiver.recv().await {
-                    let images = process_image(message_data.clone(), Arc::clone(&image_sem)).await;
+            while let Some(message_data) = pipeline_task_receiver.recv().await {
+                let pipeline_sem = Arc::clone(&pipeline_sem);
+                let processed_data_store = processed_data_store.clone();
+                let message_data_clone = message_data.clone();
+                let image_sem = Arc::clone(&image_sem);
+                let speech_sem = Arc::clone(&speech_sem);
+                let pipeline_sem = Arc::clone(&pipeline_sem);
+                tokio::spawn(async move {
+                    let _permit = pipeline_sem
+                        .acquire()
+                        .await
+                        .expect("Failed to acquire pipeline semaphore permit");
+
+                    let images =
+                        process_image(message_data_clone.clone(), Arc::clone(&image_sem)).await;
+                    let speech_data =
+                        process_speech(message_data_clone.clone(), Arc::clone(&speech_sem)).await;
                     let mut store = processed_data_store.lock().await;
 
-                    match store.entry(message_data.paragraph_count) {
+                    match store.entry(message_data_clone.paragraph_count) {
                         std::collections::hash_map::Entry::Vacant(e) => {
                             e.insert(ProcessedData {
-                                paragraph: message_data.paragraph.clone(),
+                                paragraph: message_data_clone.paragraph.clone(),
                                 image_data: Some(images),
-                                audio_data: None,
-                                paragraph_count: message_data.paragraph_count,
-                                subtitle_position: message_data.subtitle_position.clone(),
+                                audio_data: Some(speech_data),
+                                paragraph_count: message_data_clone.paragraph_count,
+                                subtitle_position: message_data_clone.subtitle_position.clone(),
                                 time_stamp: 0,
                             });
                         }
                         std::collections::hash_map::Entry::Occupied(mut e) => {
                             let entry = e.get_mut();
                             entry.image_data = Some(images);
-                        }
-                    }
-                    break;
-                }
-            }
-        })
-    };
-
-    // Speech processing task
-    let running_processor_speech = Arc::new(AtomicBool::new(true));
-    let speech_processing_task = {
-        let speech_sem = Arc::clone(&speech_sem);
-        let processed_data_store = processed_data_store.clone();
-        let running_processor_clone = running_processor_speech.clone();
-        tokio::spawn(async move {
-            while running_processor_clone.load(Ordering::SeqCst) {
-                while let Some(message_data) = speech_task_receiver.recv().await {
-                    let speech_data =
-                        process_speech(message_data.clone(), Arc::clone(&speech_sem)).await;
-                    let mut store = processed_data_store.lock().await;
-
-                    match store.entry(message_data.paragraph_count) {
-                        std::collections::hash_map::Entry::Vacant(e) => {
-                            e.insert(ProcessedData {
-                                paragraph: message_data.paragraph.clone(),
-                                image_data: None,
-                                audio_data: Some(speech_data),
-                                paragraph_count: message_data.paragraph_count,
-                                subtitle_position: message_data.subtitle_position.clone(),
-                                time_stamp: 0,
-                            });
-                        }
-                        std::collections::hash_map::Entry::Occupied(mut e) => {
-                            let entry = e.get_mut();
                             entry.audio_data = Some(speech_data);
                         }
                     }
-                    break;
-                }
+                });
             }
         })
     };
@@ -175,9 +153,6 @@ async fn main() {
     let ndi_sync_task = tokio::spawn(async move {
         let ndi_sem = Arc::clone(&ndi_sem);
         while running_processor_clone.load(Ordering::SeqCst) {
-            // Artificial delay for demonstration; adjust as needed
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
             let keys_to_remove = {
                 let store = processed_data_store_for_ndi.lock().await;
                 store
@@ -191,6 +166,12 @@ async fn main() {
                     })
                     .collect::<Vec<_>>()
             };
+
+            // sleep if there is no data to process
+            if keys_to_remove.is_empty() {
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                continue;
+            }
 
             for key in keys_to_remove {
                 if let Some(data) = processed_data_store_for_ndi.lock().await.remove(&key) {
@@ -851,8 +832,7 @@ async fn main() {
                             let subtitle_position = args.subtitle_position.clone();
                             let args = args.clone();
 
-                            let image_task_sender_clone = image_task_sender.clone();
-                            let speech_task_sender_clone = speech_task_sender.clone();
+                            let pipeline_task_sender_clone = pipeline_task_sender.clone();
 
                             let mut sd_config = SDConfig::new();
                             sd_config.prompt = paragraph_clone;
@@ -870,42 +850,24 @@ async fn main() {
                             let mimic3_voice_clone = mimic3_voice.clone();
                             let subtitle_position_clone = subtitle_position.clone();
 
-                            if args.sd_image {
-                                debug!("Generating images with prompt: {}", sd_config.prompt);
+                            debug!("Generating images with prompt: {}", sd_config.prompt);
 
-                                // Create MessageData for image task
-                                let message_data_for_image = MessageData {
-                                    paragraph: sd_config.prompt.clone(), // Clone for the image task
-                                    output_id: output_id_clone.clone(),
-                                    paragraph_count,
-                                    sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
-                                    mimic3_voice: mimic3_voice_clone.clone(),
-                                    subtitle_position: subtitle_position_clone.clone(),
-                                    args: args_clone.clone(),
-                                };
-
-                                // For image tasks
-                                image_task_sender_clone
-                                    .send(message_data_for_image)
-                                    .await
-                                    .expect("Failed to send image task");
-                            }
-
-                            let message_data_for_speech = MessageData {
-                                paragraph: sd_config.prompt.clone(), // Already cloned above
-                                output_id: output_id_clone.clone(),  // Clone again for speech task
+                            // Create MessageData for image task
+                            let message_data_for_pipeline = MessageData {
+                                paragraph: sd_config.prompt.clone(), // Clone for the image task
+                                output_id: output_id_clone.clone(),
                                 paragraph_count,
-                                sd_config: sd_config.clone(), // Clone again if necessary
-                                mimic3_voice: mimic3_voice_clone, // Already cloned above
-                                subtitle_position: subtitle_position_clone, // Already cloned above
-                                args: args_clone,             // Already cloned above
+                                sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                                mimic3_voice: mimic3_voice_clone.clone(),
+                                subtitle_position: subtitle_position_clone.clone(),
+                                args: args_clone.clone(),
                             };
 
-                            // For speech tasks
-                            speech_task_sender_clone
-                                .send(message_data_for_speech)
+                            // For image tasks
+                            pipeline_task_sender_clone
+                                .send(message_data_for_pipeline)
                                 .await
-                                .expect("Failed to send speech task");
+                                .expect("Failed to send image/speech pipeline task");
                         }
                         // ** End of TTS and Image Generation **
 
@@ -948,8 +910,7 @@ async fn main() {
                     let subtitle_position = args.subtitle_position.clone();
                     let args = args.clone();
 
-                    let image_task_sender_clone = image_task_sender.clone();
-                    let speech_task_sender_clone = speech_task_sender.clone();
+                    let pipeline_task_sender_clone = pipeline_task_sender.clone();
 
                     let mut sd_config = SDConfig::new();
                     sd_config.prompt = paragraph_clone;
@@ -967,42 +928,22 @@ async fn main() {
                     let mimic3_voice_clone = mimic3_voice.clone();
                     let subtitle_position_clone = subtitle_position.clone();
 
-                    if args.sd_image {
-                        debug!("Generating images with prompt: {}", sd_config.prompt);
-
-                        // Create MessageData for image task
-                        let message_data_for_image = MessageData {
-                            paragraph: sd_config.prompt.clone(), // Clone for the image task
-                            output_id: output_id_clone.clone(),
-                            paragraph_count,
-                            sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
-                            mimic3_voice: mimic3_voice_clone.clone(),
-                            subtitle_position: subtitle_position_clone.clone(),
-                            args: args_clone.clone(),
-                        };
-
-                        // For image tasks
-                        image_task_sender_clone
-                            .send(message_data_for_image)
-                            .await
-                            .expect("Failed to send image task");
-                    }
-
-                    let message_data_for_speech = MessageData {
-                        paragraph: sd_config.prompt.clone(), // Already cloned above
-                        output_id: output_id_clone.clone(),  // Clone again for speech task
+                    // Create MessageData for image task
+                    let message_data_for_pipeline = MessageData {
+                        paragraph: sd_config.prompt.clone(), // Clone for the image task
+                        output_id: output_id_clone.clone(),
                         paragraph_count,
-                        sd_config: sd_config.clone(), // Clone again if necessary
-                        mimic3_voice: mimic3_voice_clone, // Already cloned above
-                        subtitle_position: subtitle_position_clone, // Already cloned above
-                        args: args_clone,             // Already cloned above
+                        sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                        mimic3_voice: mimic3_voice_clone.clone(),
+                        subtitle_position: subtitle_position_clone.clone(),
+                        args: args_clone.clone(),
                     };
 
-                    // For speech tasks
-                    speech_task_sender_clone
-                        .send(message_data_for_speech)
+                    // For image tasks
+                    pipeline_task_sender_clone
+                        .send(message_data_for_pipeline)
                         .await
-                        .expect("Failed to send speech task");
+                        .expect("Failed to send last audio/speech pipeline task");
                 }
                 // ** End of TTS and Image Generation **
 
@@ -1087,15 +1028,12 @@ async fn main() {
 
             // stop the running threads
             running_processor.store(false, Ordering::SeqCst);
-            running_processor_images.store(false, Ordering::SeqCst);
-            running_processor_speech.store(false, Ordering::SeqCst);
             running_processor_ndi.store(false, Ordering::SeqCst);
             running_processor_twitch.store(false, Ordering::SeqCst);
 
             // Await the completion of background tasks
             let _ = processing_handle.await;
-            let _ = image_processing_task.await;
-            let _ = speech_processing_task.await;
+            let _ = pipeline_processing_task.await;
             let _ = ndi_sync_task.await;
 
             break;

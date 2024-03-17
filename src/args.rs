@@ -215,6 +215,15 @@ pub struct Args {
     )]
     pub speech_concurrency: usize,
 
+    /// Pipeline concurrency - max concurrent pipeline tasks
+    #[clap(
+        long,
+        env = "PIPELINE_CONCURRENCY",
+        default_value = "1",
+        help = "Pipeline concurrency - max concurrent pipeline tasks."
+    )]
+    pub pipeline_concurrency: usize,
+
     /// debug inline on output (can mess up the output) as a bool
     #[clap(
         long,
