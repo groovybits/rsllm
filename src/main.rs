@@ -96,10 +96,10 @@ async fn main() {
         mpsc::channel::<MessageData>(args.pipeline_concurrency);
 
     // Channel to signal NDI is done
-    let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(1);
+    let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(args.llm_concurrency);
 
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
-    let llm_sem = Arc::new(Semaphore::new(args.llm_concurrency));
+    //let llm_sem = Arc::new(Semaphore::new(args.llm_concurrency));
 
     // Pipeline processing task for image and speech together as a single task
     let pipeline_processing_task = {
@@ -143,8 +143,18 @@ async fn main() {
                     }
                 });
 
+                // Check if this is the last message
+                if message_data.last_message {
+                    std::io::stdout().flush().unwrap();
+                    info!(
+                        "Pipeline processing task: Last message processed {}",
+                        message_data.paragraph_count
+                    );
+                }
+
                 // check if shutdown is requested from the message shutdown flag
                 if message_data.shutdown {
+                    std::io::stdout().flush().unwrap();
                     info!("Shutdown requested from message data for pipeline processing task.");
                     break;
                 }
@@ -173,36 +183,55 @@ async fn main() {
 
             if let Some(ref data) = data {
                 if data.completed {
+                    // Check if this is the last message and send the NDI done signal
+                    if data.last_message {
+                        std::io::stdout().flush().unwrap();
+                        info!(
+                            "NDI sync task: Last message {} processed for key {}, sending done signal.",
+                            data.paragraph_count, current_key
+                        );
+                        // Send NDI done signal
+                        if let Err(e) = ndi_done_tx.send(()).await {
+                            error!("Failed to send NDI done signal: {}", e);
+                        }
+                        std::io::stdout().flush().unwrap();
+                        info!(
+                            "Sent NDI Sending done signal for {} key {}.",
+                            data.paragraph_count, current_key
+                        );
+                    }
+                    // Send to NDI
                     send_to_ndi(data.clone(), &args_for_ndi).await;
                     {
                         let mut store = processed_data_store_for_ndi.lock().await;
                         store.remove(&current_key);
                     }
                     current_key += 1;
-
-                    // Check if this is the last message and send the NDI done signal
-                    if data.last_message {
-                        if let Err(e) = ndi_done_tx.send(()).await {
-                            error!("Failed to send NDI done signal: {}", e);
-                        }
-                        info!("Sent NDI Sending done signal.");
-                    }
                 } else {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                    std::io::stdout().flush().unwrap();
+                    info!(
+                        "NDI sync task: Message {} data not completed for key {}",
+                        data.paragraph_count, current_key
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
                 }
             } else {
-                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                std::io::stdout().flush().unwrap();
+                info!("NDI sync task: No data found for key {}", current_key);
+                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
             }
 
             // SHUTDOWN Signal
             if data.is_some() && data.as_ref().unwrap().shutdown {
                 running_processor_ndi_clone.store(false, Ordering::SeqCst);
+                std::io::stdout().flush().unwrap();
                 info!("Shutting down NDI sync task on shutdown signal.");
                 break;
             }
         }
 
         // exit the loop
+        std::io::stdout().flush().unwrap();
         info!("Exiting NDI sync task.");
         std::process::exit(0);
     });
@@ -773,10 +802,10 @@ async fn main() {
             }
 
             let prompt_clone = prompt.clone();
-            let llm_sem_clone = llm_sem.clone();
+            //let llm_sem_clone = llm_sem.clone();
             let llm_thread = if args.candle_llm == "mistral" {
                 tokio::spawn(async move {
-                    let _permit = llm_sem_clone.acquire().await.unwrap();
+                    //let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = mistral(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -787,11 +816,11 @@ async fn main() {
                     ) {
                         eprintln!("Error running mistral: {}", e);
                     }
-                    drop(_permit);
+                    //drop(_permit);
                 })
             } else {
                 tokio::spawn(async move {
-                    let _permit = llm_sem_clone.acquire().await.unwrap();
+                    //let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = gemma(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -802,7 +831,7 @@ async fn main() {
                     ) {
                         eprintln!("Error running gemma: {}", e);
                     }
-                    drop(_permit);
+                    //drop(_permit);
                 })
             };
 
@@ -932,7 +961,7 @@ async fn main() {
                             let message_data_for_pipeline = MessageData {
                                 paragraph: sd_config.prompt.clone(),
                                 output_id: output_id_clone.clone(),
-                                paragraph_count,
+                                paragraph_count: total_paragraph_count,
                                 sd_config: sd_config.clone(),
                                 mimic3_voice: mimic3_voice_clone.clone(),
                                 subtitle_position: subtitle_position_clone.clone(),
@@ -1017,7 +1046,7 @@ async fn main() {
                         subtitle_position: subtitle_position_clone.clone(),
                         args: args_clone.clone(),
                         shutdown: false,
-                        last_message: true,
+                        last_message: false,
                     };
 
                     // For pipeline task
@@ -1030,33 +1059,48 @@ async fn main() {
 
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
-            } else {
+            }
+
+            // End of the response message to the pipeline
+            if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                let mut sd_config = SDConfig::new();
+                sd_config.prompt = args.shutdown_msg.clone();
+                sd_config.height = Some(args.sd_height);
+                sd_config.width = Some(args.sd_width);
+                sd_config.image_position = Some(args.image_alignment.clone());
+                if args.sd_scaled_height > 0 {
+                    sd_config.scaled_height = Some(args.sd_scaled_height);
+                }
+                if args.sd_scaled_width > 0 {
+                    sd_config.scaled_width = Some(args.sd_scaled_width);
+                }
                 // just send a message with the last_message field true to indicate the end of the response
                 let message_data_for_pipeline = MessageData {
-                    paragraph: "".to_string(),
+                    paragraph: args.shutdown_msg.to_string(),
                     output_id: output_id.clone(),
                     paragraph_count: total_paragraph_count,
-                    sd_config: SDConfig::new(),
-                    mimic3_voice: "".to_string(),
-                    subtitle_position: "".to_string(),
+                    sd_config,
+                    mimic3_voice: args.mimic3_voice.to_string(),
+                    subtitle_position: args.subtitle_position.to_string(),
                     args: args.clone(),
                     shutdown: false,
                     last_message: true,
                 };
+
                 // For pipeline task
                 pipeline_task_sender
                     .send(message_data_for_pipeline)
                     .await
                     .expect("Failed to send last audio/speech pipeline task");
+
+                total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
+            std::io::stdout().flush().unwrap();
+            info!("\nWaiting for LLM thread to finish...");
             // Wait for the LLM thread to finish
             llm_thread.await.unwrap();
-
-            // Wait for the NDI done signal
-            info!("\nWaiting for NDI done signal for LLM messages...");
-            ndi_done_rx.recv().await;
-            info!("Received NDI done signal.");
+            info!("LLM thread finished.");
 
             // Calculate elapsed time and tokens per second
             let elapsed = start.elapsed().as_secs_f64();
@@ -1087,6 +1131,14 @@ async fn main() {
                     role: "assistant".to_string(),
                     content: answers_str.clone(),
                 });
+            }
+
+            if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                // Wait for the NDI done signal
+                std::io::stdout().flush().unwrap();
+                info!("Waiting for NDI done signal for LLM messages...");
+                ndi_done_rx.recv().await;
+                info!("Received NDI done signal.");
             }
         } else {
             // Stream API Completion
