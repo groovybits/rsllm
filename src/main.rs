@@ -95,7 +95,11 @@ async fn main() {
     let (pipeline_task_sender, mut pipeline_task_receiver) =
         mpsc::channel::<MessageData>(args.pipeline_concurrency);
 
+    // Channel to signal NDI is done
+    let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(1);
+
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
+    let llm_sem = Arc::new(Semaphore::new(args.llm_concurrency));
 
     // Pipeline processing task for image and speech together as a single task
     let pipeline_processing_task = {
@@ -126,12 +130,15 @@ async fn main() {
                                 subtitle_position: message_data_clone.subtitle_position.clone(),
                                 time_stamp: 0,
                                 shutdown: message_data_clone.shutdown.clone(),
+                                completed: true,
+                                last_message: message_data_clone.last_message.clone(),
                             });
                         }
                         std::collections::hash_map::Entry::Occupied(mut e) => {
                             let entry = e.get_mut();
                             entry.image_data = Some(images);
                             entry.audio_data = Some(speech_data);
+                            entry.completed = true;
                         }
                     }
                 });
@@ -157,50 +164,38 @@ async fn main() {
     let running_processor_ndi_clone = running_processor_ndi.clone();
     #[cfg(feature = "ndi")]
     let ndi_sync_task = tokio::spawn(async move {
+        let mut current_key = 0;
         while running_processor_ndi_clone.load(Ordering::SeqCst) {
-            // check if the shutdown field is set for this message and we need to exit the loop
-            let shutdown = {
+            let data = {
                 let store = processed_data_store_for_ndi.lock().await;
-                store
-                    .iter()
-                    .filter_map(|(_, data)| {
-                        if data.shutdown {
-                            Some(data.shutdown.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
+                store.get(&current_key).cloned()
             };
 
-            let keys_to_remove = {
-                let store = processed_data_store_for_ndi.lock().await;
-                store
-                    .iter()
-                    .filter_map(|(&key, data)| {
-                        if data.image_data.is_some() && data.audio_data.is_some() {
-                            Some(key)
-                        } else {
-                            None
+            if let Some(ref data) = data {
+                if data.completed {
+                    send_to_ndi(data.clone(), &args_for_ndi).await;
+                    {
+                        let mut store = processed_data_store_for_ndi.lock().await;
+                        store.remove(&current_key);
+                    }
+                    current_key += 1;
+
+                    // Check if this is the last message and send the NDI done signal
+                    if data.last_message {
+                        if let Err(e) = ndi_done_tx.send(()).await {
+                            error!("Failed to send NDI done signal: {}", e);
                         }
-                    })
-                    .collect::<Vec<_>>()
-            };
-
-            // sleep if there is no data to process
-            if keys_to_remove.is_empty() {
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                continue;
-            }
-
-            for key in keys_to_remove {
-                if let Some(data) = processed_data_store_for_ndi.lock().await.remove(&key) {
-                    send_to_ndi(data, &args_for_ndi).await;
+                        info!("Sent NDI Sending done signal.");
+                    }
+                } else {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
                 }
+            } else {
+                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
 
             // SHUTDOWN Signal
-            if shutdown.contains(&true) {
+            if data.is_some() && data.as_ref().unwrap().shutdown {
                 running_processor_ndi_clone.store(false, Ordering::SeqCst);
                 info!("Shutting down NDI sync task on shutdown signal.");
                 break;
@@ -778,8 +773,10 @@ async fn main() {
             }
 
             let prompt_clone = prompt.clone();
+            let llm_sem_clone = llm_sem.clone();
             let llm_thread = if args.candle_llm == "mistral" {
                 tokio::spawn(async move {
+                    let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = mistral(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -790,9 +787,11 @@ async fn main() {
                     ) {
                         eprintln!("Error running mistral: {}", e);
                     }
+                    drop(_permit);
                 })
             } else {
                 tokio::spawn(async move {
+                    let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = gemma(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -803,6 +802,7 @@ async fn main() {
                     ) {
                         eprintln!("Error running gemma: {}", e);
                     }
+                    drop(_permit);
                 })
             };
 
@@ -938,6 +938,7 @@ async fn main() {
                                 subtitle_position: subtitle_position_clone.clone(),
                                 args: args_clone.clone(),
                                 shutdown: false,
+                                last_message: false,
                             };
 
                             // For image tasks
@@ -1016,6 +1017,7 @@ async fn main() {
                         subtitle_position: subtitle_position_clone.clone(),
                         args: args_clone.clone(),
                         shutdown: false,
+                        last_message: true,
                     };
 
                     // For pipeline task
@@ -1028,10 +1030,33 @@ async fn main() {
 
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+            } else {
+                // just send a message with the last_message field true to indicate the end of the response
+                let message_data_for_pipeline = MessageData {
+                    paragraph: "".to_string(),
+                    output_id: output_id.clone(),
+                    paragraph_count: total_paragraph_count,
+                    sd_config: SDConfig::new(),
+                    mimic3_voice: "".to_string(),
+                    subtitle_position: "".to_string(),
+                    args: args.clone(),
+                    shutdown: false,
+                    last_message: true,
+                };
+                // For pipeline task
+                pipeline_task_sender
+                    .send(message_data_for_pipeline)
+                    .await
+                    .expect("Failed to send last audio/speech pipeline task");
             }
 
             // Wait for the LLM thread to finish
             llm_thread.await.unwrap();
+
+            // Wait for the NDI done signal
+            info!("\nWaiting for NDI done signal for LLM messages...");
+            ndi_done_rx.recv().await;
+            info!("Received NDI done signal.");
 
             // Calculate elapsed time and tokens per second
             let elapsed = start.elapsed().as_secs_f64();
@@ -1146,6 +1171,7 @@ async fn main() {
                     subtitle_position: args.subtitle_position.to_string(),
                     args: args.clone(),
                     shutdown: true,
+                    last_message: true,
                 })
                 .await
                 .expect("Failed to send last audio/speech pipeline task");

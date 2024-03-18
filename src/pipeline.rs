@@ -31,6 +31,7 @@ pub struct MessageData {
     pub subtitle_position: String,
     pub args: Args,
     pub shutdown: bool,
+    pub last_message: bool,
 }
 
 // Function to process image generation
@@ -154,6 +155,8 @@ pub struct ProcessedData {
     pub subtitle_position: String,
     pub time_stamp: u64,
     pub shutdown: bool,
+    pub completed: bool,
+    pub last_message: bool,
 }
 
 // Function to send audio/video pairs to NDI
