@@ -217,7 +217,7 @@ async fn main() {
                 }
             } else {
                 std::io::stdout().flush().unwrap();
-                info!("NDI sync task: No data found for key {}", current_key);
+                debug!("NDI sync task: No data found for key {}", current_key);
                 tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
             }
 
