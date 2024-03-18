@@ -1,11 +1,11 @@
-FROM rust:alpine as builder
-RUN apk update && apk add --no-cache cmake libstdc++ libpcap-dev cabextract clang libc-dev binutils-gold libobjc openssl-dev clang-dev libobjc build-base alpine-sdk
+FROM rust:1.76.0 as builder
+RUN apt-get update && apt-get -y install cmake libpcap-dev cabextract
 
 WORKDIR /app
-COPY src .
+COPY src/ src/
 COPY Cargo.toml .
-COPY fonts .
-COPY scripts .
+COPY fonts/ fonts/
+COPY scripts/ scripts/
 COPY libndi.dylib .
 
 RUN cargo build --release
