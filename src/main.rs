@@ -186,7 +186,7 @@ async fn main() {
                     // Check if this is the last message and send the NDI done signal
                     if data.last_message {
                         std::io::stdout().flush().unwrap();
-                        info!(
+                        debug!(
                             "NDI sync task: Last message {} processed for key {}, sending done signal.",
                             data.paragraph_count, current_key
                         );
@@ -195,7 +195,7 @@ async fn main() {
                             error!("Failed to send NDI done signal: {}", e);
                         }
                         std::io::stdout().flush().unwrap();
-                        info!(
+                        debug!(
                             "Sent NDI Sending done signal for {} key {}.",
                             data.paragraph_count, current_key
                         );
@@ -209,7 +209,7 @@ async fn main() {
                     current_key += 1;
                 } else {
                     std::io::stdout().flush().unwrap();
-                    info!(
+                    debug!(
                         "NDI sync task: Message {} data not completed for key {}",
                         data.paragraph_count, current_key
                     );
