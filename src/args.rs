@@ -4,7 +4,7 @@ use clap::Parser;
 #[derive(Parser, Debug, Clone)]
 #[clap(
     author = "Chris Kennedy",
-    version = "0.4.9",
+    version = "0.5.0",
     about = "Rust LLM Stream Analyzer and Content Generator"
 )]
 pub struct Args {
@@ -214,6 +214,15 @@ pub struct Args {
         help = "audio chunk size in seconds for text to speech."
     )]
     pub audio_chunk_size: f32,
+
+    /// llm concurrency
+    #[clap(
+        long,
+        env = "LLM_CONCURRENCY",
+        default_value = "1",
+        help = "llm concurrency."
+    )]
+    pub llm_concurrency: usize,
 
     /// max_concurrent_sd_image_tasks for the sd image semaphore
     #[clap(
