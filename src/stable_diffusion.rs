@@ -386,7 +386,7 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
             StableDiffusionVersion::V1_5
             | StableDiffusionVersion::V2_1
             | StableDiffusionVersion::Xl => 30,
-            StableDiffusionVersion::Turbo => 1,
+            StableDiffusionVersion::Turbo => 3,
         },
     };
     let dtype = if config.use_f16 {
