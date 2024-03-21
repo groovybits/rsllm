@@ -96,21 +96,40 @@ impl TextGeneration {
                 let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 value == 0.0
             });
+
             if is_all_zero {
                 log::warn!("All logits are zero at index {}", index);
+
                 // Retry up to 3 times
                 let max_retries = 3;
                 for retry in 1..=max_retries {
                     log::info!("Retrying ({}/{})", retry, max_retries);
-                    let logits = self.model.forward(&input, start_pos)?;
-                    let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
-                    let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
-                        let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-                        value == 0.0
-                    });
-                    if !is_all_zero {
-                        break;
+
+                    match self.model.forward(&input, start_pos) {
+                        Ok(logits) => {
+                            let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+
+                            let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                                let value =
+                                    f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                                value == 0.0
+                            });
+
+                            if !is_all_zero {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Error during retry: {}", e);
+                            if retry == max_retries {
+                                return Err(anyhow::format_err!(
+                                    "All logits are zero after {} retries",
+                                    max_retries
+                                ));
+                            }
+                        }
                     }
+
                     if retry == max_retries {
                         return Err(anyhow::format_err!(
                             "All logits are zero after {} retries",

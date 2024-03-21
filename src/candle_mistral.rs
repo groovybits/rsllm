@@ -118,8 +118,32 @@ impl TextGeneration {
                     log::info!("Retrying ({}/{})", retry, max_retries);
 
                     let logits = match &mut self.model {
-                        Model::Mistral(m) => m.forward(&input, start_pos)?,
-                        Model::Quantized(m) => m.forward(&input, start_pos)?,
+                        Model::Mistral(m) => match m.forward(&input, start_pos) {
+                            Ok(logits) => logits,
+                            Err(e) => {
+                                log::error!("Error during retry: {}", e);
+                                if retry == max_retries {
+                                    return Err(anyhow::format_err!(
+                                        "All logits are zero after {} retries",
+                                        max_retries
+                                    ));
+                                }
+                                continue;
+                            }
+                        },
+                        Model::Quantized(m) => match m.forward(&input, start_pos) {
+                            Ok(logits) => logits,
+                            Err(e) => {
+                                log::error!("Error during retry: {}", e);
+                                if retry == max_retries {
+                                    return Err(anyhow::format_err!(
+                                        "All logits are zero after {} retries",
+                                        max_retries
+                                    ));
+                                }
+                                continue;
+                            }
+                        },
                     };
 
                     let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;

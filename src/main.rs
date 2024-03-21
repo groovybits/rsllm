@@ -1107,8 +1107,11 @@ async fn main() {
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
-            std::io::stdout().flush().unwrap();
-            info!("\nWaiting for LLM thread to finish...");
+            if loglevel != "error" {
+                println!("");
+                std::io::stdout().flush().unwrap();
+            }
+            info!("Waiting for LLM thread to finish...");
             // Wait for the LLM thread to finish
             llm_thread.await.unwrap();
             info!("LLM thread finished.");
