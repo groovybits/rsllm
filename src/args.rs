@@ -574,7 +574,7 @@ pub struct Args {
     #[clap(
         long,
         env = "CANDLE_LLM",
-        default_value = "mistral",
+        default_value = "gemma",
         help = "which llm to use from candle."
     )]
     pub candle_llm: String,

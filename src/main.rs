@@ -16,6 +16,7 @@
 */
 
 use clap::Parser;
+use ctrlc;
 use log::{debug, error, info};
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
@@ -59,6 +60,16 @@ async fn main() {
 
     // Parse command line arguments
     let args = Args::parse();
+
+    // Create an atomic bool to track if Ctrl+C is pressed
+    let running_ctrlc = Arc::new(AtomicBool::new(true));
+    let rctrlc = running_ctrlc.clone();
+
+    // Set up the Ctrl+C handler
+    ctrlc::set_handler(move || {
+        rctrlc.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl+C handler");
 
     // Set Rust log level with --loglevel if it is set
     let loglevel = args.loglevel.to_lowercase();
@@ -1180,7 +1191,8 @@ async fn main() {
         }
 
         // break the loop if we are not running as a daemon or hit max iterations
-        if (!args.daemon && args.max_iterations <= 1)
+        let rctrlc_clone = running_ctrlc.clone();
+        if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
             || (args.max_iterations > 1 && args.max_iterations == packet_count)
         {
             // stop the running threads

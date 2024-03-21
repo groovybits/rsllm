@@ -5,6 +5,7 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
+use safetensors::tensor::View;
 use std::io::Write;
 use tokio::sync::mpsc::{self, Sender};
 use tracing_chrome::ChromeLayerBuilder;
@@ -101,6 +102,46 @@ impl TextGeneration {
                 Model::Quantized(m) => m.forward(&input, start_pos)?,
             };
             let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+
+            // Check if logits are all zero
+            let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                value == 0.0
+            });
+
+            if is_all_zero {
+                log::warn!("All logits are zero at index {}", index);
+
+                // Retry up to 3 times
+                let max_retries = 3;
+                for retry in 1..=max_retries {
+                    log::info!("Retrying ({}/{})", retry, max_retries);
+
+                    let logits = match &mut self.model {
+                        Model::Mistral(m) => m.forward(&input, start_pos)?,
+                        Model::Quantized(m) => m.forward(&input, start_pos)?,
+                    };
+
+                    let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+
+                    let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                        let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                        value == 0.0
+                    });
+
+                    if !is_all_zero {
+                        break;
+                    }
+
+                    if retry == max_retries {
+                        return Err(anyhow::format_err!(
+                            "All logits are zero after {} retries",
+                            max_retries
+                        ));
+                    }
+                }
+            }
+
             let logits = if self.repeat_penalty == 1. {
                 logits
             } else {
@@ -271,6 +312,7 @@ pub fn mistral(
         while let Some(token) = internal_receiver.recv().await {
             if let Err(e) = external_sender_clone.send(token).await {
                 log::error!("Failed to send token externally: {}", e);
+                break;
             }
         }
     });
