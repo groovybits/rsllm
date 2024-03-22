@@ -15,11 +15,11 @@ fi
 ## Build release version
 cargo build \
     --release \
-    --features mps,ndi,audioplayer,metavoice
+    --features mps,ndi,audioplayer,metavoice,fonts
 
 # Build debug version
 cargo build \
-    --features mps,ndi,audioplayer,metavoice
+    --features mps,ndi,audioplayer,metavoice,fonts
 
 if [ ! -f "target/release/rsllm" ]; then
     echo "Error building rsllm, please check output"

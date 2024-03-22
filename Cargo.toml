@@ -22,6 +22,7 @@ mps = ["candle-core/metal", "candle-nn/metal", "metal", "candle-metal-kernels"]
 ndi = ["ndi-sdk-rsllm"]
 metavoice = []
 audioplayer = ["rodio"]
+fonts = ["rusttype", "imageproc"]
 
 [profile.release-with-debug]
 inherits = "release"
@@ -71,8 +72,8 @@ candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.
 ndi-sdk-rsllm = { git = "https://github.com/groovybits/rust-ndi.git", version = "0.1.2", optional = true }
 rand = { version = "0.8.5", features = ["small_rng"] }
 uuid = { version = "1.7.0", features = ["v4"] }
-imageproc = "0.23.0"
-rusttype = "0.9.3"
+imageproc = { version = "0.23.0", optional = true }
+rusttype = { version = "0.9.3", optional = true }
 rodio = { version = "0.17.3", features = ["wav", "mp3"], optional = true }
 minimp3 = "0.5.1"
 tmi = "0.5.0"

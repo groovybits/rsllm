@@ -1,3 +1,6 @@
+#[cfg(not(feature = "fonts"))]
+use crate::convert_rgb_to_rgba;
+#[cfg(feature = "fonts")]
 use crate::convert_rgb_to_rgba_with_text;
 use image::{ImageBuffer, Rgb};
 #[cfg(feature = "ndi")]
@@ -38,7 +41,9 @@ pub fn send_images_over_ndi(
         let height = image_buffer.height();
 
         // adjust height depending on subtitle_postion as top, center, bottom with respect to the image height
+        #[cfg(feature = "fonts")]
         let mut subtitle_height = height as i32 - (height as i32 / 3);
+        #[cfg(feature = "fonts")]
         if subtitle_position == "top" {
             subtitle_height = 10;
         } else if subtitle_position == "mid-top" {
@@ -57,10 +62,14 @@ pub fn send_images_over_ndi(
             );
         }
 
+        #[cfg(feature = "fonts")]
         let start_pos = ((font_size as i32 * 1) as i32, subtitle_height); // Text start position (x, y)
 
+        #[cfg(feature = "fonts")]
         let rgba_buffer =
             convert_rgb_to_rgba_with_text(&image_buffer, subtitle, font_size, start_pos);
+        #[cfg(not(feature = "fonts"))]
+        let rgba_buffer = convert_rgb_to_rgba(&image_buffer);
 
         let frame = ndi_sdk_rsllm::send::create_ndi_send_video_frame(
             width as i32,

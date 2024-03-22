@@ -29,7 +29,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use system_stats::{get_system_stats, SystemStats};
 pub mod candle_gemma;
 use image::{ImageBuffer, Rgb, Rgba};
+#[cfg(feature = "fonts")]
 use imageproc::drawing::draw_text_mut;
+#[cfg(feature = "fonts")]
 use rusttype::{Font, Scale};
 use std::io::Write;
 
@@ -223,6 +225,7 @@ pub fn count_tokens(text: &str) -> usize {
 }
 
 // Helper function to wrap text into lines
+#[cfg(feature = "fonts")]
 pub fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current_line = String::new();
@@ -276,12 +279,14 @@ pub fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -
 }
 
 // Helper function to calculate text width
+#[cfg(feature = "fonts")]
 pub fn text_width(text: &str, font: &Font, scale: Scale) -> f32 {
     text.chars()
         .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
         .sum()
 }
 
+#[cfg(feature = "fonts")]
 pub fn convert_rgb_to_rgba_with_text(
     image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>,
     text: &str,
@@ -368,6 +373,22 @@ pub fn convert_rgb_to_rgba_with_text(
         );
         current_height += font_size as i32;
     }
+
+    image_rgba
+        .pixels()
+        .flat_map(|pixel| {
+            let Rgba(data) = *pixel;
+            vec![data[0], data[1], data[2], data[3]]
+        })
+        .collect()
+}
+
+#[cfg(not(feature = "fonts"))]
+pub fn convert_rgb_to_rgba(image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Vec<u8> {
+    let image_rgba = ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
+        let pixel = image_buffer.get_pixel(x, y);
+        Rgba([pixel[0], pixel[1], pixel[2], 255])
+    });
 
     image_rgba
         .pixels()
