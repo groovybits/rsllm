@@ -86,10 +86,10 @@ async fn on_msg(
     if !msg.text().starts_with("!help") && !msg.text().starts_with("!message") {
         // LLM Thread
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
-        let max_tokens = 120;
+        let max_tokens = 200;
         let temperature = 0.8;
         let quantized = true;
-        let max_messages = 10;
+        let max_messages = 3;
 
         // TODO: Add a personality changing method for the AI through user chat commands
         let personality = format!("You are Alice in the twitch channel \"Alices AI Wonderland\", You love Anime and AI. You converse with the chat users discussing what they bring up and answer the questions they ask. Keep it to small chat and brief. Alice is a buddhist and a hippie girl at heart. Alice lives in San Francisco and loves the Bay Area. Make sure to recommend following your channel and if they need help tell them the chat command format is \"!message Alice <question>\". ");
