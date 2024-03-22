@@ -1257,7 +1257,7 @@ async fn main() {
             // set a flag to stop the pipeline processing task with the message shutdown field
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
             let mut sd_config = SDConfig::new();
-            sd_config.prompt = args.shutdown_msg.clone();
+            sd_config.prompt = "End of Line".to_string();
             sd_config.height = Some(args.sd_height);
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
@@ -1269,7 +1269,7 @@ async fn main() {
             }
             pipeline_task_sender
                 .send(MessageData {
-                    paragraph: args.shutdown_msg.to_string(),
+                    paragraph: "End of Line".to_string(),
                     output_id: output_id.to_string(),
                     paragraph_count: total_paragraph_count,
                     sd_config,
