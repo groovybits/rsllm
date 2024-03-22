@@ -67,6 +67,7 @@ async fn main() {
 
     // Set up the Ctrl+C handler
     ctrlc::set_handler(move || {
+        println!("");
         println!(
             "Ctrl+C received, shutting down after all processes are stopped (Do not force quit)..."
         );

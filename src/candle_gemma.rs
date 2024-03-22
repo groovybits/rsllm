@@ -107,7 +107,17 @@ impl TextGeneration {
 
                     match self.model.forward(&input, start_pos) {
                         Ok(logits) => {
-                            let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+                            let logits = match logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32) {
+                                Ok(logits) => logits,
+                                Err(e) => {
+                                    log::error!("Error during logits processing: {}", e);
+                                    return Err(anyhow::format_err!(
+                                        "Failed to process logits after {} retries: {}",
+                                        retry,
+                                        e
+                                    ));
+                                }
+                            };
 
                             let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
                                 let value =
@@ -123,8 +133,9 @@ impl TextGeneration {
                             log::error!("Error during retry: {}", e);
                             if retry == max_retries {
                                 return Err(anyhow::format_err!(
-                                    "All logits are zero after {} retries",
-                                    max_retries
+                                    "Failed to generate logits after {} retries: {}",
+                                    max_retries,
+                                    e
                                 ));
                             }
                         }
