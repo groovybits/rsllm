@@ -599,19 +599,13 @@ async fn main() {
             json!({})
         };
 
-        let mut twitch_received_chat = false;
         if args.twitch_client {
             loop {
                 match tokio::time::timeout(Duration::from_millis(100), twitch_rx.recv()).await {
                     Ok(Some(msg)) => {
                         if msg.starts_with("!message") {
                             let message = msg.splitn(2, ' ').nth(1).unwrap_or("");
-                            // add the message to the messages
-                            let twitch_message = Message {
-                                role: "twitch".to_string(),
-                                content: message.to_string(),
-                            };
-                            twitch_received_chat = true;
+                            // set the current query to the message
                             query = message.to_string();
                         } else if msg.is_empty() {
                             query = args.query.clone();

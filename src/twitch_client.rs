@@ -124,7 +124,7 @@ async fn on_msg(
     client
         .privmsg(
             msg.channel(),
-            "Sorry for the lack of interactive messaging, for now please chat with me directly in chat :)", // How to use the chat: !help, !message <message>.",
+            "To send a message to Alice type !message Alice <question>. You can also conversate with me by free typing in the chat! Enjoy the stories!",
         )
         .reply_to(msg.message_id())
         .send()
