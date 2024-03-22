@@ -16,6 +16,7 @@
 */
 
 use clap::Parser;
+use ctrlc;
 use log::{debug, error, info};
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
@@ -59,6 +60,19 @@ async fn main() {
 
     // Parse command line arguments
     let args = Args::parse();
+
+    // Create an atomic bool to track if Ctrl+C is pressed
+    let running_ctrlc = Arc::new(AtomicBool::new(true));
+    let rctrlc = running_ctrlc.clone();
+
+    // Set up the Ctrl+C handler
+    ctrlc::set_handler(move || {
+        println!(
+            "Ctrl+C received, shutting down after all processes are stopped (Do not force quit)..."
+        );
+        rctrlc.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl+C handler");
 
     // Set Rust log level with --loglevel if it is set
     let loglevel = args.loglevel.to_lowercase();
@@ -487,6 +501,8 @@ async fn main() {
         .unwrap_or_else(|| "NO_AUTH_KEY".to_string());
 
     let running_processor_twitch = Arc::new(AtomicBool::new(true));
+    let (twitch_tx, mut twitch_rx) = mpsc::channel(100);
+
     if args.twitch_client {
         // Clone values before moving them into the closure
         let twitch_channel_clone = vec![args.twitch_channel.clone()];
@@ -515,6 +531,7 @@ async fn main() {
                     twitch_auth_clone.clone(),
                     twitch_channel_clone.clone(),
                     running_processor_twitch_clone.clone(),
+                    twitch_tx.clone(),
                 )
                 .await
                 {
@@ -553,6 +570,7 @@ async fn main() {
         println!("Running RsLLM for [{}] iterations...", args.max_iterations);
     }
     let mut packet_count = 0;
+    let mut query = args.query.clone();
     loop {
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
@@ -581,10 +599,41 @@ async fn main() {
             json!({})
         };
 
+        if args.twitch_client {
+            loop {
+                match tokio::time::timeout(Duration::from_millis(100), twitch_rx.recv()).await {
+                    Ok(Some(msg)) => {
+                        if msg.starts_with("!message") {
+                            let message = msg.splitn(2, ' ').nth(1).unwrap_or("");
+                            // set the current query to the message
+                            query = message.to_string();
+                        } else if msg.is_empty() {
+                            query = args.query.clone();
+                        } else {
+                            // add the message to the messages
+                            let twitch_message = Message {
+                                role: "twitch".to_string(),
+                                content: msg.to_string(),
+                            };
+                            messages.push(twitch_message);
+                        }
+                    }
+                    Ok(None) => {
+                        // The channel has been closed, so break the loop
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout occurred, so continue the loop without blocking
+                        break;
+                    }
+                }
+            }
+        }
+
         // Add the system stats to the messages
         if !args.ai_os_stats && !args.ai_network_stats {
-            if !args.interactive && !args.query.is_empty() {
-                let query_clone = args.query.clone();
+            if !args.interactive && !query.is_empty() {
+                let query_clone = query.clone();
                 let user_message = Message {
                     role: "user".to_string(),
                     content: query_clone.to_string(),
@@ -631,7 +680,7 @@ async fn main() {
                         pretty_date_time,
                         system_stats_json.to_string(),
                         decode_batch,
-                        args.query
+                        query
                     ),
                 };
                 messages.push(network_stats_message.clone());
@@ -651,7 +700,7 @@ async fn main() {
                     "{} System Stats: {}\nInstructions: {}",
                     pretty_date_time,
                     system_stats_json.to_string(),
-                    args.query
+                    query
                 ),
             };
             messages.push(system_stats_message.clone());
@@ -1096,8 +1145,11 @@ async fn main() {
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
-            std::io::stdout().flush().unwrap();
-            info!("\nWaiting for LLM thread to finish...");
+            if loglevel != "error" {
+                println!("");
+                std::io::stdout().flush().unwrap();
+            }
+            info!("Waiting for LLM thread to finish...");
             // Wait for the LLM thread to finish
             llm_thread.await.unwrap();
             info!("LLM thread finished.");
@@ -1180,7 +1232,8 @@ async fn main() {
         }
 
         // break the loop if we are not running as a daemon or hit max iterations
-        if (!args.daemon && args.max_iterations <= 1)
+        let rctrlc_clone = running_ctrlc.clone();
+        if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
             || (args.max_iterations > 1 && args.max_iterations == packet_count)
         {
             // stop the running threads
