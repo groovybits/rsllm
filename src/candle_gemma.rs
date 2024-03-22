@@ -16,6 +16,7 @@ use candle_examples::token_output_stream::TokenOutputStream;
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
 use hf_hub::{api::sync::Api, Repo, RepoType};
+use safetensors::tensor::View;
 use std::sync::Arc;
 use tokenizers::Tokenizer;
 use tokio::sync::Mutex;
@@ -89,6 +90,66 @@ impl TextGeneration {
             let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
             let logits = self.model.forward(&input, start_pos)?;
             let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+
+            // Check if logits are all zero
+            let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                value == 0.0
+            });
+
+            if is_all_zero {
+                log::warn!("All logits are zero at index {}", index);
+
+                // Retry up to 3 times
+                let max_retries = 3;
+                for retry in 1..=max_retries {
+                    log::info!("Retrying ({}/{})", retry, max_retries);
+
+                    match self.model.forward(&input, start_pos) {
+                        Ok(logits) => {
+                            let logits = match logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32) {
+                                Ok(logits) => logits,
+                                Err(e) => {
+                                    log::error!("Error during logits processing: {}", e);
+                                    return Err(anyhow::format_err!(
+                                        "Failed to process logits after {} retries: {}",
+                                        retry,
+                                        e
+                                    ));
+                                }
+                            };
+
+                            let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                                let value =
+                                    f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                                value == 0.0
+                            });
+
+                            if !is_all_zero {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Error during retry: {}", e);
+                            if retry == max_retries {
+                                return Err(anyhow::format_err!(
+                                    "Failed to generate logits after {} retries: {}",
+                                    max_retries,
+                                    e
+                                ));
+                            }
+                        }
+                    }
+
+                    if retry == max_retries {
+                        return Err(anyhow::format_err!(
+                            "All logits are zero after {} retries",
+                            max_retries
+                        ));
+                    }
+                }
+            }
+
             let logits = if self.repeat_penalty == 1. {
                 logits
             } else {

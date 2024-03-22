@@ -5,6 +5,7 @@ extern crate intel_mkl_src;
 extern crate accelerate_src;
 
 use anyhow::{Error as E, Result};
+use safetensors::tensor::View;
 use std::io::Write;
 use tokio::sync::mpsc::{self, Sender};
 use tracing_chrome::ChromeLayerBuilder;
@@ -97,10 +98,93 @@ impl TextGeneration {
             let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
             //Model::Mistral7binstructV02(m) => m.forward(&input, start_pos)?,
             let logits = match &mut self.model {
-                Model::Mistral(m) => m.forward(&input, start_pos)?,
-                Model::Quantized(m) => m.forward(&input, start_pos)?,
+                Model::Mistral(m) => match m.forward(&input, start_pos) {
+                    Ok(logits) => logits,
+                    Err(e) => return Err(anyhow::format_err!("Error during forward pass: {}", e)),
+                },
+                Model::Quantized(m) => match m.forward(&input, start_pos) {
+                    Ok(logits) => logits,
+                    Err(e) => return Err(anyhow::format_err!("Error during forward pass: {}", e)),
+                },
             };
+
             let logits = logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32)?;
+
+            // Check if logits are all zero
+            let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                value == 0.0
+            });
+
+            if is_all_zero {
+                log::warn!("All logits are zero at index {}", index);
+
+                // Retry up to 3 times
+                let max_retries = 3;
+                for retry in 1..=max_retries {
+                    log::info!("Retrying ({}/{})", retry, max_retries);
+
+                    let logits = match &mut self.model {
+                        Model::Mistral(m) => match m.forward(&input, start_pos) {
+                            Ok(logits) => logits,
+                            Err(e) => {
+                                log::error!("Error during retry: {}", e);
+                                if retry == max_retries {
+                                    return Err(anyhow::format_err!(
+                                        "Failed to generate logits after {} retries: {}",
+                                        max_retries,
+                                        e
+                                    ));
+                                }
+                                continue;
+                            }
+                        },
+                        Model::Quantized(m) => match m.forward(&input, start_pos) {
+                            Ok(logits) => logits,
+                            Err(e) => {
+                                log::error!("Error during retry: {}", e);
+                                if retry == max_retries {
+                                    return Err(anyhow::format_err!(
+                                        "Failed to generate logits after {} retries: {}",
+                                        max_retries,
+                                        e
+                                    ));
+                                }
+                                continue;
+                            }
+                        },
+                    };
+
+                    let logits = match logits.squeeze(0)?.squeeze(0)?.to_dtype(DType::F32) {
+                        Ok(logits) => logits,
+                        Err(e) => {
+                            log::error!("Error during logits processing: {}", e);
+                            return Err(anyhow::format_err!(
+                                "Failed to process logits after {} retries: {}",
+                                retry,
+                                e
+                            ));
+                        }
+                    };
+
+                    let is_all_zero = logits.data().chunks_exact(4).all(|bytes| {
+                        let value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                        value == 0.0
+                    });
+
+                    if !is_all_zero {
+                        break;
+                    }
+
+                    if retry == max_retries {
+                        return Err(anyhow::format_err!(
+                            "All logits are zero after {} retries",
+                            max_retries
+                        ));
+                    }
+                }
+            }
+
             let logits = if self.repeat_penalty == 1. {
                 logits
             } else {

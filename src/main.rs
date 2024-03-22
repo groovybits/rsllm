@@ -60,6 +60,20 @@ async fn main() {
     // Parse command line arguments
     let args = Args::parse();
 
+    // Create an atomic bool to track if Ctrl+C is pressed
+    let running_ctrlc = Arc::new(AtomicBool::new(true));
+    let rctrlc = running_ctrlc.clone();
+
+    // Set up the Ctrl+C handler
+    ctrlc::set_handler(move || {
+        println!("");
+        println!(
+            "Ctrl+C received, shutting down after all processes are stopped (Do not force quit)..."
+        );
+        rctrlc.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl+C handler");
+
     // Set Rust log level with --loglevel if it is set
     let loglevel = args.loglevel.to_lowercase();
     match loglevel.as_str() {
