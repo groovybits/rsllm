@@ -19,8 +19,9 @@ jobs:
               run: |
                   brew update
                   brew install libpcap zmq capnp cabextract
-                  cd fonts && sh ./fonts/unpack_fonts.sh
             - name: Build
-              run: cargo build --verbose
+              run: |
+                  cd fonts && sh unpack_fonts.sh && cd ../
+                  cargo build --verbose
             - name: Run tests
               run: cargo test --verbose
