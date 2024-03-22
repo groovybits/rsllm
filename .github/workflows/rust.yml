@@ -1,25 +1,27 @@
 name: Rust
 
 on:
-  push:
-    branches: [ "main", "staging" ]
-  pull_request:
-    branches: [ "main", "staging" ]
+    push:
+        branches: ["main", "staging"]
+    pull_request:
+        branches: ["main", "staging"]
 
 env:
-  CARGO_TERM_COLOR: always
+    CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: macos-latest  # Changed from ubuntu-latest to macos-latest
+    build:
+        runs-on: macos-latest # Changed from ubuntu-latest to macos-latest
 
-    steps:
-    - uses: actions/checkout@v3
-    - name: Install dependencies
-      run: |
-        brew update
-        brew install libpcap zmq capnp
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+        steps:
+            - uses: actions/checkout@v3
+            - name: Install dependencies
+              run: |
+                  brew update
+                  brew install libpcap zmq capnp cabextract
+            - name: Build
+              run: |
+                  cd fonts && sh unpack_fonts.sh && cd ../
+                  cargo build --verbose
+            - name: Run tests
+              run: cargo test --verbose

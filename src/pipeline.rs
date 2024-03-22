@@ -3,6 +3,8 @@
 */
 use crate::adjust_caps;
 use crate::args::Args;
+#[cfg(feature = "ndi")]
+use crate::audio::{mp3_to_f32, wav_to_f32};
 #[cfg(feature = "metavoice")]
 use crate::candle_metavoice::metavoice;
 use crate::mimic3_tts::tts as mimic3_tts;
@@ -74,10 +76,43 @@ pub async fn process_image(data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8
 pub async fn process_speech(data: MessageData) -> Vec<u8> {
     if data.args.mimic3_tts || data.args.oai_tts || data.args.tts_enable || data.args.metavoice_tts
     {
-        let input = data.sd_config.prompt.clone(); // Ensure this uses the appropriate text for TTS
+        let input = data.paragraph.clone(); // Ensure this uses the appropriate text for TTS
 
         // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
         let input = adjust_caps(&input);
+
+        // remove any special characters from the text except for normal punctuation ./,;:?
+        let input = input
+            .chars()
+            .filter(|c| c.is_alphanumeric() || c.is_whitespace() || c.is_ascii_punctuation())
+            .collect::<String>();
+
+        // split into sentences and check if any begin with special characters, remove them
+        let input = input
+            .split('.')
+            .map(|s| {
+                let s = s.trim();
+                if s.starts_with(|c: char| c.is_ascii_punctuation()) {
+                    &s[1..]
+                } else {
+                    s
+                }
+            })
+            .collect::<Vec<&str>>()
+            .join(". ");
+
+        // remove any non ascii characters from the ending of the input text
+        let input = input
+            .chars()
+            .take_while(|c| c.is_ascii())
+            .collect::<String>();
+
+        // remove any punctuation from the end of the input
+        let input = input
+            .trim_end_matches(|c: char| !c.is_alphanumeric())
+            .to_string();
+
+        debug!("\nTTS Speech text input: {}", input);
 
         let bytes_result = if data.args.oai_tts {
             // OpenAI TTS request
@@ -124,6 +159,7 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
                     return bytes.to_vec();
                 } else {
                     // Example code to play audio directly, replace with your actual audio playback logic
+                    // TODO: Split out into the audio crate
                     #[cfg(feature = "audioplayer")]
                     {
                         println!("Playing TTS audio");
@@ -186,37 +222,55 @@ pub async fn send_to_ndi(processed_data: ProcessedData, args: &Args) {
 
     if let Some(audio_data) = processed_data.audio_data {
         if args.ndi_audio {
-            {
-                let samples_result = if args.oai_tts {
-                    crate::ndi::mp3_to_f32(audio_data)
+            let samples_result = if args.oai_tts {
+                mp3_to_f32(audio_data)
+            } else {
+                wav_to_f32(audio_data)
+            };
+
+            if let Ok(mut samples_f32) = samples_result {
+                let sample_rate = if args.mimic3_tts { 22050 } else { 24000 };
+                let channels: i32 = 1;
+                let chunk_size = args.audio_chunk_size * sample_rate as f32 * channels as f32;
+
+                let delay_ms =
+                    (chunk_size as f32 / channels as f32 / sample_rate as f32 * 1000.0) as u64;
+
+                // Calculate the number of samples needed for 3 seconds of silence
+                let silence_duration = 3.0; // Duration of silence in seconds
+                let silence_samples = (silence_duration * sample_rate as f32) as usize;
+
+                // Create a vector of silent samples
+                let silence_vec = vec![0.0; silence_samples];
+
+                // Prepend the silence to the audio samples
+                samples_f32.splice(0..0, silence_vec.clone());
+
+                // make sure the last chunk is aligned to the chunk size
+                let last_chunk_size = samples_f32.len() as f32 % chunk_size;
+                let last_chunk_size = if last_chunk_size == 0.0 {
+                    chunk_size
                 } else {
-                    crate::ndi::wav_to_f32(audio_data)
+                    last_chunk_size
                 };
+                // Append silence to the last chunk to make it the same size as the other chunks
+                let silence_samples = (chunk_size - last_chunk_size) as usize;
+                let silence_vec = vec![0.0; silence_samples];
+                samples_f32.extend(silence_vec);
 
-                if let Ok(samples_f32) = samples_result {
-                    let sample_rate = if args.mimic3_tts { 22050 } else { 24000 };
-                    let channels: i32 = 1;
-                    let chunk_size = args.audio_chunk_size * sample_rate as f32 * channels as f32;
-                    let delay_ms =
-                        (chunk_size as f32 / channels as f32 / sample_rate as f32 * 1000.0) as u64;
+                debug!(
+                    "Sending {} ms duration {} audio samples",
+                    delay_ms, chunk_size
+                );
 
-                    debug!(
-                        "Sending {} ms duration {} audio samples",
-                        delay_ms, chunk_size
-                    );
-
-                    for chunk_samples in samples_f32.chunks(chunk_size as usize) {
-                        let mut chunk_vec = chunk_samples.to_vec();
-
-                        if chunk_samples.len() < chunk_size as usize {
-                            chunk_vec.resize(chunk_size as usize, 0.0);
-                        }
-
-                        send_audio_samples_over_ndi(chunk_vec, sample_rate, channels)
-                            .expect("Failed to send audio samples over NDI");
-
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                for chunk_samples in samples_f32.chunks(chunk_size as usize) {
+                    let mut chunk_vec = chunk_samples.to_vec();
+                    if chunk_samples.len() < chunk_size as usize {
+                        chunk_vec.resize(chunk_size as usize, 0.0);
                     }
+                    send_audio_samples_over_ndi(chunk_vec, sample_rate, channels)
+                        .expect("Failed to send audio samples over NDI");
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                 }
             }
         }

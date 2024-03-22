@@ -4,6 +4,7 @@ extern crate accelerate_src;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
+use crate::truncate_tokens;
 use candle_transformers::models::stable_diffusion;
 
 use anyhow::{Error as E, Result};
@@ -218,6 +219,10 @@ fn text_embeddings(
         Some(padding) => *tokenizer.get_vocab(true).get(padding.as_str()).unwrap(),
         None => *tokenizer.get_vocab(true).get("<|endoftext|>").unwrap(),
     };
+
+    // truncate the prompt to 77 tokens max length of input
+    let prompt = truncate_tokens(prompt, 50);
+
     debug!("Stable Diffusion: Running with prompt \"{prompt}\".");
     let mut tokens = tokenizer
         .encode(prompt, true)

@@ -21,6 +21,7 @@ use log::{debug, error, info};
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
+use rsllm::count_tokens;
 use rsllm::handle_long_string;
 use rsllm::network_capture::{network_capture, NetworkCapture};
 use rsllm::openai_api::{format_messages_for_llm, stream_completion, Message, OpenAIRequest};
@@ -111,10 +112,10 @@ async fn main() {
         mpsc::channel::<MessageData>(args.pipeline_concurrency);
 
     // Channel to signal NDI is done
-    let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(args.llm_concurrency);
+    #[cfg(feature = "ndi")]
+    let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(1);
 
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
-    //let llm_sem = Arc::new(Semaphore::new(args.llm_concurrency));
 
     // Pipeline processing task for image and speech together as a single task
     let pipeline_processing_task = {
@@ -189,7 +190,7 @@ async fn main() {
     let running_processor_ndi_clone = running_processor_ndi.clone();
     #[cfg(feature = "ndi")]
     let ndi_sync_task = tokio::spawn(async move {
-        let mut current_key = 0;
+        let mut current_key = 1;
         while running_processor_ndi_clone.load(Ordering::SeqCst) {
             let data = {
                 let store = processed_data_store_for_ndi.lock().await;
@@ -216,6 +217,7 @@ async fn main() {
                         );
                     }
                     // Send to NDI
+                    #[cfg(feature = "ndi")]
                     send_to_ndi(data.clone(), &args_for_ndi).await;
                     {
                         let mut store = processed_data_store_for_ndi.lock().await;
@@ -259,7 +261,7 @@ async fn main() {
 
     // start time
     let start_time = current_unix_timestamp_ms().unwrap_or(0);
-    let mut total_paragraph_count = 0;
+    let mut total_paragraph_count = 1;
 
     // Perform TR 101 290 checks
     let mut tr101290_errors = Tr101290Errors::new();
@@ -572,6 +574,44 @@ async fn main() {
     }
     let mut packet_count = 0;
     let mut query = args.query.clone();
+
+    // Boot up message and image repeat of the query sent to the pipeline
+    if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+        let mut sd_config = SDConfig::new();
+        sd_config.prompt = args.assistant_image_prompt.clone();
+        sd_config.height = Some(args.sd_height);
+        sd_config.width = Some(args.sd_width);
+        sd_config.image_position = Some(args.image_alignment.clone());
+
+        let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+        if args.sd_scaled_height > 0 {
+            sd_config.scaled_height = Some(args.sd_scaled_height);
+        }
+        if args.sd_scaled_width > 0 {
+            sd_config.scaled_width = Some(args.sd_scaled_width);
+        }
+        // just send a message with the last_message field true to indicate the end of the response
+        let message_data_for_pipeline = MessageData {
+            paragraph: args.greeting.to_string(),
+            output_id: output_id.to_string(),
+            paragraph_count: total_paragraph_count,
+            sd_config,
+            mimic3_voice: args.mimic3_voice.to_string(),
+            subtitle_position: args.subtitle_position.to_string(),
+            args: args.clone(),
+            shutdown: false,
+            last_message: false,
+        };
+
+        // For pipeline task
+        pipeline_task_sender
+            .send(message_data_for_pipeline)
+            .await
+            .expect("Failed to send bootup pipeline task");
+
+        total_paragraph_count += 1;
+    }
+
     loop {
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
@@ -592,14 +632,7 @@ async fn main() {
 
         packet_count += 1;
 
-        // OS and Network stats message
-        let system_stats_json = if args.ai_os_stats {
-            get_stats_as_json(StatsType::System).await
-        } else {
-            // Default input message
-            json!({})
-        };
-
+        let mut twitch_query = false;
         if args.twitch_client {
             loop {
                 match tokio::time::timeout(Duration::from_millis(100), twitch_rx.recv()).await {
@@ -608,15 +641,20 @@ async fn main() {
                             let message = msg.splitn(2, ' ').nth(1).unwrap_or("");
                             // set the current query to the message
                             query = message.to_string();
-                        } else if msg.is_empty() {
+                            twitch_query = true;
+                            break;
+                        } else if msg.is_empty() || msg.starts_with("!") {
                             query = args.query.clone();
                         } else {
                             // add the message to the messages
                             let twitch_message = Message {
-                                role: "twitch".to_string(),
+                                role: "user".to_string(),
                                 content: msg.to_string(),
                             };
+                            // store in history for context of chat room
                             messages.push(twitch_message);
+                            // set the current query to the the default
+                            query = args.query.clone();
                         }
                     }
                     Ok(None) => {
@@ -630,6 +668,112 @@ async fn main() {
                 }
             }
         }
+
+        // Did not get a message from twitch, so don't process the query
+        if !twitch_query && args.twitch_client {
+            if !args.continuous {
+                // sleep for a while to avoid busy loop
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        }
+
+        // break the loop if we are not running as a daemon or hit max iterations
+        let rctrlc_clone = running_ctrlc.clone();
+        if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
+            || (args.max_iterations > 1 && args.max_iterations == packet_count)
+        {
+            // stop the running threads
+            if args.ai_network_stats {
+                network_capture_config
+                    .running
+                    .store(false, Ordering::SeqCst);
+            }
+
+            // stop the running threads
+            info!("Signaling background tasks to complete...");
+            running_processor_network.store(false, Ordering::SeqCst);
+            running_processor_twitch.store(false, Ordering::SeqCst);
+
+            // Await the completion of background tasks
+            info!("waiting for network capture handle to complete...");
+            let _ = processing_handle.await;
+            info!("Network Processing handle complete.");
+
+            // set a flag to stop the pipeline processing task with the message shutdown field
+            let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = args.assistant_image_prompt.to_string();
+            sd_config.height = Some(args.sd_height);
+            sd_config.width = Some(args.sd_width);
+            sd_config.image_position = Some(args.image_alignment.clone());
+            if args.sd_scaled_height > 0 {
+                sd_config.scaled_height = Some(args.sd_scaled_height);
+            }
+            if args.sd_scaled_width > 0 {
+                sd_config.scaled_width = Some(args.sd_scaled_width);
+            }
+            pipeline_task_sender
+                .send(MessageData {
+                    paragraph: "Alice is Shutting Down the AI Channel, goodbye!".to_string(),
+                    output_id: output_id.to_string(),
+                    paragraph_count: total_paragraph_count,
+                    sd_config,
+                    mimic3_voice: args.mimic3_voice.to_string(),
+                    subtitle_position: args.subtitle_position.to_string(),
+                    args: args.clone(),
+                    shutdown: true,
+                    last_message: true,
+                })
+                .await
+                .expect("Failed to send last audio/speech pipeline task");
+
+            // Pipeline await completion
+            info!("waiting for pipline handle to complete...");
+            let _ = pipeline_processing_task.await;
+            info!("pipeline handle completed.");
+
+            // NDI await completion
+            #[cfg(feature = "ndi")]
+            info!("waiting for ndi handle to complete...");
+            #[cfg(feature = "ndi")]
+            let _ = ndi_sync_task.await;
+            #[cfg(feature = "ndi")]
+            info!("ndi handle completed.");
+
+            // exit here
+            info!("Exiting main loop...");
+            std::process::exit(0);
+        }
+
+        // Calculate elapsed time since last start
+        let elapsed = poll_start_time.elapsed();
+
+        // Sleep only if the elapsed time is less than the poll interval
+        if elapsed < poll_interval_duration {
+            // Sleep only if the elapsed time is less than the poll interval
+            println!(
+                "Finished loop #{} Sleeping for {} ms...",
+                packet_count,
+                poll_interval_duration.as_millis() - elapsed.as_millis()
+            );
+            tokio::time::sleep(poll_interval_duration - elapsed).await;
+            println!(
+                "Continuing after sleeping with loop #{}...",
+                packet_count + 1
+            );
+        }
+
+        // Update start time for the next iteration
+        poll_start_time = Instant::now();
+
+        // OS and Network stats message
+        let system_stats_json = if args.ai_os_stats {
+            get_stats_as_json(StatsType::System).await
+        } else {
+            // Default input message
+            json!({})
+        };
 
         // Add the system stats to the messages
         if !args.ai_os_stats && !args.ai_network_stats {
@@ -852,10 +996,8 @@ async fn main() {
             }
 
             let prompt_clone = prompt.clone();
-            //let llm_sem_clone = llm_sem.clone();
             let llm_thread = if args.candle_llm == "mistral" {
                 tokio::spawn(async move {
-                    //let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = mistral(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -866,11 +1008,9 @@ async fn main() {
                     ) {
                         eprintln!("Error running mistral: {}", e);
                     }
-                    //drop(_permit);
                 })
             } else {
                 tokio::spawn(async move {
-                    //let _permit = llm_sem_clone.acquire().await.unwrap();
                     if let Err(e) = gemma(
                         prompt_clone,
                         args.max_tokens as usize,
@@ -881,7 +1021,6 @@ async fn main() {
                     ) {
                         eprintln!("Error running gemma: {}", e);
                     }
-                    //drop(_permit);
                 })
             };
 
@@ -897,6 +1036,41 @@ async fn main() {
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
 
+            //  Initial repeat of the query sent to the pipeline
+            if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                let mut sd_config = SDConfig::new();
+                sd_config.prompt = query.clone();
+                sd_config.height = Some(args.sd_height);
+                sd_config.width = Some(args.sd_width);
+                sd_config.image_position = Some(args.image_alignment.clone());
+                if args.sd_scaled_height > 0 {
+                    sd_config.scaled_height = Some(args.sd_scaled_height);
+                }
+                if args.sd_scaled_width > 0 {
+                    sd_config.scaled_width = Some(args.sd_scaled_width);
+                }
+                // just send a message with the last_message field true to indicate the end of the response
+                let message_data_for_pipeline = MessageData {
+                    paragraph: query.clone().to_string(),
+                    output_id: output_id.clone(),
+                    paragraph_count: total_paragraph_count,
+                    sd_config,
+                    mimic3_voice: args.mimic3_voice.to_string(),
+                    subtitle_position: args.subtitle_position.to_string(),
+                    args: args.clone(),
+                    shutdown: false,
+                    last_message: false,
+                };
+
+                // For pipeline task
+                pipeline_task_sender
+                    .send(message_data_for_pipeline)
+                    .await
+                    .expect("Failed to send q/a audio/speech pipeline task");
+
+                total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+            }
+
             while let Some(received) = external_receiver.recv().await {
                 token_count += 1;
                 terminal_token_len += received.len();
@@ -904,17 +1078,23 @@ async fn main() {
                 // Store the received token
                 answers.push(received.clone());
 
+                let token_len = count_tokens(&current_paragraph.join(""));
                 // If a newline is at the end of the token, process the accumulated paragraph for image generation
                 if received.contains('\n') && !current_paragraph.is_empty()
-                    || (current_paragraph.join("").len() > args.sd_max_length
+                    || (token_len as f32 > args.sd_max_length as f32 / 1.8
                         && (received.contains('.')
                             || received.contains('?')
                             || received.contains('\n')
                             || received.contains('!'))
-                        || (current_paragraph.join("").len()
-                            >= (2.5 * args.sd_max_length as f32) as usize
+                        || (token_len >= (args.sd_max_length as f32) as usize
                             && (received.contains(' '))))
                 {
+                    debug!(
+                        "\nParagraph Token count: {} Character Count: {}",
+                        token_len,
+                        current_paragraph.join("").len()
+                    );
+
                     // Join the current paragraph tokens into a single String without adding extra spaces
                     if !current_paragraph.is_empty()
                         && current_paragraph.join("").len() > min_paragraph_len
@@ -1025,6 +1205,8 @@ async fn main() {
                                 .send(message_data_for_pipeline)
                                 .await
                                 .expect("Failed to send image/speech pipeline task");
+
+                            total_paragraph_count += 1; // Increment paragraph count for the next paragraph
                         }
                         // ** End of TTS and Image Generation **
 
@@ -1033,7 +1215,6 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
 
                         paragraph_count += 1; // Increment paragraph count for the next paragraph
-                        total_paragraph_count += 1; // Increment paragraph count for the next paragraph
                     } else {
                         // store the token in the current paragraph
                         current_paragraph.push(received.clone());
@@ -1104,17 +1285,17 @@ async fn main() {
                         .send(message_data_for_pipeline)
                         .await
                         .expect("Failed to send last audio/speech pipeline task");
+
+                    total_paragraph_count += 1; // Increment paragraph count for the next paragraph
                 }
                 // ** End of TTS and Image Generation **
-
                 paragraph_count += 1; // Increment paragraph count for the next paragraph
-                total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
 
             // End of the response message to the pipeline
             if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                 let mut sd_config = SDConfig::new();
-                sd_config.prompt = args.shutdown_msg.clone();
+                sd_config.prompt = args.greeting.clone();
                 sd_config.height = Some(args.sd_height);
                 sd_config.width = Some(args.sd_width);
                 sd_config.image_position = Some(args.image_alignment.clone());
@@ -1126,7 +1307,7 @@ async fn main() {
                 }
                 // just send a message with the last_message field true to indicate the end of the response
                 let message_data_for_pipeline = MessageData {
-                    paragraph: args.shutdown_msg.to_string(),
+                    paragraph: args.greeting.to_string(),
                     output_id: output_id.clone(),
                     paragraph_count: total_paragraph_count,
                     sd_config,
@@ -1186,6 +1367,7 @@ async fn main() {
                 });
             }
 
+            #[cfg(feature = "ndi")]
             if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                 // Wait for the NDI done signal
                 std::io::stdout().flush().unwrap();
@@ -1231,94 +1413,5 @@ async fn main() {
                 messages.push(assistant_message.clone());
             }
         }
-
-        // break the loop if we are not running as a daemon or hit max iterations
-        let rctrlc_clone = running_ctrlc.clone();
-        if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
-            || (args.max_iterations > 1 && args.max_iterations == packet_count)
-        {
-            // stop the running threads
-            if args.ai_network_stats {
-                network_capture_config
-                    .running
-                    .store(false, Ordering::SeqCst);
-            }
-
-            // stop the running threads
-            info!("Signaling background tasks to complete...");
-            running_processor_network.store(false, Ordering::SeqCst);
-            running_processor_twitch.store(false, Ordering::SeqCst);
-
-            // Await the completion of background tasks
-            info!("waiting for network capture handle to complete...");
-            let _ = processing_handle.await;
-            info!("Network Processing handle complete.");
-
-            // set a flag to stop the pipeline processing task with the message shutdown field
-            let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
-            let mut sd_config = SDConfig::new();
-            sd_config.prompt = "End of Line".to_string();
-            sd_config.height = Some(args.sd_height);
-            sd_config.width = Some(args.sd_width);
-            sd_config.image_position = Some(args.image_alignment.clone());
-            if args.sd_scaled_height > 0 {
-                sd_config.scaled_height = Some(args.sd_scaled_height);
-            }
-            if args.sd_scaled_width > 0 {
-                sd_config.scaled_width = Some(args.sd_scaled_width);
-            }
-            pipeline_task_sender
-                .send(MessageData {
-                    paragraph: "End of Line".to_string(),
-                    output_id: output_id.to_string(),
-                    paragraph_count: total_paragraph_count,
-                    sd_config,
-                    mimic3_voice: args.mimic3_voice.to_string(),
-                    subtitle_position: args.subtitle_position.to_string(),
-                    args: args.clone(),
-                    shutdown: true,
-                    last_message: true,
-                })
-                .await
-                .expect("Failed to send last audio/speech pipeline task");
-
-            // Pipeline await completion
-            info!("waiting for pipline handle to complete...");
-            let _ = pipeline_processing_task.await;
-            info!("pipeline handle completed.");
-
-            // NDI await completion
-            #[cfg(feature = "ndi")]
-            info!("waiting for ndi handle to complete...");
-            #[cfg(feature = "ndi")]
-            let _ = ndi_sync_task.await;
-            #[cfg(feature = "ndi")]
-            info!("ndi handle completed.");
-
-            // exit here
-            info!("Exiting main loop...");
-            std::process::exit(0);
-        }
-
-        // Calculate elapsed time since last start
-        let elapsed = poll_start_time.elapsed();
-
-        // Sleep only if the elapsed time is less than the poll interval
-        if elapsed < poll_interval_duration {
-            // Sleep only if the elapsed time is less than the poll interval
-            println!(
-                "Finished loop #{} Sleeping for {} ms...",
-                packet_count,
-                poll_interval_duration.as_millis() - elapsed.as_millis()
-            );
-            tokio::time::sleep(poll_interval_duration - elapsed).await;
-            println!(
-                "Continuing after sleeping with loop #{}...",
-                packet_count + 1
-            );
-        }
-
-        // Update start time for the next iteration
-        poll_start_time = Instant::now();
     }
 }

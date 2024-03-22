@@ -16,8 +16,7 @@ MAX_TOKENS=3000
 ALIGNMENT=right
 TEMPERATURE=0.8
 POLL_INTERVAL=3000
-PIPELINE_CONCURRENCY=2
-LLM_CONCURRENCY=1
+PIPELINE_CONCURRENCY=3
 CONTEXT_SIZE=4000
 SUBTITLES=1
 DAEMON=0
@@ -51,7 +50,6 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --image-alignment $ALIGNMENT \
     --temperature $TEMPERATURE \
     --pipeline-concurrency $PIPELINE_CONCURRENCY \
-    --llm-concurrency $LLM_CONCURRENCY \
     --poll-interval $POLL_INTERVAL \
     --llm-history-size $CONTEXT_SIZE \
     $SUBTITLE_CMD \

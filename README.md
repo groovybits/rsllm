@@ -9,6 +9,7 @@ The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal 
 -   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
 -   **TTS MetaVoice / Mimic3 TTS API / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support generates very nice speech for a prie if wanting quality/realtime speech generation. Mimic3 TTS API requires running the mimic3-server and is a bit more involved but is a good alternative to OpenAI TTS API since it is free if you have a local system. <https://github.com/MycroftAI/mimic3>
+-   **Twitch Chat Interactive AI**: Integrated Twitch chat for real-time AI interactions, enabling users to engage with the toolkit through chat commands and receive AI-generated responses.
 
 ![RSLLM](https://storage.googleapis.com/groovybits/images/rsllm/rsllm.webp)
 
@@ -50,7 +51,8 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
 3. **Compile with Metal GPU Support and NDI SDK support**:
     ```bash
     # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-    # cargo build --release --features=mps,ndi,audioplayer,metavoice
+    # cargo build --release --features=fonts,mps,ndi,audioplayer,metavoice
+
     ## run the compile.sh which basically does the above command + gets the libndi.dylib.
     ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
     ```
@@ -77,7 +79,7 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 -   **Running with Candle and OS Stats for AI System Analysis**:
     ```bash
-    cargo run --release --features ndi,mps,metavoice,audioplayer -- \
+    cargo run --release --features fonts,ndi,mps,metavoice,audioplayer -- \
       --candle_llm gemma \
       --model-id "2b-it" \
       --max-tokens 1000 \
@@ -120,7 +122,6 @@ RsLLM has a mission to research and explore implementing a versatile, high-perfo
 
 ### Priority:
 
--   Twitch Chat integration fixes for threading and input/output through mpsc channels async (WIP).
 -   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
 -   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
 -   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.

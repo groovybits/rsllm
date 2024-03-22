@@ -8,6 +8,7 @@
 */
 
 pub mod args;
+pub mod audio;
 pub mod candle_metavoice;
 pub mod candle_mistral;
 pub mod mimic3_tts;
@@ -27,6 +28,11 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use system_stats::{get_system_stats, SystemStats};
 pub mod candle_gemma;
+use image::{ImageBuffer, Rgb, Rgba};
+#[cfg(feature = "fonts")]
+use imageproc::drawing::draw_text_mut;
+#[cfg(feature = "fonts")]
+use rusttype::{Font, Scale};
 use std::io::Write;
 
 #[derive(Debug)]
@@ -116,16 +122,7 @@ pub fn hexdump_ascii(packet: &[u8], packet_offset: usize, packet_len: usize) -> 
     packet_dump
 }
 
-pub fn remove_prompt_from_output(prompt: &str, output: String) -> String {
-    if output.starts_with(prompt) {
-        // Remove the prompt from the beginning of the output
-        output[prompt.len()..].to_string()
-    } else {
-        // If the output does not start with the prompt, return it as is
-        output.to_string()
-    }
-}
-
+/// Remove all caps from the provided string.
 pub fn adjust_caps(paragraph: &str) -> String {
     paragraph
         .split_whitespace()
@@ -186,4 +183,218 @@ pub fn handle_long_string(received: &str, terminal_token_len: &mut usize) {
         print!("{}", received);
         std::io::stdout().flush().unwrap();
     }
+}
+
+/// Truncate the input text to the specified number of tokens.
+/// If the number of tokens in the input text is less than or equal to the specified number of tokens,
+/// the input text is returned as is. Otherwise, the input text is truncated to the specified number of tokens.
+fn truncate_tokens(text: &str, max_tokens: usize) -> String {
+    let mut tokens: Vec<String> = Vec::new();
+    for token in text.split_whitespace() {
+        if token.len() <= 4 {
+            tokens.push(token.to_string());
+        } else {
+            let token_chars: Vec<char> = token.chars().collect();
+            let chunks = token_chars.chunks(4);
+            for chunk in chunks {
+                let chunk_str: String = chunk.iter().collect();
+                tokens.push(chunk_str);
+            }
+        }
+    }
+
+    if tokens.len() <= max_tokens {
+        text.to_string()
+    } else {
+        tokens[..max_tokens].join(" ")
+    }
+}
+
+pub fn count_tokens(text: &str) -> usize {
+    let mut token_count = 0;
+    for token in text.split_whitespace() {
+        if token.len() <= 4 {
+            token_count += 1;
+        } else {
+            let token_chars: Vec<char> = token.chars().collect();
+            let chunks = token_chars.chunks(4);
+            token_count += chunks.len();
+        }
+    }
+    token_count
+}
+
+// Helper function to wrap text into lines
+#[cfg(feature = "fonts")]
+pub fn wrap_text<'a>(text: &'a str, font: &Font, scale: Scale, max_width: i32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+    let space_width = font.glyph(' ').scaled(scale).h_metrics().advance_width;
+
+    for word in text.split_whitespace() {
+        let word_width = word
+            .chars()
+            .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+            .sum::<f32>();
+        if current_line.is_empty()
+            || text_width(&current_line, font, scale) + space_width + word_width <= max_width as f32
+        {
+            if !current_line.is_empty() {
+                current_line.push(' ');
+            }
+            current_line.push_str(word);
+        } else {
+            lines.push(current_line);
+            current_line = String::from(word);
+        }
+    }
+
+    // go through lines and break any that exceed our max length into smaller lines and adjust proceeding lines
+    // force break without wrap_text function since we are not breaking by spaces but by characters instead
+    let mut i = 0;
+    while i < lines.len() {
+        let line = &lines[i];
+        if text_width(line, font, scale) > max_width as f32 {
+            // break line into smaller lines by character not by spaces
+            let mut new_lines = Vec::new();
+            let mut current_line = String::new();
+            for c in line.chars() {
+                let char_width = font.glyph(c).scaled(scale).h_metrics().advance_width;
+                if text_width(&current_line, font, scale) + char_width <= max_width as f32 {
+                    current_line.push(c);
+                } else {
+                    new_lines.push(current_line);
+                    current_line = String::from(c);
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+// Helper function to calculate text width
+#[cfg(feature = "fonts")]
+pub fn text_width(text: &str, font: &Font, scale: Scale) -> f32 {
+    text.chars()
+        .map(|c| font.glyph(c).scaled(scale).h_metrics().advance_width)
+        .sum()
+}
+
+#[cfg(feature = "fonts")]
+pub fn convert_rgb_to_rgba_with_text(
+    image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>,
+    text: &str,
+    font_size: f32,
+    start_pos: (i32, i32),
+) -> Vec<u8> {
+    let font_data = include_bytes!("../fonts/TrebuchetMSBold.ttf");
+    let font = Font::try_from_bytes(font_data as &[u8]).expect("Error constructing Font");
+
+    let mut image_rgba =
+        ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
+            let pixel = image_buffer.get_pixel(x, y);
+            Rgba([pixel[0], pixel[1], pixel[2], 255])
+        });
+
+    let scale = Scale {
+        x: font_size,
+        y: font_size,
+    };
+    let text_color = Rgba([255, 255, 255, 0xff]);
+    let shadow_color = Rgba([0, 0, 0, 255]);
+    let shadow_top_offset = 2; // Shadow offset in pixels
+    let shadow_bottom_offset = 4; // Shadow offset in pixels
+
+    // Draw bottom shadow
+    let wrapped_text_shadow = wrap_text(
+        text,
+        &font,
+        scale,
+        image_buffer.width() as i32 - start_pos.0 * 2,
+    );
+    let mut current_height_bottom_shadow = start_pos.1 + shadow_bottom_offset / 2;
+    for line in &wrapped_text_shadow {
+        draw_text_mut(
+            &mut image_rgba,
+            shadow_color,
+            start_pos.0 + shadow_bottom_offset,
+            current_height_bottom_shadow,
+            scale,
+            &font,
+            line,
+        );
+        current_height_bottom_shadow += font_size as i32;
+    }
+
+    // Draw top shadow
+    let wrapped_text_shadow = wrap_text(
+        text,
+        &font,
+        scale,
+        image_buffer.width() as i32 - start_pos.0 * 2,
+    );
+    let mut current_height_top_shadow = start_pos.1 - shadow_top_offset / 2;
+    for line in &wrapped_text_shadow {
+        draw_text_mut(
+            &mut image_rgba,
+            shadow_color,
+            start_pos.0 - shadow_top_offset,
+            current_height_top_shadow,
+            scale,
+            &font,
+            line,
+        );
+        current_height_top_shadow += font_size as i32;
+    }
+
+    // Draw text
+    let wrapped_text = wrap_text(
+        text,
+        &font,
+        scale,
+        image_buffer.width() as i32 - start_pos.0 * 2,
+    );
+    let mut current_height = start_pos.1;
+    for line in &wrapped_text {
+        draw_text_mut(
+            &mut image_rgba,
+            text_color,
+            start_pos.0,
+            current_height,
+            scale,
+            &font,
+            line,
+        );
+        current_height += font_size as i32;
+    }
+
+    image_rgba
+        .pixels()
+        .flat_map(|pixel| {
+            let Rgba(data) = *pixel;
+            vec![data[0], data[1], data[2], data[3]]
+        })
+        .collect()
+}
+
+#[cfg(not(feature = "fonts"))]
+pub fn convert_rgb_to_rgba(image_buffer: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> Vec<u8> {
+    let image_rgba = ImageBuffer::from_fn(image_buffer.width(), image_buffer.height(), |x, y| {
+        let pixel = image_buffer.get_pixel(x, y);
+        Rgba([pixel[0], pixel[1], pixel[2], 255])
+    });
+
+    image_rgba
+        .pixels()
+        .flat_map(|pixel| {
+            let Rgba(data) = *pixel;
+            vec![data[0], data[1], data[2], data[3]]
+        })
+        .collect()
 }
