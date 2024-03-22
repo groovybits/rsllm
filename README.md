@@ -1,14 +1,14 @@
-# Rust LLM Stream Analyzer and Content Generator
+# RsLLM: Rust LLM Stream Analyzer and Content Generator
 
-The Rust LLM Stream Analyzer and Content Generator is optimized for MacOS Metal GPUs leveraging the Candle framework from Huggingface, represents a cutting-edge approach to AI model interaction and stream analysis on MacOS devices equipped with M1/M2/M3 ARM GPUs. This toolkit is meticulously designed for developers and researchers aiming to integrate local large language models (LLMs) with high efficiency, bypassing the need for external dependencies and Python servers. At its core, it emphasizes the utilization of local LLMs for generating text, images, and speech within a Rust environment, offering a robust suite of features for real-time data stream analysis and AI-driven content creation.
+RsLLM (Rust LLM Stream Analyzer and Content Generator) is a cutting-edge toolkit optimized for MacOS Metal GPUs, leveraging the Candle framework from Huggingface. It represents a pioneering approach to AI model interaction and stream analysis on MacOS devices equipped with M1/M2/M3 ARM GPUs. This toolkit is meticulously designed for developers and researchers aiming to integrate local large language models (LLMs) with high efficiency, bypassing the need for external dependencies and Python servers. At its core, RsLLM emphasizes the utilization of local LLMs for generating text, images, and speech within a Rust environment, offering a robust suite of features for real-time data stream analysis and AI-driven content creation.
 
-## Highlighted Features
+## Key Features
 
 -   **Local LLM Focus**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
 -   **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
 -   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
--   **TTS MetaVoice / Mimic3 TTS API / OpenAI TTS API**: Candle implements TTS using MetaVoice which is the default but a WIP as the author is shoring up the implementation quality and optimizing for Metal GPUs (isn't realtime currently, sounds very "wavy"). OpenAI TTS API support generates very nice speech for a prie if wanting quality/realtime speech generation. Mimic3 TTS API requires running the mimic3-server and is a bit more involved but is a good alternative to OpenAI TTS API since it is free if you have a local system. <https://github.com/MycroftAI/mimic3>
+-   **TTS Support**: Candle implements TTS using MetaVoice (default, WIP), OpenAI TTS API (high-quality, real-time), and Mimic3 TTS API (local, free). MetaVoice is being optimized for Metal GPUs, while OpenAI TTS API generates premium speech at a cost. Mimic3 TTS API requires running the mimic3-server but offers a good alternative to OpenAI TTS API. [Mimic3 GitHub](https://github.com/MycroftAI/mimic3)
 -   **Twitch Chat Interactive AI**: Integrated Twitch chat for real-time AI interactions, enabling users to engage with the toolkit through chat commands and receive AI-generated responses.
 
 ![RSLLM](https://storage.googleapis.com/groovybits/images/rsllm/rsllm.webp)
@@ -21,18 +21,18 @@ Candle, a project by Huggingface, offers Rust-native LLMs like Mistral and Gemma
 
 ### OpenAI API Support
 
-While the toolkit’s primary focus is on running local LLMs, it also provides support for the OpenAI API, enabling users to leverage external AI models when necessary. This feature ensures versatility and broad applicability in various AI-driven projects.
+While RsLLM's primary focus is on running local LLMs, it also provides support for the OpenAI API, enabling users to leverage external AI models when necessary. This feature ensures versatility and broad applicability in various AI-driven projects.
 
 ### Real-time AI Analysis and Content Generation
 
-The toolkit excels in analyzing real-time data streams and generating AI-driven content, including text, images, and speech. It aims to create a dynamic interaction model where voice inputs can be converted into text commands for the LLM, and the generated outputs can be streamed back as voice or visual content.
+RsLLM excels in analyzing real-time data streams and generating AI-driven content, including text, images, and speech. It aims to create a dynamic interaction model where voice inputs can be converted into text commands for the LLM, and the generated outputs can be streamed back as voice or visual content.
 
 ## Installation and Configuration
 
 ### Prerequisites
 
--   Ensure Rust and Cargo are installed. [Installation Guide](https://www.rust-lang.org/tools/install).
--   MacOS system with M1/M2/M3 ARM GPU.
+-   Ensure Rust and Cargo are installed. [Rust Installation Guide](https://www.rust-lang.org/tools/install).
+-   MacOS system with an M1/M2/M3 ARM GPU.
 
 ### Setup Guide
 
@@ -49,12 +49,9 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
     ```
 
 3. **Compile with Metal GPU Support and NDI SDK support**:
-    ```bash
-    # export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-    # cargo build --release --features=fonts,mps,ndi,audioplayer,metavoice
 
-    ## run the compile.sh which basically does the above command + gets the libndi.dylib.
-    ./scripts/compile.sh # Script helps handle the NDI SDK dependency and DYLD_LIBRARY_PATH
+    ```bash
+    ./scripts/compile.sh # Script handles NDI SDK dependency and DYLD_LIBRARY_PATH
     ```
 
 ### Configuration
@@ -63,15 +60,14 @@ The toolkit excels in analyzing real-time data streams and generating AI-driven 
 
 ## Usage
 
-The toolkit is designed to facilitate a wide range of AI-driven operations, from generating text-based content to analyzing network streams and processing visual and audio inputs. Advanced features like NDI audio output and voice-to-text input processing are in development, aiming to enhance the interactive capabilities of the toolkit.
+RsLLM is designed to facilitate a wide range of AI-driven operations, from generating text-based content to analyzing network streams and processing visual and audio inputs. Advanced features like NDI audio output and voice-to-text input processing are in development, aiming to enhance the interactive capabilities of the toolkit.
 
 ### Example Commands
 
 -   Use the scripts in the [./scripts](./scripts/) directory.
 
     ```bash
-    [./scripts/compile.sh](./scripts/compile.sh) # build rsllm
-
+    ./scripts/compile.sh # Build RsLLM
     ./scripts/mpeg_analyzer.sh
     ./scripts/mpeg_poetry.sh
     ./scripts/system_health.sh
@@ -88,7 +84,7 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
       --sd-image \
       --ndi-images \
       --ndi-audio \
-      --system-prompt "you create image prompts from os system stats health state." \
+      --system-prompt "You create image prompts from OS system stats health state." \
       --query "How is my system doing? Create a report on the system health as visual image descriptions."
     ```
 
@@ -96,55 +92,54 @@ The toolkit is designed to facilitate a wide range of AI-driven operations, from
 
 ### NDI Output for Images and TTS Speech Audio
 
-The toolkit is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks.
+RsLLM is enhancing its output capabilities to include NDI (Network Device Interface) support for images and TTS (Text-to-Speech) audio, facilitating high-quality, low-latency video streaming over IP networks.
 
--   **(OPTIONAL) NDI SDK Installation**: The [compile.sh](scripts/compile.sh] script will download hte libndi.dylib for you. If you want to, you can Download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is useful for viewing the NDI output and other tools to explore.
+-   **(OPTIONAL) NDI SDK Installation**: The [compile.sh](scripts/compile.sh) script will download the libndi.dylib for you. If desired, you can download and install the NDI SDK from [here](https://ndi.video/download-ndi-sdk/). This SDK is useful for viewing the NDI output and exploring other tools.
 -   **Configuration Steps**:
     1. Add `--features ndi` to the Cargo build command to include NDI support in your build.
-    2. Run scripts/compile.sh which will retreive the libndi.dylib which works best for MacOS.
-    ````
+    2. Run `scripts/compile.sh`, which will retrieve the libndi.dylib that works best for MacOS.
     3. To ensure the library is correctly recognized when building with `cargo --features=ndi`, set the `DYLD_LIBRARY_PATH` environment variable:
     ```bash
     export DYLD_LIBRARY_PATH=`pwd`:$DYLD_LIBRARY_PATH
-    ````
+    ```
 -   **Additional Configuration**: Logging into the Huggingface Hub via the CLI can resolve some potential warnings. Execute `huggingface-cli login` to authenticate.
 
 ### MetaVoice TTS Text to Speech (WIP)
 
-Candle, our core Rust framework for LLM interaction has MetaVoice now, a groundbreaking Text-to-Speech (TTS) technology. As this feature improves it will enable pure Rust-based LLM, TTI (Text-to-Image), and TTS functionalities, seamlessly integrated with Metal GPU optimizations for MacOS.
+Candle, our core Rust framework for LLM interaction, now includes MetaVoice, a groundbreaking Text-to-Speech (TTS) technology. As this feature improves, it will enable pure Rust-based LLM, TTI (Text-to-Image), and TTS functionalities, seamlessly integrated with Metal GPU optimizations for MacOS.
 
--   **Development Status**: The MetaVoice integration is done and being optimized in Candle so that quality matches the reference implementation.
--   **Anticipated Benefits**: Once full quality/optimized, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text without costing and low latency on a local LLM. Also it will give the ability to one shot learn a voice from a small clip and generate speech from it. For now you may want to use OpenAI for quality/realtime generation of the speech audio.
+-   **Development Status**: The MetaVoice integration is done and being optimized in Candle to match the quality of the reference implementation.
+-   **Anticipated Benefits**: Once fully optimized, MetaVoice will significantly enhance the toolkit's ability to generate lifelike speech from text without cost and with low latency on a local LLM. It will also provide the ability to one-shot learn a voice from a small clip and generate speech from it. For now, you may want to use OpenAI for quality/real-time generation of speech audio.
 
-RsLLM has a mission to research and explore implementing a versatile, high-performance toolkit for AI-driven content creation and analysis on MacOS, leveraging the full potential of Metal GPUs and Rust's efficiency.
+RsLLM's mission is to research and explore the implementation of a versatile, high-performance toolkit for AI-driven content creation and analysis on MacOS, leveraging the full potential of Metal GPUs and Rust's efficiency.
 
-## TODO
+## Roadmap
 
 ### Priority:
 
--   MpegTS Chat for analysis freeform over current and historical mpegts streams data.
--   Improve Image/TTS Latency and async cooridaation of output. Use an NDI pre-Queue for images and audio to ensure they are in sync and non-latent.
--   RAG document chromium use and caching of embeddings for augmented documentation based LLM context.
--   Merge fixes for Metavoice as they are done in Candle - WIP.
+-   MpegTS Chat for freeform analysis over current and historical MPEG-TS stream data.
+-   Improve Image/TTS latency and async coordination of output. Use an NDI pre-queue for images and audio to ensure synchronization and minimize latency.
+-   Implement RAG (Retrieval Augmented Generation) using Chromium for document caching and embeddings, providing augmented documentation-based LLM context.
+-   Merge MetaVoice fixes from Candle as they become available (WIP).
 
-### Sooner or later:
+### Future Enhancements:
 
--   use ffmpeg-next-sys to process video and audio in real-time, use for generating frames/audio/text to video etc / transforming video, creating mood videos or themes and stories. Experiment to see what an LLM + FFmpeg can do together.
--   Improve into a good MpegTS Analyzer for real-time analysis of mpegts streams and reporting, with AI to detect issues and report them.
--   Use Perceptual Hashes DCT64 based frame fingerprints from video input to detect changes in video frames, recognize and learn repeating frames / content sequences, commercial break verification, and ad insertion detection. Plug in SCTE35 and have database of content fingerprinted to compare to and various quality checks on iput and confirmation of break/logo fidelity and presence.
+-   Utilize ffmpeg-next-sys to process video and audio in real-time for generating frames, audio, and text-to-video, as well as transforming video and creating mood videos or themed stories. Explore the possibilities of combining an LLM with FFmpeg.
+-   Enhance MpegTS Analyzer for real-time analysis of MPEG-TS streams, reporting, and AI-driven issue detection.
+-   Implement Perceptual Hashes (DCT64-based) for frame fingerprinting to detect changes in video frames, recognize and learn repeating content sequences, verify commercial breaks, and detect ad insertions. Integrate SCTE-35 and maintain a database of fingerprinted content for various quality checks, break/logo fidelity confirmation, and presence detection.
 -   Improve network and system analyzers.
--   preserve history as a small db possibly sqlite or mongodb locally. feed history into chroma db for RAG.
--   use chroma db to do RAG with documents for augmenting the prompt with relevant information.
--   allow daemon mode to run and listent for requests via zmq input and pass to output.
--   fill out options for the LLM and openai api.
--   capnproto for serialization and deserialization of data with modular zmq protocol communication.
--   add MetaMusic music generation for mood enhancement based on results.
--   add talking head video generation with consistent frame context of objects staying same in frame.
--   speech to text via Whisper Candle for audio input for llm ingestion and subtitling of video.
--   freeform input options for the LLM to figure out what the user wants to do.
--   dynamic code generation of python for new tasks on the fly like video processing? risks?
--   iterations and multi-generational output with outlines leading to multiple passes till a final result is reached.
--   Speech to Text with Whisper Candle for audio input for sending commands to the LLM for conversational AI.
+-   Preserve history using a local database (e.g., SQLite or MongoDB) and feed it into a Chroma DB for RAG.
+-   Utilize Chroma DB for RAG with documents to augment prompts with relevant information.
+-   Enable daemon mode to run and listen for requests via ZeroMQ input and pass to output.
+-   Expand options for LLMs and the OpenAI API.
+-   Implement Cap'n Proto for serialization, deserialization, and modular ZeroMQ protocol communication.
+-   Integrate MetaMusic for mood-based music generation based on results.
+-   Develop talking head video generation with consistent frame context, ensuring objects remain the same within frames.
+-   Implement speech-to-text using Whisper Candle for audio input, LLM ingestion, and video subtitling.
+-   Allow freeform input options for the LLM to interpret user intentions.
+-   Explore dynamic code generation in Python for new tasks like video processing (consider risks).
+-   Implement iterative and multi-generational output with outlines leading to multiple passes until a final result is reached.
+-   Utilize Speech to Text with Whisper Candle for audio input, enabling voice commands to the LLM for conversational AI.
 
 ## Contributing
 
@@ -161,8 +156,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 -   OpenAI for TTS Integration: [OpenAI](https://openai.com/)
 -   MetaVoice for TTS Integration: [MetaVoice](https://metavoice.com/)
 -   Mimic3 for TTS Integration: [Mimic3](https://github.com/MycroftAI/mimic3)
--   Whisper for Speech to Text: [Whisper](https://whisper.com/)
--   Google Gemma LLM: [Gemma](https://huggingface.co/blog/gemma#prompt-format)
+-   Whisper for Speech to Text: [Whisper](https://openai.com/research/whisper)
+-   Google Gemini LLM: [Gemini](https://ai.googleblog.com/2023/02/introducing-gemini-language-model-for.html)
 -   Mistral LLM: [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
 ## Author
