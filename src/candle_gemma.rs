@@ -77,6 +77,13 @@ impl TextGeneration {
             }
         }
 
+        // Skip the first token
+        for &t in tokens.iter() {
+            if let Some(_) = self.tokenizer.next_token(t)? {
+                break;
+            }
+        }
+
         debug!("prompt: {:?}", prompt);
 
         let eos_token = match self.tokenizer.get_token("<eos>") {

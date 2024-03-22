@@ -82,10 +82,11 @@ pub async fn tts(req: Request) -> Result<Bytes, ApiError> {
     let length_scale = req.length_scale.unwrap_or(1.0);
     let ssml = req.ssml.unwrap_or(false);
     let audio_target = req.audio_target.unwrap_or_else(|| "client".to_string());
+    let text = req.text;
 
     let query_params = format!(
         "text={}&voice={}&noiseScale={}&noiseW={}&lengthScale={}&ssml={}&audioTarget={}",
-        urlencoding::encode(&req.text),
+        urlencoding::encode(&text),
         urlencoding::encode(&req.voice),
         noise_scale,
         noise_w,

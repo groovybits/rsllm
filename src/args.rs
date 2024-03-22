@@ -215,24 +215,6 @@ pub struct Args {
     )]
     pub audio_chunk_size: f32,
 
-    /// llm concurrency
-    #[clap(
-        long,
-        env = "LLM_CONCURRENCY",
-        default_value = "1",
-        help = "llm concurrency."
-    )]
-    pub llm_concurrency: usize,
-
-    /// max_concurrent_sd_image_tasks for the sd image semaphore
-    #[clap(
-        long,
-        env = "MAX_CONCURRENT_SD_IMAGE_TASKS",
-        default_value = "8",
-        help = "max_concurrent_sd_image_tasks for the sd image semaphore."
-    )]
-    pub max_concurrent_sd_image_tasks: usize,
-
     /// Pipeline concurrency - max concurrent pipeline tasks
     #[clap(
         long,
@@ -507,12 +489,12 @@ pub struct Args {
     )]
     pub sd_image: bool,
 
-    /// SD Max Length for SD Image
+    /// SD Max Length in tokens for SD Image
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 80,
-        help = "SD Max Length for SD Image hardsub text segments. Will be less than this amount."
+        default_value_t = 77,
+        help = "SD Max Length in tokens for SD Image hardsub text segments. example: 77 tokens is avg 77 * 4 == 308 chars."
     )]
     pub sd_max_length: usize,
 
@@ -626,11 +608,20 @@ pub struct Args {
     /// shutdown_msg - message to send when shutting down
     #[clap(
         long,
-        env = "SHUTDOWN_MSG",
-        default_value = "End of Episode.\nBrought to you by GroovyLife.AI\nDeveloped by The Groovy Organization",
-        help = "shutdown_msg - message to send when shutting down."
+        env = "GREETING",
+        default_value = "Hi I'm Alice, ask me a question!",
+        help = "greeting - message to send after done speaking."
     )]
-    pub shutdown_msg: String,
+    pub greeting: String,
+
+    /// assistant image description
+    #[clap(
+        long,
+        env = "ASSISTANT_IMAGE_DESCRIPTION",
+        default_value = "A head shot of Alice from Alice in AI Wonderland. A streaming girl on twitch who is live streaming AI generated content. Similar a magical anime girl in appearance.",
+        help = "assistant image description."
+    )]
+    pub assistant_image_prompt: String,
 
     /// Subtitles - enable subtitles
     #[clap(
@@ -649,6 +640,15 @@ pub struct Args {
         help = "Subtitle position."
     )]
     pub subtitle_position: String,
+
+    /// Continuous - continuous mode where it will keep running the query until stopped
+    #[clap(
+        long,
+        env = "CONTINUOUS",
+        default_value_t = false,
+        help = "Continuous - continuous mode where it will keep running the query until stopped."
+    )]
+    pub continuous: bool,
 
     /// enable twitch client
     #[clap(
