@@ -1147,7 +1147,7 @@ async fn main() {
             }
 
             if loglevel != "error" {
-                println!("");
+                println!("\n");
                 std::io::stdout().flush().unwrap();
             }
             info!("Waiting for LLM thread to finish...");
