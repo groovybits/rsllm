@@ -1,6 +1,6 @@
 [package]
 name = "rsllm"
-description = "Rust LLM Stream Analyzer and Content Generator"
+description = "Rust AI Stream Analyzer Twitch Bot"
 keywords = ["ai", "stable-diffusion", "ndi", "text-to-speech", "twitch"]
 categories = ["command-line-utilities"]
 readme = "README.md"
@@ -9,7 +9,7 @@ license-file = "LICENSE"
 homepage = "https://github.com/groovybits/rsllm/wiki"
 repository = "https://github.com/groovybits/rsllm"
 authors = ["Chris Kennedy"]
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 
 [lib]
