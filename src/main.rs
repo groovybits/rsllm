@@ -1410,7 +1410,9 @@ async fn main() {
             }
 
             #[cfg(feature = "ndi")]
-            if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+            if args.single_concurrency
+                && (args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts)
+            {
                 // Wait for the NDI done signal
                 std::io::stdout().flush().unwrap();
                 info!("Waiting for NDI done signal for LLM messages...");

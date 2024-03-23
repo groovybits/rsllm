@@ -712,4 +712,13 @@ pub struct Args {
         help = "Twitch LLM model."
     )]
     pub twitch_model: String,
+
+    /// single concurrency - bool single concurrency for all models, wait between each request
+    #[clap(
+        long,
+        env = "SINGLE_CONCURRENCY",
+        default_value_t = false,
+        help = "single concurrency - bool single concurrency for all models, wait between each request."
+    )]
+    pub single_concurrency: bool,
 }
