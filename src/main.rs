@@ -1029,7 +1029,8 @@ async fn main() {
             let prompt_clone = prompt.clone();
             let llm_thread = if args.candle_llm == "mistral" {
                 tokio::spawn(async move {
-                    if let Err(e) = mistral(
+                    let mistral_clone = mistral.clone();
+                    if let Err(e) = mistral_clone(
                         prompt_clone,
                         args.max_tokens as usize,
                         args.temperature as f64,
@@ -1042,7 +1043,8 @@ async fn main() {
                 })
             } else {
                 tokio::spawn(async move {
-                    if let Err(e) = gemma(
+                    let gemma_clone = gemma.clone();
+                    if let Err(e) = gemma_clone(
                         prompt_clone,
                         args.max_tokens as usize,
                         args.temperature as f64,

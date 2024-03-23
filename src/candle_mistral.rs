@@ -67,10 +67,13 @@ impl TextGeneration {
 
     async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         let verbose_prompt: bool = false;
-        match &mut self.model {
-            Model::Mistral(m) => m.clear_kv_cache(),
-            Model::Quantized(m) => m.clear_kv_cache(),
-        };
+        let clear_kv_cache = false;
+        if clear_kv_cache {
+            match &mut self.model {
+                Model::Mistral(m) => m.clear_kv_cache(),
+                Model::Quantized(m) => m.clear_kv_cache(),
+            };
+        }
         self.tokenizer.clear();
         let mut tokens = self
             .tokenizer
