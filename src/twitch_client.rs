@@ -156,6 +156,13 @@ async fn on_msg(
 
         println!("\nTwitch received answer:\n{}\n", answer);
 
+        // truncate to 500 characters and remove any urls
+        let answer = answer
+            .chars()
+            .take(500)
+            .collect::<String>()
+            .replace("http", "hxxp");
+
         // Send message to the twitch channel
         client
             .privmsg(msg.channel(), &format!("{}", answer.clone(),))
