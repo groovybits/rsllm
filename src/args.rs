@@ -685,4 +685,13 @@ pub struct Args {
         help = "Twitch Chat history - number of messages to keep in history."
     )]
     pub twitch_chat_history: usize,
+
+    /// Twitch LLM Concurrency
+    #[clap(
+        long,
+        env = "TWITCH_LLM_CONCURRENCY",
+        default_value_t = 1,
+        help = "Twitch LLM Concurrency."
+    )]
+    pub twitch_llm_concurrency: usize,
 }

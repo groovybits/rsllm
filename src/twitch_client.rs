@@ -46,7 +46,7 @@ async fn run(
 ) -> Result<()> {
     let mut chat_messages = Vec::new();
     // create a semaphore so no more than one message is sent to the AI at a time
-    let semaphore = tokio::sync::Semaphore::new(1);
+    let semaphore = tokio::sync::Semaphore::new(args.twitch_llm_concurrency as usize);
     while running.load(Ordering::SeqCst) {
         let msg = client.recv().await?;
 
