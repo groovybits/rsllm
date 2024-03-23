@@ -58,7 +58,7 @@ impl TextGeneration {
 
     async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         let verbose_prompt: bool = false;
-        let clear_kv_cache = false;
+        let clear_kv_cache = true;
 
         if clear_kv_cache {
             self.model.clear_kv_cache();
