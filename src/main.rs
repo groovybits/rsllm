@@ -1410,7 +1410,7 @@ async fn main() {
             }
 
             #[cfg(feature = "ndi")]
-            if args.single_concurrency
+            if !args.async_concurrency
                 && (args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts)
             {
                 // Wait for the NDI done signal

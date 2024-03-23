@@ -716,9 +716,9 @@ pub struct Args {
     /// single concurrency - bool single concurrency for all models, wait between each request
     #[clap(
         long,
-        env = "SINGLE_CONCURRENCY",
+        env = "ASYNC_CONCURRENCY",
         default_value_t = false,
-        help = "single concurrency - bool single concurrency for all models, wait between each request."
+        help = "async concurrency - bool async concurrency for all models, don't wait for NDI between each request. (unstable)"
     )]
-    pub single_concurrency: bool,
+    pub async_concurrency: bool,
 }
