@@ -59,6 +59,7 @@ impl TextGeneration {
     async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         let verbose_prompt: bool = false;
 
+        self.model.clear_kv_cache();
         self.tokenizer.clear();
         let mut tokens = self
             .tokenizer

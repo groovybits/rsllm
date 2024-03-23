@@ -67,6 +67,10 @@ impl TextGeneration {
 
     async fn run(&mut self, prompt: &str, sample_len: usize) -> Result<()> {
         let verbose_prompt: bool = false;
+        match &mut self.model {
+            Model::Mistral(m) => m.clear_kv_cache(),
+            Model::Quantized(m) => m.clear_kv_cache(),
+        };
         self.tokenizer.clear();
         let mut tokens = self
             .tokenizer
@@ -103,7 +107,6 @@ impl TextGeneration {
             let start_pos = tokens.len().saturating_sub(context_size);
             let ctxt = &tokens[start_pos..];
             let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-            //Model::Mistral7binstructV02(m) => m.forward(&input, start_pos)?,
             let logits = match &mut self.model {
                 Model::Mistral(m) => match m.forward(&input, start_pos) {
                     Ok(logits) => logits,
