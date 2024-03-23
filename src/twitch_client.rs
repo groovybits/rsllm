@@ -1,6 +1,6 @@
+use crate::args::Args;
 use crate::candle_gemma::gemma;
 use anyhow::Result;
-use log::debug;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -12,6 +12,7 @@ pub async fn daemon(
     channel: Vec<String>,
     running: Arc<AtomicBool>,
     twitch_tx: mpsc::Sender<String>,
+    args: Args,
 ) -> Result<()> {
     let credentials = match Some(nick).zip(Some(token)) {
         Some((nick, token)) => tmi::client::Credentials::new(nick, token),
@@ -32,7 +33,7 @@ pub async fn daemon(
     client.join_all(&channels).await?;
     log::info!("Joined the following channels: {}", channels.join(", "));
 
-    run(client, channels, running, twitch_tx).await
+    run(client, channels, running, twitch_tx, args).await
 }
 
 async fn run(
@@ -40,10 +41,11 @@ async fn run(
     channels: Vec<tmi::Channel>,
     running: Arc<AtomicBool>,
     twitch_tx: mpsc::Sender<String>,
+    args: Args,
 ) -> Result<()> {
     let mut chat_messages = Vec::new();
     // create a semaphore so no more than one message is sent to the AI at a time
-    let semaphore = tokio::sync::Semaphore::new(1);
+    let semaphore = tokio::sync::Semaphore::new(args.twitch_llm_concurrency as usize);
     while running.load(Ordering::SeqCst) {
         let msg = client.recv().await?;
 
@@ -51,7 +53,14 @@ async fn run(
             tmi::Message::Privmsg(msg) => {
                 // acquire the semaphore to send a message to the AI
                 let _chat_lock = semaphore.acquire().await.unwrap();
-                on_msg(&mut client, msg, &twitch_tx, &mut chat_messages).await?
+                on_msg(
+                    &mut client,
+                    msg,
+                    &twitch_tx,
+                    &mut chat_messages,
+                    args.clone(),
+                )
+                .await?
             }
             tmi::Message::Reconnect => {
                 client.reconnect().await?;
@@ -69,6 +78,7 @@ async fn on_msg(
     msg: tmi::Privmsg<'_>,
     tx: &mpsc::Sender<String>,
     chat_messages: &mut Vec<String>,
+    args: Args,
 ) -> Result<()> {
     log::debug!("\nTwitch Message: {:?}", msg);
     log::info!(
@@ -85,14 +95,11 @@ async fn on_msg(
     // also send the message to the main LLM loop to keep history context of the conversation
     if !msg.text().starts_with("!help") && !msg.text().starts_with("!message") {
         // LLM Thread
-        let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
-        let max_tokens = 200;
-        let temperature = 0.8;
+        let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(100);
+        let max_tokens = 120;
+        let temperature = 1.0;
         let quantized = true;
-        let max_messages = 3;
-
-        // TODO: Add a personality changing method for the AI through user chat commands
-        let personality = format!("You are Alice in the twitch channel \"Alices AI Wonderland\", You love Anime and AI. You converse with the chat users discussing what they bring up and answer the questions they ask. Keep it to small chat and brief. Alice is a buddhist and a hippie girl at heart. Alice lives in San Francisco and loves the Bay Area. Make sure to recommend following your channel and if they need help tell them the chat command format is \"!message Alice <question>\". ");
+        let max_messages = args.twitch_chat_history;
 
         // Truncate the chat_messages array to 3 messages max messages
         if chat_messages.len() > max_messages {
@@ -108,14 +115,14 @@ async fn on_msg(
 
         // Send message to the AI through mpsc channels format to model specs
         let msg_text = format!(
-            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model",
-            personality,
+            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model ",
+            args.twitch_prompt.clone(),
             chat_messages_history,
             msg.sender().name(),
             msg.text().to_string()
         ); // Clone the message text
 
-        debug!("\n Twitch sending msg_text: {}", msg_text);
+        println!("\nTwitch sending msg_text:\n{}\n", msg_text);
 
         let llm_thread = tokio::spawn(async move {
             if let Err(e) = gemma(
@@ -130,18 +137,31 @@ async fn on_msg(
             }
         });
 
+        // thread token collection and wait for it to finish
+        let token_thread = tokio::spawn(async move {
+            let mut tokens = String::new();
+            while let Some(received) = external_receiver.recv().await {
+                tokens.push_str(&received);
+            }
+            tokens
+        });
+
         // wait for llm thread to finish
         llm_thread.await?;
 
-        // Collect tokens from the external receiver
-        let mut answer = String::new();
-        while let Some(received) = external_receiver.recv().await {
-            // collect tokens received
-            answer.push_str(&received);
-        }
+        let answer = token_thread.await?;
 
         // remove all new lines from answer:
-        answer = answer.replace("\n", " ");
+        let answer = answer.replace("\n", " ");
+
+        println!("\nTwitch received answer:\n{}\n", answer);
+
+        // truncate to 500 characters and remove any urls
+        let answer = answer
+            .chars()
+            .take(500)
+            .collect::<String>()
+            .replace("http", "hxxp");
 
         // Send message to the twitch channel
         client
