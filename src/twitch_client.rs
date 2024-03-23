@@ -1,5 +1,6 @@
 use crate::args::Args;
 use crate::candle_gemma::gemma;
+use crate::candle_mistral::mistral;
 use anyhow::Result;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -97,9 +98,69 @@ async fn on_msg(
         // LLM Thread
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(100);
         let max_tokens = 120;
-        let temperature = 1.0;
-        let quantized = true;
+        let temperature = 0.8;
+        let quantized = false;
         let max_messages = args.twitch_chat_history;
+
+        let system_start_token = if args.twitch_model == "gemma" {
+            "<start_of_turn>"
+        } else {
+            "<<SYS>>"
+        };
+
+        let system_end_token = if args.twitch_model == "gemma" {
+            "<end_of_turn>"
+        } else {
+            "<</SYS>>"
+        };
+
+        let assistant_start_token = if args.twitch_model == "gemma" {
+            "<start_of_turn>"
+        } else {
+            ""
+        };
+
+        let assistant_end_token = if args.twitch_model == "gemma" {
+            "<end_of_turn>"
+        } else {
+            ""
+        };
+
+        let start_token = if args.twitch_model == "gemma" {
+            "<start_of_turn>"
+        } else {
+            "[INST]"
+        };
+
+        let end_token = if args.twitch_model == "gemma" {
+            "<end_of_turn>"
+        } else {
+            "[/INST]"
+        };
+
+        let bos_token = if args.twitch_model == "gemma" {
+            ""
+        } else {
+            "<s>"
+        };
+
+        let eos_token = if args.twitch_model == "gemma" {
+            ""
+        } else {
+            "</s>"
+        };
+
+        let user_name = if args.twitch_model == "gemma" {
+            "user"
+        } else {
+            ""
+        };
+
+        let assistant_name = if args.twitch_model == "gemma" {
+            "model"
+        } else {
+            ""
+        };
 
         // Truncate the chat_messages array to 3 messages max messages
         if chat_messages.len() > max_messages {
@@ -115,27 +176,66 @@ async fn on_msg(
 
         // Send message to the AI through mpsc channels format to model specs
         let msg_text = format!(
-            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model ",
+            "{}{}{} {}{}{}{}{}{}{}{} twitch chat user {} asked {}{}{}{} ",
+            bos_token,
+            system_start_token,
+            assistant_name,
             args.twitch_prompt.clone(),
+            system_end_token,
+            eos_token,
+            bos_token,
             chat_messages_history,
+            bos_token,
+            start_token,
+            user_name,
             msg.sender().name(),
-            msg.text().to_string()
+            msg.text().to_string(),
+            end_token,
+            assistant_start_token,
+            assistant_name,
         ); // Clone the message text
 
         println!("\nTwitch sending msg_text:\n{}\n", msg_text);
 
-        let llm_thread = tokio::spawn(async move {
-            if let Err(e) = gemma(
-                msg_text,
-                max_tokens,
-                temperature,
-                quantized,
-                Some("2b-it".to_string()),
-                external_sender,
-            ) {
-                eprintln!("Error running twitch gemma: {}", e);
-            }
-        });
+        let llm_thread = if args.twitch_model == "gemma" {
+            tokio::spawn(async move {
+                if let Err(e) = gemma(
+                    msg_text,
+                    max_tokens,
+                    temperature,
+                    quantized,
+                    Some("2b-it".to_string()),
+                    external_sender,
+                ) {
+                    eprintln!("Error running twitch gemma: {}", e);
+                }
+            })
+        } else if args.twitch_model == "mistral" {
+            tokio::spawn(async move {
+                if let Err(e) = mistral(
+                    msg_text,
+                    max_tokens,
+                    temperature,
+                    quantized,
+                    Some("auto".to_string()),
+                    external_sender,
+                ) {
+                    eprintln!("Error running twitch mistral: {}", e);
+                }
+            })
+        } else {
+            // print message and error out
+            eprintln!(
+                "Error: Invalid model specified for twitch chat {}",
+                args.twitch_model
+            );
+            tokio::spawn(async move {
+                external_sender
+                    .send("Error: Invalid model specified for twitch chat".to_string())
+                    .await
+                    .unwrap();
+            })
+        };
 
         // thread token collection and wait for it to finish
         let token_thread = tokio::spawn(async move {
@@ -172,10 +272,18 @@ async fn on_msg(
 
         // add message to the chat_messages history of strings
         let full_message = format!(
-            "<start_of_turn>user {} asked {}<end_of_turn><start_of_turn>model {}<end_of_turn>",
+            "{}{}{} {} asked {}{}{}{} {}{}{}",
+            bos_token,
+            start_token,
+            user_name,
             msg.sender().name(),
             msg.text().to_string(),
-            answer.clone()
+            end_token,
+            assistant_start_token,
+            assistant_name,
+            answer.clone(),
+            assistant_end_token,
+            eos_token
         );
         chat_messages.push(full_message);
 

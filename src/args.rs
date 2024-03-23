@@ -703,4 +703,13 @@ pub struct Args {
         help = "Twitch Prompt."
     )]
     pub twitch_prompt: String,
+
+    /// Twitch model - LLM to use, gemma or mistral for now
+    #[clap(
+        long,
+        env = "TWITCH_MODEL",
+        default_value = "gemma",
+        help = "Twitch LLM model."
+    )]
+    pub twitch_model: String,
 }

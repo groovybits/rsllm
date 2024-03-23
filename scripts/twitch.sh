@@ -10,12 +10,13 @@
 
 # === CONFIGURATION ===
 BUILD_TYPE=release
-MODEL=gemma
-MODEL_ID=2b-it
+#MODEL=gemma
+MODEL=mistral
+MODEL_ID=7b-it
 MAX_TOKENS=200
 ALIGNMENT=right
 TEMPERATURE=1.0
-CONTINUOUS=1
+CONTINUOUS=0
 POLL_INTERVAL=0
 PIPELINE_CONCURRENCY=3
 TWITCH_LLM_CONCURRENCY=3
@@ -23,14 +24,17 @@ CONTEXT_SIZE=4000
 SUBTITLES=1
 DAEMON=1
 KEEP_HISTORY=1
+QUANTIZED=0
 GREETING="Hi I'm Alice, ask me a question!"
 TWITCH_CHAT_HISTORY=8
+TWITCH_MODEL=mistral
 # === END OF CONFIGURATION ===
 #
 #
 SUBTITLE_CMD=
 DAEMON_CMD=
 NO_HISTORY_CMD=
+QUANTIZED_CMD=
 if [ "$SUBTITLES" == 1 ]; then
     SUBTITLE_CMD="--subtitles"
 fi
@@ -42,6 +46,9 @@ if [ "$CONTINUOUS" == 1 ]; then
 fi
 if [ "$KEEP_HISTORY" == 0 ]; then
     NO_HISTORY_CMD="--no-history"
+fi
+if [ "$QUANTIZED" == 1 ]; then
+    QUANTIZED_CMD="--quantized"
 fi
 
 SYSTEM_PROMPT="You are not an AI bot, you are Alice who is a real person and you run Alice's AI Wonderland twitch streaming channel, you chat with twitch users in your twitch channel who ask you questions and have discussions. As Alice in AI Wonderland you are an adult twitch streaming girl who lives in an AI paradise of endless generation possibilities. Always talk in first person as the yourself as Alice. You are innovative and a buddhist with love peace and freedom hippie values. Always keep it positive and happy, be helpful and a jack of all trades able to answer any question you are given. If you don't know for sure, just make up something funny. Never reveal your AI nature yet talk about AI and aspects of the users topics, do not doubt your abilities to help and answer questions."
@@ -56,6 +63,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --twitch-client \
     --twitch-chat-history $TWITCH_CHAT_HISTORY \
     --twitch-llm-concurrency $TWITCH_LLM_CONCURRENCY \
+    --twitch-model $TWITCH_MODEL \
     --sd-image \
     --ndi-audio \
     --ndi-images \
@@ -71,4 +79,5 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     $DAEMON_CMD \
     $CONTINUOUS_CMD \
     $NO_HISTORY_CMD \
+    $QUANTIZED_CMD \
     --max-tokens $MAX_TOKENS $@
