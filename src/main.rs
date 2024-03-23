@@ -122,17 +122,31 @@ async fn main() {
         let pipeline_sem = Arc::clone(&pipeline_sem);
         let processed_data_store = processed_data_store.clone();
         tokio::spawn(async move {
+            let mut last_images = vec![];
             while let Some(message_data) = pipeline_task_receiver.recv().await {
                 let processed_data_store = processed_data_store.clone();
                 let message_data_clone = message_data.clone();
                 let pipeline_sem = Arc::clone(&pipeline_sem);
-                tokio::spawn(async move {
+                let last_images_clone = last_images.clone();
+                // channels to pass images back for the last_images vec
+                let (image_tx, mut image_rx) =
+                    mpsc::channel::<Vec<image::ImageBuffer<image::Rgb<u8>, Vec<u8>>>>(100);
+                let image_task = tokio::spawn(async move {
                     let _permit = pipeline_sem
                         .acquire()
                         .await
                         .expect("failed to acquire pipeline semaphore permit");
 
-                    let images = process_image(message_data_clone.clone()).await;
+                    // if process_image returns a valid set of images, if so store the images inthe images vec else use the previous images vec if it exists
+                    // process_image returns an empty vec if there are no images
+                    let mut images = process_image(message_data_clone.clone()).await;
+                    if images.is_empty() {
+                        images = last_images_clone.clone();
+                    } else {
+                        // send images to the image channel
+                        let _ = image_tx.send(images.clone()).await;
+                    }
+                    // update image cache images
                     let speech_data = process_speech(message_data_clone.clone()).await;
                     let mut store = processed_data_store.lock().await;
 
@@ -158,6 +172,15 @@ async fn main() {
                         }
                     }
                 });
+
+                // wait for images and collect any in and put into the last_images vec
+                let images = image_rx.recv().await;
+                if let Some(images) = images {
+                    last_images = images;
+                }
+
+                // wait for the image task to finish
+                image_task.await.unwrap();
 
                 // Check if this is the last message
                 if message_data.last_message {
@@ -1039,7 +1062,6 @@ async fn main() {
             let mut paragraphs: Vec<String> = Vec::new();
             let mut current_paragraph: Vec<String> = Vec::new();
             let mut paragraph_count = 0;
-            let min_paragraph_len = args.sd_text_min; // Minimum length of a paragraph to generate an image
 
             // create uuid unique identifier for the output images
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
@@ -1116,9 +1138,7 @@ async fn main() {
                     );
 
                     // Join the current paragraph tokens into a single String without adding extra spaces
-                    if !current_paragraph.is_empty()
-                        && current_paragraph.join("").len() > min_paragraph_len
-                    {
+                    if !current_paragraph.is_empty() {
                         // check if token has the new line character, split it at the new line into two parts, then put the first part onto
                         // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
                         // Safely handle split at the newline character

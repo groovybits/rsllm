@@ -37,7 +37,9 @@ pub struct MessageData {
 }
 
 // Function to process image generation
-pub async fn process_image(data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+pub async fn process_image(mut data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+    // truncate tokens for sd_config.prompt
+    data.sd_config.prompt = crate::truncate_tokens(&data.sd_config.prompt, data.args.sd_text_min);
     if data.args.sd_image {
         debug!("Generating images with prompt: {}", data.sd_config.prompt);
         match sd(data.sd_config).await {

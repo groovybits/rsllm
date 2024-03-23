@@ -220,8 +220,8 @@ fn text_embeddings(
         None => *tokenizer.get_vocab(true).get("<|endoftext|>").unwrap(),
     };
 
-    // truncate the prompt to 77 tokens max length of input
-    let prompt = truncate_tokens(prompt, 50);
+    // truncate the prompt to N tokens max length of input
+    let prompt = truncate_tokens(prompt, 77);
 
     debug!("Stable Diffusion: Running with prompt \"{prompt}\".");
     let mut tokens = tokenizer
@@ -248,6 +248,8 @@ fn text_embeddings(
     };
     let text_model =
         stable_diffusion::build_clip_transformer(clip_config, clip_weights, device, DType::F32)?;
+
+    // catch errors and return without crashing
     let text_embeddings = text_model.forward(&tokens)?;
 
     let text_embeddings = if use_guide_scale {

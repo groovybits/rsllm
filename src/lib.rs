@@ -188,7 +188,7 @@ pub fn handle_long_string(received: &str, terminal_token_len: &mut usize) {
 /// Truncate the input text to the specified number of tokens.
 /// If the number of tokens in the input text is less than or equal to the specified number of tokens,
 /// the input text is returned as is. Otherwise, the input text is truncated to the specified number of tokens.
-fn truncate_tokens(text: &str, max_tokens: usize) -> String {
+pub fn truncate_tokens(text: &str, max_tokens: usize) -> String {
     let mut tokens: Vec<String> = Vec::new();
     for token in text.split_whitespace() {
         if token.len() <= 4 {
