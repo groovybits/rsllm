@@ -115,10 +115,9 @@ async fn on_msg(
 
         // Send message to the AI through mpsc channels format to model specs
         let msg_text = format!(
-            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>model {}<end_of_turn><start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model",
+            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model ",
             args.twitch_prompt.clone(),
             chat_messages_history,
-            args.twitch_prompt.clone(),
             msg.sender().name(),
             msg.text().to_string()
         ); // Clone the message text
