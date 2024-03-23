@@ -572,7 +572,7 @@ async fn main() {
     } else {
         println!("Running RsLLM for [{}] iterations...", args.max_iterations);
     }
-    let mut packet_count = 0;
+    let mut iterations = 0;
     let mut query = args.query.clone();
 
     // Boot up message and image repeat of the query sent to the pipeline
@@ -630,8 +630,6 @@ async fn main() {
             messages.push(system_message.clone());
         }
 
-        packet_count += 1;
-
         let mut twitch_query = false;
         if args.twitch_client {
             loop {
@@ -681,7 +679,7 @@ async fn main() {
         // break the loop if we are not running as a daemon or hit max iterations
         let rctrlc_clone = running_ctrlc.clone();
         if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
-            || (args.max_iterations > 1 && args.max_iterations == packet_count)
+            || (args.max_iterations > 1 && args.max_iterations == iterations)
         {
             // stop the running threads
             if args.ai_network_stats {
@@ -754,14 +752,11 @@ async fn main() {
             // Sleep only if the elapsed time is less than the poll interval
             println!(
                 "Finished loop #{} Sleeping for {} ms...",
-                packet_count,
+                iterations,
                 poll_interval_duration.as_millis() - elapsed.as_millis()
             );
             tokio::time::sleep(poll_interval_duration - elapsed).await;
-            println!(
-                "Continuing after sleeping with loop #{}...",
-                packet_count + 1
-            );
+            println!("Continuing after sleeping with loop #{}...", iterations + 1);
         }
 
         // Update start time for the next iteration
@@ -786,7 +781,7 @@ async fn main() {
                 messages.push(user_message.clone());
             } else {
                 // output a prompt and wait for input, create a user message and add it to the messages
-                print!("#{} rsllm> ", packet_count);
+                print!("#{} rsllm> ", iterations);
                 std::io::stdout().flush().expect("Could not flush stdout");
                 let mut prompt = String::new();
                 std::io::stdin()
@@ -815,7 +810,7 @@ async fn main() {
                 // get current pretty date and time
                 let pretty_date_time = format!(
                     "#{}: {} -",
-                    packet_count,
+                    iterations,
                     chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
                 );
                 let network_stats_message = Message {
@@ -836,7 +831,7 @@ async fn main() {
         } else if args.ai_os_stats {
             let pretty_date_time = format!(
                 "#{}: {} - ",
-                packet_count,
+                iterations,
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
             );
             let system_stats_message = Message {
@@ -959,6 +954,8 @@ async fn main() {
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
 
         let model_id = args.model_id.clone();
+
+        iterations += 1;
 
         // Spawn a thread to run the LLM function, to keep the UI responsive streaming the response
         if !args.use_api && !args.use_openai {
@@ -1345,7 +1342,7 @@ async fn main() {
             println!("\n=======================================");
             println!(
                 "#[{}] ({}) {}/{}/{} imgs/tkns/chrs in {:.2?}s @ {:.2}tps",
-                packet_count,
+                iterations,
                 output_id,
                 paragraph_count,
                 token_count,
