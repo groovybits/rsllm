@@ -53,7 +53,7 @@ pub fn send_images_over_ndi(
         } else if subtitle_position == "mid-bottom" {
             subtitle_height = height as i32 - (height as i32 / 3);
         } else if subtitle_position == "bottom" {
-            subtitle_height = height as i32 - (height as i32 / 4);
+            subtitle_height = (height as i32 - (height as i32 / 4)) /*+ font_size as i32*/;
         } else {
             log::error!(
                 "Invalid subtitle position '{}', using default position bottome as value {} instead.",

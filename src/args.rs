@@ -493,7 +493,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 77,
+        default_value_t = 70,
         help = "SD Max Length in tokens for SD Image hardsub text segments. example: 77 tokens is avg 77 * 4 == 308 chars."
     )]
     pub sd_max_length: usize,
@@ -502,7 +502,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_PARAGRAPH_MIN",
-        default_value_t = 40,
+        default_value_t = 30,
         help = "SD Min Length for text segments generating Images. Will force past this value before segmenting text."
     )]
     pub sd_text_min: usize,
@@ -556,7 +556,7 @@ pub struct Args {
     #[clap(
         long,
         env = "CANDLE_LLM",
-        default_value = "gemma",
+        default_value = "mistral",
         help = "which llm to use from candle."
     )]
     pub candle_llm: String,
