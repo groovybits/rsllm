@@ -1,7 +1,6 @@
 use crate::args::Args;
 use crate::candle_gemma::gemma;
 use anyhow::Result;
-use log::debug;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -96,9 +95,9 @@ async fn on_msg(
     // also send the message to the main LLM loop to keep history context of the conversation
     if !msg.text().starts_with("!help") && !msg.text().starts_with("!message") {
         // LLM Thread
-        let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(32768);
-        let max_tokens = 200;
-        let temperature = 0.8;
+        let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(100);
+        let max_tokens = 120;
+        let temperature = 1.0;
         let quantized = true;
         let max_messages = args.twitch_chat_history;
 
@@ -119,14 +118,15 @@ async fn on_msg(
 
         // Send message to the AI through mpsc channels format to model specs
         let msg_text = format!(
-            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model",
+            "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>model {}<end_of_turn><start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model",
             personality,
             chat_messages_history,
+            personality,
             msg.sender().name(),
             msg.text().to_string()
         ); // Clone the message text
 
-        debug!("\n Twitch sending msg_text: {}", msg_text);
+        println!("\nTwitch sending msg_text:\n{}\n", msg_text);
 
         let llm_thread = tokio::spawn(async move {
             if let Err(e) = gemma(
@@ -141,18 +141,24 @@ async fn on_msg(
             }
         });
 
+        // thread token collection and wait for it to finish
+        let token_thread = tokio::spawn(async move {
+            let mut tokens = String::new();
+            while let Some(received) = external_receiver.recv().await {
+                tokens.push_str(&received);
+            }
+            tokens
+        });
+
         // wait for llm thread to finish
         llm_thread.await?;
 
-        // Collect tokens from the external receiver
-        let mut answer = String::new();
-        while let Some(received) = external_receiver.recv().await {
-            // collect tokens received
-            answer.push_str(&received);
-        }
+        let answer = token_thread.await?;
 
         // remove all new lines from answer:
-        answer = answer.replace("\n", " ");
+        let answer = answer.replace("\n", " ");
+
+        println!("\nTwitch received answer:\n{}\n", answer);
 
         // Send message to the twitch channel
         client
