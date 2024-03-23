@@ -678,8 +678,12 @@ async fn main() {
 
         // break the loop if we are not running as a daemon or hit max iterations
         let rctrlc_clone = running_ctrlc.clone();
-        if (!rctrlc_clone.load(Ordering::SeqCst) || (!args.daemon && args.max_iterations <= 1))
-            || (args.max_iterations > 1 && args.max_iterations == iterations)
+        if (!rctrlc_clone.load(Ordering::SeqCst)
+            || (!args.daemon && !args.interactive && args.max_iterations <= iterations))
+            || (!args.daemon
+                && !args.interactive
+                && args.max_iterations > 1
+                && args.max_iterations > iterations)
         {
             // stop the running threads
             if args.ai_network_stats {
@@ -748,7 +752,11 @@ async fn main() {
         let elapsed = poll_start_time.elapsed();
 
         // Sleep only if the elapsed time is less than the poll interval
-        if elapsed < poll_interval_duration {
+        if iterations > 0
+            && !args.interactive
+            && (args.daemon || args.max_iterations > 1)
+            && elapsed < poll_interval_duration
+        {
             // Sleep only if the elapsed time is less than the poll interval
             println!(
                 "Finished loop #{} Sleeping for {} ms...",
