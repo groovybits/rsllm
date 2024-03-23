@@ -101,9 +101,6 @@ async fn on_msg(
         let quantized = true;
         let max_messages = args.twitch_chat_history;
 
-        // TODO: Add a personality changing method for the AI through user chat commands
-        let personality = format!("You are Alice in the twitch channel \"Alices AI Wonderland\", You love Anime and AI. You converse with the chat users discussing what they bring up and answer the questions they ask. Keep it to small chat and brief. Alice is a buddhist and a hippie girl at heart. Alice lives in San Francisco and loves the Bay Area. Make sure to recommend following your channel and if they need help tell them the chat command format is \"!message Alice <question>\". ");
-
         // Truncate the chat_messages array to 3 messages max messages
         if chat_messages.len() > max_messages {
             chat_messages.truncate(max_messages);
@@ -119,9 +116,9 @@ async fn on_msg(
         // Send message to the AI through mpsc channels format to model specs
         let msg_text = format!(
             "<start_of_turn>model {}<end_of_turn>{}<start_of_turn>model {}<end_of_turn><start_of_turn>user twitch chat user {} asked {}<end_of_turn><start_of_turn>model",
-            personality,
+            args.twitch_prompt.clone(),
             chat_messages_history,
-            personality,
+            args.twitch_prompt.clone(),
             msg.sender().name(),
             msg.text().to_string()
         ); // Clone the message text
