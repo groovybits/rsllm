@@ -4,7 +4,7 @@ use clap::Parser;
 #[derive(Parser, Debug, Clone)]
 #[clap(
     author = "Chris Kennedy",
-    version = "0.5.4",
+    version = "0.5.5",
     about = "Rust AI Stream Analyzer Twitch Bot"
 )]
 pub struct Args {
