@@ -1,3 +1,4 @@
+use crate::args::Args;
 use crate::candle_gemma::gemma;
 use anyhow::Result;
 use log::debug;
@@ -12,6 +13,7 @@ pub async fn daemon(
     channel: Vec<String>,
     running: Arc<AtomicBool>,
     twitch_tx: mpsc::Sender<String>,
+    args: Args,
 ) -> Result<()> {
     let credentials = match Some(nick).zip(Some(token)) {
         Some((nick, token)) => tmi::client::Credentials::new(nick, token),
@@ -32,7 +34,7 @@ pub async fn daemon(
     client.join_all(&channels).await?;
     log::info!("Joined the following channels: {}", channels.join(", "));
 
-    run(client, channels, running, twitch_tx).await
+    run(client, channels, running, twitch_tx, args).await
 }
 
 async fn run(
@@ -40,6 +42,7 @@ async fn run(
     channels: Vec<tmi::Channel>,
     running: Arc<AtomicBool>,
     twitch_tx: mpsc::Sender<String>,
+    args: Args,
 ) -> Result<()> {
     let mut chat_messages = Vec::new();
     // create a semaphore so no more than one message is sent to the AI at a time
@@ -51,7 +54,14 @@ async fn run(
             tmi::Message::Privmsg(msg) => {
                 // acquire the semaphore to send a message to the AI
                 let _chat_lock = semaphore.acquire().await.unwrap();
-                on_msg(&mut client, msg, &twitch_tx, &mut chat_messages).await?
+                on_msg(
+                    &mut client,
+                    msg,
+                    &twitch_tx,
+                    &mut chat_messages,
+                    args.clone(),
+                )
+                .await?
             }
             tmi::Message::Reconnect => {
                 client.reconnect().await?;
@@ -69,6 +79,7 @@ async fn on_msg(
     msg: tmi::Privmsg<'_>,
     tx: &mpsc::Sender<String>,
     chat_messages: &mut Vec<String>,
+    args: Args,
 ) -> Result<()> {
     log::debug!("\nTwitch Message: {:?}", msg);
     log::info!(
@@ -89,7 +100,7 @@ async fn on_msg(
         let max_tokens = 200;
         let temperature = 0.8;
         let quantized = true;
-        let max_messages = 3;
+        let max_messages = args.twitch_chat_history;
 
         // TODO: Add a personality changing method for the AI through user chat commands
         let personality = format!("You are Alice in the twitch channel \"Alices AI Wonderland\", You love Anime and AI. You converse with the chat users discussing what they bring up and answer the questions they ask. Keep it to small chat and brief. Alice is a buddhist and a hippie girl at heart. Alice lives in San Francisco and loves the Bay Area. Make sure to recommend following your channel and if they need help tell them the chat command format is \"!message Alice <question>\". ");

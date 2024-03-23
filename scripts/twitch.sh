@@ -12,10 +12,10 @@
 BUILD_TYPE=release
 MODEL=gemma
 MODEL_ID=2b-it
-MAX_TOKENS=800
+MAX_TOKENS=400
 ALIGNMENT=right
 TEMPERATURE=0.8
-CONTINUOUS=0
+CONTINUOUS=1
 POLL_INTERVAL=0
 PIPELINE_CONCURRENCY=3
 CONTEXT_SIZE=3000
@@ -23,6 +23,7 @@ SUBTITLES=1
 DAEMON=1
 KEEP_HISTORY=1
 GREETING="Hi I'm Alice, ask me a question!"
+TWITCH_CHAT_HISTORY=30
 # === END OF CONFIGURATION ===
 #
 #
@@ -52,6 +53,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --system-prompt "$SYSTEM_PROMPT" \
     --candle-llm $MODEL \
     --twitch-client \
+    --twitch-chat-history 30 \
     --sd-image \
     --ndi-audio \
     --ndi-images \

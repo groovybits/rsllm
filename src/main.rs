@@ -514,6 +514,7 @@ async fn main() {
 
         // TODO: add mpsc channels for communication between the twitch setup and the main thread
         let running_processor_twitch_clone = running_processor_twitch.clone();
+        let args_clone = args.clone();
         let _twitch_handle = tokio::spawn(async move {
             info!(
                 "Setting up Twitch channel {} for user {}",
@@ -535,6 +536,7 @@ async fn main() {
                     twitch_channel_clone.clone(),
                     running_processor_twitch_clone.clone(),
                     twitch_tx.clone(),
+                    args_clone,
                 )
                 .await
                 {
@@ -752,7 +754,8 @@ async fn main() {
         let elapsed = poll_start_time.elapsed();
 
         // Sleep only if the elapsed time is less than the poll interval
-        if iterations > 0
+        if !twitch_query
+            && iterations > 0
             && !args.interactive
             && (args.daemon || args.max_iterations > 1)
             && elapsed < poll_interval_duration
@@ -1042,9 +1045,21 @@ async fn main() {
             let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
 
             //  Initial repeat of the query sent to the pipeline
-            if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+            if ((!args.continuous && args.twitch_client && twitch_query)
+                || (args.twitch_client && twitch_query))
+                && args.sd_image
+                && (args.tts_enable || args.oai_tts || args.mimic3_tts)
+            {
                 let mut sd_config = SDConfig::new();
                 sd_config.prompt = query.clone();
+                // reduce prompt down to 300 characters max
+                if sd_config.prompt.len() > 300 {
+                    sd_config.prompt = sd_config.prompt.chars().take(300).collect();
+                }
+                // append "..." to the prompt if truncated
+                if query.len() > 300 {
+                    sd_config.prompt.push_str("...");
+                }
                 sd_config.height = Some(args.sd_height);
                 sd_config.width = Some(args.sd_width);
                 sd_config.image_position = Some(args.image_alignment.clone());

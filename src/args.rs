@@ -5,7 +5,7 @@ use clap::Parser;
 #[clap(
     author = "Chris Kennedy",
     version = "0.5.4",
-    about = "Rust AI Stream Analyzer Twitch Bot",
+    about = "Rust AI Stream Analyzer Twitch Bot"
 )]
 pub struct Args {
     /// System prompt
@@ -676,4 +676,13 @@ pub struct Args {
         help = "twitch channel."
     )]
     pub twitch_channel: String,
+
+    /// Twitch Chat history - number of messages to keep in history
+    #[clap(
+        long,
+        env = "TWITCH_CHAT_HISTORY",
+        default_value_t = 10,
+        help = "Twitch Chat history - number of messages to keep in history."
+    )]
+    pub twitch_chat_history: usize,
 }
