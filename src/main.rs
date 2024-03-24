@@ -598,7 +598,6 @@ async fn main() {
         println!("Running RsLLM for [{}] iterations...", args.max_iterations);
     }
     let mut iterations = 0;
-    let mut query = args.query.clone();
 
     // Boot up message and image repeat of the query sent to the pipeline
     if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
@@ -638,6 +637,9 @@ async fn main() {
     }
 
     loop {
+        let mut twitch_query = false;
+        let mut query = args.query.clone();
+
         let openai_key = env::var("OPENAI_API_KEY")
             .ok()
             .unwrap_or_else(|| "NO_API_KEY".to_string());
@@ -655,7 +657,6 @@ async fn main() {
             messages.push(system_message.clone());
         }
 
-        let mut twitch_query = false;
         if args.twitch_client {
             loop {
                 match tokio::time::timeout(Duration::from_millis(100), twitch_rx.recv()).await {
@@ -679,6 +680,7 @@ async fn main() {
                             // set the current query to the the default
                             query = args.query.clone();
                         }
+                        break;
                     }
                     Ok(None) => {
                         // The channel has been closed, so break the loop
