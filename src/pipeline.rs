@@ -121,10 +121,13 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
             .take_while(|c| c.is_ascii())
             .collect::<String>();
 
-        // remove any punctuation from the end of the input
-        let input = input
-            .trim_end_matches(|c: char| !c.is_alphanumeric())
-            .to_string();
+        // loop removing end punctuation until no more
+        let mut input = input.clone();
+        while input.ends_with(|c: char| !c.is_alphanumeric()) {
+            input = input
+                .trim_end_matches(|c: char| !c.is_alphanumeric())
+                .to_string();
+        }
 
         // check if input is "" empty and if so return here an empty Vec<u8>
         if input.is_empty() {
