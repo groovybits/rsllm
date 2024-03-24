@@ -721,4 +721,13 @@ pub struct Args {
         help = "async concurrency - bool async concurrency for all models, don't wait for NDI between each request. (unstable)"
     )]
     pub async_concurrency: bool,
+
+    /// NDI Timeout
+    #[clap(
+        long,
+        env = "NDI_TIMEOUT",
+        default_value_t = 300,
+        help = "NDI Timeout."
+    )]
+    pub ndi_timeout: u64,
 }

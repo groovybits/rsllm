@@ -121,7 +121,9 @@ async fn main() {
     let pipeline_processing_task = {
         let pipeline_sem = Arc::clone(&pipeline_sem);
         let processed_data_store = processed_data_store.clone();
-        let last_images = Arc::new(Mutex::new(vec![]));
+        // create a black frame image in the vec[] to use initially as last_images
+        let black_frame = image::ImageBuffer::from_fn(1920, 1080, |_, _| image::Rgb([0, 0, 0]));
+        let last_images = Arc::new(Mutex::new(vec![black_frame]));
         tokio::spawn(async move {
             while let Some(message_data) = pipeline_task_receiver.recv().await {
                 let processed_data_store = processed_data_store.clone();
@@ -136,6 +138,12 @@ async fn main() {
                         .acquire()
                         .await
                         .expect("failed to acquire pipeline semaphore permit");
+
+                    // check length of message_data, if it is less than 80 characters, use last_images
+                    /*if message_data_clone.paragraph.len() < 80 {
+                    let last_images = last_images_clone.lock().await;
+                    let images = last_images.clone();
+                    }*/
 
                     // process_image returns an empty vec if there are no images
                     let mut images = process_image(message_data_clone.clone()).await;
@@ -238,15 +246,27 @@ async fn main() {
     let running_processor_ndi_clone = running_processor_ndi.clone();
     #[cfg(feature = "ndi")]
     let ndi_sync_task = tokio::spawn(async move {
-        let mut current_key = 1;
+        let mut current_key = 0;
+        let mut max_key = 0;
+
         while running_processor_ndi_clone.load(Ordering::SeqCst) {
-            let data = {
+            let mut data = {
                 let store = processed_data_store_for_ndi.lock().await;
                 store.get(&current_key).cloned()
             };
 
-            if let Some(ref data) = data {
+            if let Some(ref mut data) = data {
                 if data.completed {
+                    // Update max_key if necessary
+                    max_key = max_key.max(data.paragraph_count);
+
+                    // check if we are reset to paragraph count 1, if so, reset the max_key and current key back to 1 and set as last_message
+                    if data.paragraph_count == 0 && current_key > 0 {
+                        max_key = 0;
+                        current_key = 0;
+                        data.last_message = true;
+                    }
+
                     // Check if this is the last message and send the NDI done signal
                     if data.last_message {
                         std::io::stdout().flush().unwrap();
@@ -264,6 +284,7 @@ async fn main() {
                             data.paragraph_count, current_key
                         );
                     }
+
                     // Send to NDI
                     #[cfg(feature = "ndi")]
                     send_to_ndi(data.clone(), &args_for_ndi).await;
@@ -283,7 +304,21 @@ async fn main() {
             } else {
                 std::io::stdout().flush().unwrap();
                 debug!("NDI sync task: No data found for key {}", current_key);
-                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+                // If the current key is not found, check if it's less than the max key
+                /*if current_key < max_key {
+                    // If the current key is less than the max key, increment the current key and continue
+                    log::error!(
+                        "NDI sync task: Current key {} is less than max key {}",
+                        current_key,
+                        max_key
+                    );
+                    current_key += 1;
+                } else {
+                    // If the current key is equal to or greater than the max key, sleep and continue
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    }*/
             }
 
             // SHUTDOWN Signal
@@ -309,7 +344,7 @@ async fn main() {
 
     // start time
     let start_time = current_unix_timestamp_ms().unwrap_or(0);
-    let mut total_paragraph_count = 1;
+    let mut total_paragraph_count = 0;
 
     // Perform TR 101 290 checks
     let mut tr101290_errors = Tr101290Errors::new();
@@ -1198,7 +1233,9 @@ async fn main() {
                 );
 
                 // Join the current paragraph tokens into a single String without adding extra spaces
-                if !current_paragraph.is_empty() {
+                if !current_paragraph.is_empty()
+                /*&& !current_paragraph.join("").len() > 80*/
+                {
                     // check if token has the new line character, split it at the new line into two parts, then put the first part onto
                     // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
                     // Safely handle split at the newline character
@@ -1471,11 +1508,27 @@ async fn main() {
         if !args.async_concurrency
             && (args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts)
         {
-            // Wait for the NDI done signal
-            std::io::stdout().flush().unwrap();
-            info!("Waiting for NDI done signal for LLM messages...");
-            ndi_done_rx.recv().await;
-            info!("Received NDI done signal.");
+            // set a timer to wait for the NDI done signal only so long then if not sent then continue
+            //let ndi_done_rx = ndi_done_rx.clone();
+            let ndi_done_timeout =
+                tokio::time::timeout(std::time::Duration::from_secs(args.ndi_timeout), async {
+                    // Wait for the NDI done signal
+                    std::io::stdout().flush().unwrap();
+                    info!(
+                        "Waiting for NDI done signal for LLM message {}...",
+                        total_paragraph_count - 1
+                    );
+                    ndi_done_rx.recv().await;
+                    info!("Received NDI done signal.");
+                });
+            match ndi_done_timeout.await {
+                Ok(_) => {
+                    info!("NDI done signal received.");
+                }
+                Err(_) => {
+                    info!("NDI done signal timeout.");
+                }
+            }
         }
     }
 }
