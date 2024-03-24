@@ -65,7 +65,7 @@ pub async fn process_image(mut data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Ve
                 return images.clone();
             }
             Err(e) => {
-                eprintln!("Error generating images for {}: {:?}", data.output_id, e);
+                eprintln!("\nError generating images for {}: {:?}", data.output_id, e);
             }
         }
     }

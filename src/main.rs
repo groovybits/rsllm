@@ -116,18 +116,18 @@ async fn main() {
     let (ndi_done_tx, mut ndi_done_rx) = mpsc::channel::<()>(1);
 
     let pipeline_sem = Arc::new(Semaphore::new(args.pipeline_concurrency));
-
+    // Pipeline processing task for image and speech together as a single task
     // Pipeline processing task for image and speech together as a single task
     let pipeline_processing_task = {
         let pipeline_sem = Arc::clone(&pipeline_sem);
         let processed_data_store = processed_data_store.clone();
+        let last_images = Arc::new(Mutex::new(vec![]));
         tokio::spawn(async move {
-            let mut last_images = vec![];
             while let Some(message_data) = pipeline_task_receiver.recv().await {
                 let processed_data_store = processed_data_store.clone();
                 let message_data_clone = message_data.clone();
                 let pipeline_sem = Arc::clone(&pipeline_sem);
-                let last_images_clone = last_images.clone();
+                let last_images_clone = Arc::clone(&last_images);
                 // channels to pass images back for the last_images vec
                 let (image_tx, mut image_rx) =
                     mpsc::channel::<Vec<image::ImageBuffer<image::Rgb<u8>, Vec<u8>>>>(100);
@@ -137,15 +137,23 @@ async fn main() {
                         .await
                         .expect("failed to acquire pipeline semaphore permit");
 
-                    // if process_image returns a valid set of images, if so store the images inthe images vec else use the previous images vec if it exists
                     // process_image returns an empty vec if there are no images
                     let mut images = process_image(message_data_clone.clone()).await;
+
+                    // Check if the processed images are empty
                     if images.is_empty() {
-                        images = last_images_clone.clone();
+                        // If the processed images are empty, use the last_images
+                        let last_images = last_images_clone.lock().await;
+                        images = last_images.clone();
                     } else {
-                        // send images to the image channel
-                        let _ = image_tx.send(images.clone()).await;
+                        // If the processed images are not empty, update the last_images
+                        let mut last_images = last_images_clone.lock().await;
+                        *last_images = images.clone();
                     }
+
+                    // send images to the image channel
+                    let _ = image_tx.send(images.clone()).await;
+
                     // update image cache images
                     let speech_data = process_speech(message_data_clone.clone()).await;
                     let mut store = processed_data_store.lock().await;
@@ -174,9 +182,9 @@ async fn main() {
                 });
 
                 // wait for images and collect any in and put into the last_images vec
-                let images = image_rx.recv().await;
-                if let Some(images) = images {
-                    last_images = images;
+                if let Some(images) = image_rx.recv().await {
+                    let mut last_images = last_images.lock().await;
+                    *last_images = images;
                 }
 
                 // wait for the image task to finish
