@@ -230,6 +230,8 @@ pub async fn stream_completion(
         // Spawn a new task for each chunk to process it asynchronously
         let worker = tokio::spawn(async move {
             let mut first_run = true;
+            let mut add_newline = false;
+            let mut add_space = false;
             while let Some(chunk) = rx.recv().await {
                 loop_count += 1;
 
@@ -259,8 +261,6 @@ pub async fn stream_completion(
                 let json_blobs: Vec<&str> = chunk_str.split("\ndata: ").collect();
                 let mut blob_count = 0;
 
-                let mut add_newline = false;
-                let mut add_space = false;
                 for json_blob in json_blobs.iter() {
                     blob_count += 1;
                     debug!("Json Blob: {}/{} - {}", loop_count, blob_count, json_blob);
