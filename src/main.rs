@@ -992,280 +992,302 @@ async fn main() {
         iterations += 1;
 
         // Spawn a thread to run the LLM function, to keep the UI responsive streaming the response
-        if !args.use_api && !args.use_openai {
-            // Capture the start time for performance metrics
-            let start = Instant::now();
 
-            let chat_format = if args.candle_llm == "mistral" {
-                // check if model_id includes the string "Instruct" within it
-                if args.model_id.contains("Instruct") {
-                    "llama2".to_string()
-                } else {
-                    "".to_string()
-                }
-            } else if args.candle_llm == "gemma" {
-                if args.model_id == "7b-it" {
-                    "google".to_string()
-                } else if args.model_id == "2b-it" {
-                    "google".to_string()
-                } else {
-                    "".to_string()
-                }
+        // Capture the start time for performance metrics
+        let start = Instant::now();
+
+        let chat_format = if args.candle_llm == "mistral" {
+            // check if model_id includes the string "Instruct" within it
+            if args.model_id.contains("Instruct") {
+                "llama2".to_string()
             } else {
                 "".to_string()
-            };
-
-            let prompt = format_messages_for_llm(messages.clone(), chat_format);
-
-            debug!("\nPrompt: {}", prompt);
-
-            // Spawn a thread to run the mistral function, to keep the UI responsive
-            if args.candle_llm != "mistral" && args.candle_llm != "gemma" {
-                // exit if the LLM is not supported
-                error!("The specified LLM is not supported. Exiting...");
-                std::process::exit(1);
             }
-
-            let prompt_clone = prompt.clone();
-            let llm_thread = if args.candle_llm == "mistral" {
-                tokio::spawn(async move {
-                    let mistral_clone = mistral.clone();
-                    if let Err(e) = mistral_clone(
-                        prompt_clone,
-                        args.max_tokens as usize,
-                        args.temperature as f64,
-                        args.quantized,
-                        Some(model_id),
-                        external_sender,
-                    ) {
-                        eprintln!("Error running mistral: {}", e);
-                    }
-                })
+        } else if args.candle_llm == "gemma" {
+            if args.model_id == "7b-it" {
+                "google".to_string()
+            } else if args.model_id == "2b-it" {
+                "google".to_string()
             } else {
-                tokio::spawn(async move {
-                    let gemma_clone = gemma.clone();
-                    if let Err(e) = gemma_clone(
-                        prompt_clone,
-                        args.max_tokens as usize,
-                        args.temperature as f64,
-                        args.quantized,
-                        Some(model_id),
-                        external_sender,
-                    ) {
-                        eprintln!("Error running gemma: {}", e);
-                    }
-                })
-            };
+                "".to_string()
+            }
+        } else if args.use_api {
+            "llama2".to_string()
+        } else {
+            "".to_string()
+        };
 
-            // Count tokens and collect output
-            let mut token_count = 0;
-            let mut terminal_token_len = 0;
-            let mut answers = Vec::new();
-            let mut paragraphs: Vec<String> = Vec::new();
-            let mut current_paragraph: Vec<String> = Vec::new();
-            let mut paragraph_count = 0;
+        let prompt = format_messages_for_llm(messages.clone(), chat_format);
 
-            // create uuid unique identifier for the output images
-            let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+        debug!("\nPrompt: {}", prompt);
 
-            //  Initial repeat of the query sent to the pipeline
-            if ((!args.continuous && args.twitch_client && twitch_query)
-                || (args.twitch_client && twitch_query))
-                && args.sd_image
-                && (args.tts_enable || args.oai_tts || args.mimic3_tts)
-            {
-                let mut sd_config = SDConfig::new();
-                sd_config.prompt = query.clone();
-                // reduce prompt down to 300 characters max
-                if sd_config.prompt.len() > 300 {
-                    sd_config.prompt = sd_config.prompt.chars().take(300).collect();
-                }
-                // append "..." to the prompt if truncated
-                if query.len() > 300 {
-                    sd_config.prompt.push_str("...");
-                }
-                sd_config.height = Some(args.sd_height);
-                sd_config.width = Some(args.sd_width);
-                sd_config.image_position = Some(args.image_alignment.clone());
-                if args.sd_scaled_height > 0 {
-                    sd_config.scaled_height = Some(args.sd_scaled_height);
-                }
-                if args.sd_scaled_width > 0 {
-                    sd_config.scaled_width = Some(args.sd_scaled_width);
-                }
-                // just send a message with the last_message field true to indicate the end of the response
-                let message_data_for_pipeline = MessageData {
-                    paragraph: query.clone().to_string(),
-                    output_id: output_id.clone(),
-                    paragraph_count: total_paragraph_count,
-                    sd_config,
-                    mimic3_voice: args.mimic3_voice.to_string(),
-                    subtitle_position: args.subtitle_position.to_string(),
-                    args: args.clone(),
-                    shutdown: false,
-                    last_message: false,
+        // Spawn a thread to run the mistral function, to keep the UI responsive
+        if args.candle_llm != "mistral" && args.candle_llm != "gemma" {
+            // exit if the LLM is not supported
+            error!("The specified LLM is not supported. Exiting...");
+            std::process::exit(1);
+        }
+
+        let messages_clone = messages.clone();
+        let llm_host_clone = llm_host.clone();
+        let llm_path_clone = args.llm_path.clone();
+        let model_clone = args.model.clone();
+
+        let prompt_clone = prompt.clone();
+        let llm_thread = if args.use_api || args.use_openai {
+            tokio::spawn(async move {
+                let open_ai_request = OpenAIRequest {
+                    model: &model_clone,
+                    max_tokens: &args.max_tokens,
+                    messages: messages_clone,
+                    temperature: &args.temperature,
+                    top_p: &args.top_p,
+                    presence_penalty: &args.presence_penalty,
+                    frequency_penalty: &args.frequency_penalty,
+                    stream: &(args.no_stream == false),
                 };
 
-                // For pipeline task
-                pipeline_task_sender
-                    .send(message_data_for_pipeline)
-                    .await
-                    .expect("Failed to send q/a audio/speech pipeline task");
+                stream_completion(
+                    open_ai_request,
+                    &openai_key.clone(),
+                    &llm_host_clone,
+                    &llm_path_clone,
+                    args.debug_inline,
+                    args.show_output_errors,
+                    external_sender,
+                )
+                .await;
+            })
+        } else if args.candle_llm == "mistral" {
+            tokio::spawn(async move {
+                let mistral_clone = mistral.clone();
+                if let Err(e) = mistral_clone(
+                    prompt_clone,
+                    args.max_tokens as usize,
+                    args.temperature as f64,
+                    args.quantized,
+                    Some(model_id),
+                    external_sender,
+                ) {
+                    eprintln!("Error running mistral: {}", e);
+                }
+            })
+        } else {
+            tokio::spawn(async move {
+                let gemma_clone = gemma.clone();
+                if let Err(e) = gemma_clone(
+                    prompt_clone,
+                    args.max_tokens as usize,
+                    args.temperature as f64,
+                    args.quantized,
+                    Some(model_id),
+                    external_sender,
+                ) {
+                    eprintln!("Error running gemma: {}", e);
+                }
+            })
+        };
 
-                total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+        // Count tokens and collect output
+        let mut token_count = 0;
+        let mut terminal_token_len = 0;
+        let mut answers = Vec::new();
+        let mut paragraphs: Vec<String> = Vec::new();
+        let mut current_paragraph: Vec<String> = Vec::new();
+        let mut paragraph_count = 0;
+
+        // create uuid unique identifier for the output images
+        let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
+
+        //  Initial repeat of the query sent to the pipeline
+        if ((!args.continuous && args.twitch_client && twitch_query)
+            || (args.twitch_client && twitch_query))
+            && args.sd_image
+            && (args.tts_enable || args.oai_tts || args.mimic3_tts)
+        {
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = query.clone();
+            // reduce prompt down to 300 characters max
+            if sd_config.prompt.len() > 300 {
+                sd_config.prompt = sd_config.prompt.chars().take(300).collect();
             }
+            // append "..." to the prompt if truncated
+            if query.len() > 300 {
+                sd_config.prompt.push_str("...");
+            }
+            sd_config.height = Some(args.sd_height);
+            sd_config.width = Some(args.sd_width);
+            sd_config.image_position = Some(args.image_alignment.clone());
+            if args.sd_scaled_height > 0 {
+                sd_config.scaled_height = Some(args.sd_scaled_height);
+            }
+            if args.sd_scaled_width > 0 {
+                sd_config.scaled_width = Some(args.sd_scaled_width);
+            }
+            // just send a message with the last_message field true to indicate the end of the response
+            let message_data_for_pipeline = MessageData {
+                paragraph: query.clone().to_string(),
+                output_id: output_id.clone(),
+                paragraph_count: total_paragraph_count,
+                sd_config,
+                mimic3_voice: args.mimic3_voice.to_string(),
+                subtitle_position: args.subtitle_position.to_string(),
+                args: args.clone(),
+                shutdown: false,
+                last_message: false,
+            };
 
-            while let Some(received) = external_receiver.recv().await {
-                token_count += 1;
-                terminal_token_len += received.len();
+            // For pipeline task
+            pipeline_task_sender
+                .send(message_data_for_pipeline)
+                .await
+                .expect("Failed to send q/a audio/speech pipeline task");
 
-                // Store the received token
-                answers.push(received.clone());
+            total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+        }
 
-                let token_len = count_tokens(&current_paragraph.join(""));
-                // If a newline is at the end of the token, process the accumulated paragraph for image generation
-                if received.contains('\n') && !current_paragraph.is_empty()
-                    || (token_len as f32 > args.sd_max_length as f32 / 1.8
-                        && (received.contains('.')
-                            || received.contains('?')
-                            || received.contains('\n')
-                            || received.contains('!'))
-                        || (token_len >= (args.sd_max_length as f32) as usize
-                            && (received.contains(' '))))
-                {
-                    debug!(
-                        "\nParagraph Token count: {} Character Count: {}",
-                        token_len,
-                        current_paragraph.join("").len()
-                    );
+        while let Some(received) = external_receiver.recv().await {
+            token_count += 1;
+            terminal_token_len += received.len();
 
-                    // Join the current paragraph tokens into a single String without adding extra spaces
-                    if !current_paragraph.is_empty() {
-                        // check if token has the new line character, split it at the new line into two parts, then put the first part onto
-                        // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
-                        // Safely handle split at the newline character
-                        let mut split_pos = received.len();
-                        for delimiter in ['\n', '.', ',', '?', '!'] {
-                            if let Some(pos) = received.find(delimiter) {
-                                // Adjust position to keep the delimiter with the first part, except for '\n'
-                                let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
-                                split_pos = split_pos.min(end_pos);
-                                break; // Break after finding the first delimiter
-                            }
+            // Store the received token
+            answers.push(received.clone());
+
+            let token_len = count_tokens(&current_paragraph.join(""));
+            // If a newline is at the end of the token, process the accumulated paragraph for image generation
+            if received.contains('\n') && !current_paragraph.is_empty()
+                || (token_len as f32 > args.sd_max_length as f32 / 1.8
+                    && (received.contains('.')
+                        || received.contains('?')
+                        || received.contains('\n')
+                        || received.contains('!'))
+                    || (token_len >= (args.sd_max_length as f32) as usize
+                        && (received.contains(' '))))
+            {
+                debug!(
+                    "\nParagraph Token count: {} Character Count: {}",
+                    token_len,
+                    current_paragraph.join("").len()
+                );
+
+                // Join the current paragraph tokens into a single String without adding extra spaces
+                if !current_paragraph.is_empty() {
+                    // check if token has the new line character, split it at the new line into two parts, then put the first part onto
+                    // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
+                    // Safely handle split at the newline character
+                    let mut split_pos = received.len();
+                    for delimiter in ['\n', '.', ',', '?', '!'] {
+                        if let Some(pos) = received.find(delimiter) {
+                            // Adjust position to keep the delimiter with the first part, except for '\n'
+                            let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
+                            split_pos = split_pos.min(end_pos);
+                            break; // Break after finding the first delimiter
                         }
-                        // Handle ' ' delimiter separately
-                        if split_pos == received.len() {
-                            if let Some(pos) = received.find(' ') {
-                                // Adjust position to keep the delimiter with the first part, except for '\n'
-                                let end_pos = pos + 1;
-                                split_pos = split_pos.min(end_pos);
-                            }
-                        }
-
-                        // Split 'received' at the determined position, handling '\n' specifically
-                        let (mut first, mut second) = received.split_at(split_pos);
-
-                        // If splitting on '\n', adjust 'first' and 'second' to not include '\n' in 'first'
-                        let mut nl: bool = false;
-                        if first.ends_with('\n') {
-                            first = &first[..first.len() - 1];
-                            nl = true;
-                        } else if second.starts_with('\n') {
-                            second = &second[1..];
-                            nl = true;
-                        }
-
-                        // Store the first part of the split token into the current paragraph
-                        current_paragraph.push(first.to_string());
-
-                        let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
-                        paragraphs.push(paragraph_text.clone());
-
-                        // Token output to stdout in real-time
-                        print!("{}", first);
-                        if nl {
-                            print!("\n");
-                            terminal_token_len = 0;
-                        } else if current_paragraph.len() >= 80 {
-                            print!("\n");
-                            terminal_token_len = 0;
-                        }
-                        std::io::stdout().flush().unwrap();
-
-                        // Clear current paragraph for the next one
-                        current_paragraph.clear(); // Clear current paragraph for the next one
-
-                        // Store the second part of the split token into the answers and current_paragraph
-                        current_paragraph.push(second.to_string());
-
-                        // ** Start of TTS and Image Generation **
-                        // Check if image generation or speech is enabled and proceed
-                        if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
-                            // Clone necessary data for use in the async block
-                            let paragraph_clone = paragraphs[paragraph_count].clone();
-                            let output_id_clone = output_id.clone();
-                            let mimic3_voice = args.mimic3_voice.clone().to_string();
-                            let image_alignment = args.image_alignment.clone();
-                            let subtitle_position = args.subtitle_position.clone();
-                            let args = args.clone();
-
-                            let pipeline_task_sender_clone = pipeline_task_sender.clone();
-
-                            let mut sd_config = SDConfig::new();
-                            sd_config.prompt = paragraph_clone;
-                            sd_config.height = Some(args.sd_height);
-                            sd_config.width = Some(args.sd_width);
-                            sd_config.image_position = Some(image_alignment);
-                            if args.sd_scaled_height > 0 {
-                                sd_config.scaled_height = Some(args.sd_scaled_height);
-                            }
-                            if args.sd_scaled_width > 0 {
-                                sd_config.scaled_width = Some(args.sd_scaled_width);
-                            }
-
-                            let args_clone = args.clone();
-                            let mimic3_voice_clone = mimic3_voice.clone();
-                            let subtitle_position_clone = subtitle_position.clone();
-
-                            debug!("Generating images with prompt: {}", sd_config.prompt);
-
-                            // Create MessageData for image task
-                            let message_data_for_pipeline = MessageData {
-                                paragraph: sd_config.prompt.clone(),
-                                output_id: output_id_clone.clone(),
-                                paragraph_count: total_paragraph_count,
-                                sd_config: sd_config.clone(),
-                                mimic3_voice: mimic3_voice_clone.clone(),
-                                subtitle_position: subtitle_position_clone.clone(),
-                                args: args_clone.clone(),
-                                shutdown: false,
-                                last_message: false,
-                            };
-
-                            // For image tasks
-                            pipeline_task_sender_clone
-                                .send(message_data_for_pipeline)
-                                .await
-                                .expect("Failed to send image/speech pipeline task");
-
-                            total_paragraph_count += 1; // Increment paragraph count for the next paragraph
-                        }
-                        // ** End of TTS and Image Generation **
-
-                        // Token output to stdout in real-time
-                        print!("{}", second);
-                        std::io::stdout().flush().unwrap();
-
-                        paragraph_count += 1; // Increment paragraph count for the next paragraph
-                    } else {
-                        // store the token in the current paragraph
-                        current_paragraph.push(received.clone());
-
-                        // Call the function to handle the string if it exceeds 80 characters
-                        handle_long_string(&received, &mut terminal_token_len);
-
-                        std::io::stdout().flush().unwrap();
                     }
+                    // Handle ' ' delimiter separately
+                    if split_pos == received.len() {
+                        if let Some(pos) = received.find(' ') {
+                            // Adjust position to keep the delimiter with the first part, except for '\n'
+                            let end_pos = pos + 1;
+                            split_pos = split_pos.min(end_pos);
+                        }
+                    }
+
+                    // Split 'received' at the determined position, handling '\n' specifically
+                    let (mut first, mut second) = received.split_at(split_pos);
+
+                    // If splitting on '\n', adjust 'first' and 'second' to not include '\n' in 'first'
+                    let mut nl: bool = false;
+                    if first.ends_with('\n') {
+                        first = &first[..first.len() - 1];
+                        nl = true;
+                    } else if second.starts_with('\n') {
+                        second = &second[1..];
+                        nl = true;
+                    }
+
+                    // Store the first part of the split token into the current paragraph
+                    current_paragraph.push(first.to_string());
+
+                    let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                    paragraphs.push(paragraph_text.clone());
+
+                    // Token output to stdout in real-time
+                    print!("{}", first);
+                    if nl {
+                        print!("\n");
+                        terminal_token_len = 0;
+                    } else if current_paragraph.len() >= 80 {
+                        print!("\n");
+                        terminal_token_len = 0;
+                    }
+                    std::io::stdout().flush().unwrap();
+
+                    // Clear current paragraph for the next one
+                    current_paragraph.clear(); // Clear current paragraph for the next one
+
+                    // Store the second part of the split token into the answers and current_paragraph
+                    current_paragraph.push(second.to_string());
+
+                    // ** Start of TTS and Image Generation **
+                    // Check if image generation or speech is enabled and proceed
+                    if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                        // Clone necessary data for use in the async block
+                        let paragraph_clone = paragraphs[paragraph_count].clone();
+                        let output_id_clone = output_id.clone();
+                        let mimic3_voice = args.mimic3_voice.clone().to_string();
+                        let image_alignment = args.image_alignment.clone();
+                        let subtitle_position = args.subtitle_position.clone();
+                        let args = args.clone();
+
+                        let pipeline_task_sender_clone = pipeline_task_sender.clone();
+
+                        let mut sd_config = SDConfig::new();
+                        sd_config.prompt = paragraph_clone;
+                        sd_config.height = Some(args.sd_height);
+                        sd_config.width = Some(args.sd_width);
+                        sd_config.image_position = Some(image_alignment);
+                        if args.sd_scaled_height > 0 {
+                            sd_config.scaled_height = Some(args.sd_scaled_height);
+                        }
+                        if args.sd_scaled_width > 0 {
+                            sd_config.scaled_width = Some(args.sd_scaled_width);
+                        }
+
+                        let args_clone = args.clone();
+                        let mimic3_voice_clone = mimic3_voice.clone();
+                        let subtitle_position_clone = subtitle_position.clone();
+
+                        debug!("Generating images with prompt: {}", sd_config.prompt);
+
+                        // Create MessageData for image task
+                        let message_data_for_pipeline = MessageData {
+                            paragraph: sd_config.prompt.clone(),
+                            output_id: output_id_clone.clone(),
+                            paragraph_count: total_paragraph_count,
+                            sd_config: sd_config.clone(),
+                            mimic3_voice: mimic3_voice_clone.clone(),
+                            subtitle_position: subtitle_position_clone.clone(),
+                            args: args_clone.clone(),
+                            shutdown: false,
+                            last_message: false,
+                        };
+
+                        // For image tasks
+                        pipeline_task_sender_clone
+                            .send(message_data_for_pipeline)
+                            .await
+                            .expect("Failed to send image/speech pipeline task");
+
+                        total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+                    }
+                    // ** End of TTS and Image Generation **
+
+                    // Token output to stdout in real-time
+                    print!("{}", second);
+                    std::io::stdout().flush().unwrap();
+
+                    paragraph_count += 1; // Increment paragraph count for the next paragraph
                 } else {
                     // store the token in the current paragraph
                     current_paragraph.push(received.clone());
@@ -1275,187 +1297,158 @@ async fn main() {
 
                     std::io::stdout().flush().unwrap();
                 }
+            } else {
+                // store the token in the current paragraph
+                current_paragraph.push(received.clone());
+
+                // Call the function to handle the string if it exceeds 80 characters
+                handle_long_string(&received, &mut terminal_token_len);
+
+                std::io::stdout().flush().unwrap();
             }
+        }
 
-            // Join the last paragraph tokens into a single String without adding extra spaces
-            if current_paragraph.len() > 0 {
-                // ** Start of TTS and Image Generation **
-                // Check if image generation is enabled and proceed
-                if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
-                    // Clone necessary data for use in the async block
-                    let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
-                    let paragraph_clone = paragraph_text.clone();
-                    let output_id_clone = output_id.clone();
-                    let mimic3_voice = args.mimic3_voice.clone().to_string();
-                    let image_alignment = args.image_alignment.clone();
-                    let subtitle_position = args.subtitle_position.clone();
-                    let args = args.clone();
-
-                    let pipeline_task_sender_clone = pipeline_task_sender.clone();
-
-                    let mut sd_config = SDConfig::new();
-                    sd_config.prompt = paragraph_clone;
-                    sd_config.height = Some(args.sd_height);
-                    sd_config.width = Some(args.sd_width);
-                    sd_config.image_position = Some(image_alignment);
-                    if args.sd_scaled_height > 0 {
-                        sd_config.scaled_height = Some(args.sd_scaled_height);
-                    }
-                    if args.sd_scaled_width > 0 {
-                        sd_config.scaled_width = Some(args.sd_scaled_width);
-                    }
-
-                    let args_clone = args.clone();
-                    let mimic3_voice_clone = mimic3_voice.clone();
-                    let subtitle_position_clone = subtitle_position.clone();
-
-                    // Create MessageData for pipeline task
-                    let message_data_for_pipeline = MessageData {
-                        paragraph: sd_config.prompt.clone(), // Clone for the image task
-                        output_id: output_id_clone.clone(),
-                        paragraph_count: total_paragraph_count,
-                        sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
-                        mimic3_voice: mimic3_voice_clone.clone(),
-                        subtitle_position: subtitle_position_clone.clone(),
-                        args: args_clone.clone(),
-                        shutdown: false,
-                        last_message: false,
-                    };
-
-                    // For pipeline task
-                    pipeline_task_sender_clone
-                        .send(message_data_for_pipeline)
-                        .await
-                        .expect("Failed to send last audio/speech pipeline task");
-
-                    total_paragraph_count += 1; // Increment paragraph count for the next paragraph
-                }
-                // ** End of TTS and Image Generation **
-                paragraph_count += 1; // Increment paragraph count for the next paragraph
-            }
-
-            // End of the response message to the pipeline
+        // Join the last paragraph tokens into a single String without adding extra spaces
+        if current_paragraph.len() > 0 {
+            // ** Start of TTS and Image Generation **
+            // Check if image generation is enabled and proceed
             if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+                // Clone necessary data for use in the async block
+                let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                let paragraph_clone = paragraph_text.clone();
+                let output_id_clone = output_id.clone();
+                let mimic3_voice = args.mimic3_voice.clone().to_string();
+                let image_alignment = args.image_alignment.clone();
+                let subtitle_position = args.subtitle_position.clone();
+                let args = args.clone();
+
+                let pipeline_task_sender_clone = pipeline_task_sender.clone();
+
                 let mut sd_config = SDConfig::new();
-                sd_config.prompt = args.greeting.clone();
+                sd_config.prompt = paragraph_clone;
                 sd_config.height = Some(args.sd_height);
                 sd_config.width = Some(args.sd_width);
-                sd_config.image_position = Some(args.image_alignment.clone());
+                sd_config.image_position = Some(image_alignment);
                 if args.sd_scaled_height > 0 {
                     sd_config.scaled_height = Some(args.sd_scaled_height);
                 }
                 if args.sd_scaled_width > 0 {
                     sd_config.scaled_width = Some(args.sd_scaled_width);
                 }
-                // just send a message with the last_message field true to indicate the end of the response
+
+                let args_clone = args.clone();
+                let mimic3_voice_clone = mimic3_voice.clone();
+                let subtitle_position_clone = subtitle_position.clone();
+
+                // Create MessageData for pipeline task
                 let message_data_for_pipeline = MessageData {
-                    paragraph: args.greeting.to_string(),
-                    output_id: output_id.clone(),
+                    paragraph: sd_config.prompt.clone(), // Clone for the image task
+                    output_id: output_id_clone.clone(),
                     paragraph_count: total_paragraph_count,
-                    sd_config,
-                    mimic3_voice: args.mimic3_voice.to_string(),
-                    subtitle_position: args.subtitle_position.to_string(),
-                    args: args.clone(),
+                    sd_config: sd_config.clone(), // Assuming SDConfig is set up previously and is cloneable
+                    mimic3_voice: mimic3_voice_clone.clone(),
+                    subtitle_position: subtitle_position_clone.clone(),
+                    args: args_clone.clone(),
                     shutdown: false,
-                    last_message: true,
+                    last_message: false,
                 };
 
                 // For pipeline task
-                pipeline_task_sender
+                pipeline_task_sender_clone
                     .send(message_data_for_pipeline)
                     .await
                     .expect("Failed to send last audio/speech pipeline task");
 
                 total_paragraph_count += 1; // Increment paragraph count for the next paragraph
             }
+            // ** End of TTS and Image Generation **
+            paragraph_count += 1; // Increment paragraph count for the next paragraph
+        }
 
-            if loglevel != "error" {
-                println!("\n");
-                std::io::stdout().flush().unwrap();
+        // End of the response message to the pipeline
+        if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
+            let mut sd_config = SDConfig::new();
+            sd_config.prompt = args.greeting.clone();
+            sd_config.height = Some(args.sd_height);
+            sd_config.width = Some(args.sd_width);
+            sd_config.image_position = Some(args.image_alignment.clone());
+            if args.sd_scaled_height > 0 {
+                sd_config.scaled_height = Some(args.sd_scaled_height);
             }
-            info!("Waiting for LLM thread to finish...");
-            // Wait for the LLM thread to finish
-            llm_thread.await.unwrap();
-            info!("LLM thread finished.");
-
-            // Calculate elapsed time and tokens per second
-            let elapsed = start.elapsed().as_secs_f64();
-            let tokens_per_second = token_count as f64 / elapsed;
-
-            let answers_str = answers.join("").to_string();
-
-            println!("\n=======================================");
-            println!(
-                "#[{}] ({}) {}/{}/{} imgs/tkns/chrs in {:.2?}s @ {:.2}tps",
-                iterations,
-                output_id,
-                paragraph_count,
-                token_count,
-                answers_str.len(),
-                elapsed,
-                tokens_per_second
-            );
-            println!("============= END RESPONSE ============");
-
-            // check if we got any tokens, if not clear and reset message history
-            if token_count == 0 {
-                messages.clear();
-                messages.push(system_message.clone());
-            } else {
-                // add answers to the messages as an assistant role message with the content
-                messages.push(Message {
-                    role: "assistant".to_string(),
-                    content: answers_str.clone(),
-                });
+            if args.sd_scaled_width > 0 {
+                sd_config.scaled_width = Some(args.sd_scaled_width);
             }
-
-            #[cfg(feature = "ndi")]
-            if !args.async_concurrency
-                && (args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts)
-            {
-                // Wait for the NDI done signal
-                std::io::stdout().flush().unwrap();
-                info!("Waiting for NDI done signal for LLM messages...");
-                ndi_done_rx.recv().await;
-                info!("Received NDI done signal.");
-            }
-        } else {
-            // Stream API Completion
-            let stream = !args.no_stream;
-            let open_ai_request = OpenAIRequest {
-                model: &args.model,
-                max_tokens: &args.max_tokens, // add this field to the request struct
-                messages: messages.clone(),
-                temperature: &args.temperature, // add this field to the request struct
-                top_p: &args.top_p,             // add this field to the request struct
-                presence_penalty: &args.presence_penalty, // add this field to the request struct
-                frequency_penalty: &args.frequency_penalty, // add this field to the request struct
-                stream: &stream,
+            // just send a message with the last_message field true to indicate the end of the response
+            let message_data_for_pipeline = MessageData {
+                paragraph: args.greeting.to_string(),
+                output_id: output_id.clone(),
+                paragraph_count: total_paragraph_count,
+                sd_config,
+                mimic3_voice: args.mimic3_voice.to_string(),
+                subtitle_position: args.subtitle_position.to_string(),
+                args: args.clone(),
+                shutdown: false,
+                last_message: true,
             };
 
-            // Directly await the future; no need for an explicit runtime block
-            let answers = stream_completion(
-                open_ai_request,
-                &openai_key.clone(),
-                &llm_host,
-                &args.llm_path,
-                args.debug_inline,
-                args.show_output_errors,
-                args.break_line_length,
-            )
-            .await
-            .unwrap_or_else(|_| Vec::new());
+            // For pipeline task
+            pipeline_task_sender
+                .send(message_data_for_pipeline)
+                .await
+                .expect("Failed to send last audio/speech pipeline task");
 
-            // for each answer in the response
-            for answer in answers {
-                let assistant_message = Message {
-                    role: "assistant".to_string(),
-                    content: answer.content,
-                };
+            total_paragraph_count += 1; // Increment paragraph count for the next paragraph
+        }
 
-                // push the message to the open_ai_request
-                messages.push(assistant_message.clone());
-            }
+        if loglevel != "error" {
+            println!("\n");
+            std::io::stdout().flush().unwrap();
+        }
+        info!("Waiting for LLM thread to finish...");
+        // Wait for the LLM thread to finish
+        llm_thread.await.unwrap();
+        info!("LLM thread finished.");
+
+        // Calculate elapsed time and tokens per second
+        let elapsed = start.elapsed().as_secs_f64();
+        let tokens_per_second = token_count as f64 / elapsed;
+
+        let answers_str = answers.join("").to_string();
+
+        println!("\n=======================================");
+        println!(
+            "#[{}] ({}) {}/{}/{} imgs/tkns/chrs in {:.2?}s @ {:.2}tps",
+            iterations,
+            output_id,
+            paragraph_count,
+            token_count,
+            answers_str.len(),
+            elapsed,
+            tokens_per_second
+        );
+        println!("============= END RESPONSE ============");
+
+        // check if we got any tokens, if not clear and reset message history
+        if token_count == 0 {
+            messages.clear();
+            messages.push(system_message.clone());
+        } else {
+            // add answers to the messages as an assistant role message with the content
+            messages.push(Message {
+                role: "assistant".to_string(),
+                content: answers_str.clone(),
+            });
+        }
+
+        #[cfg(feature = "ndi")]
+        if !args.async_concurrency
+            && (args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts)
+        {
+            // Wait for the NDI done signal
+            std::io::stdout().flush().unwrap();
+            info!("Waiting for NDI done signal for LLM messages...");
+            ndi_done_rx.recv().await;
+            info!("Received NDI done signal.");
         }
     }
 }

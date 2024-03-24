@@ -83,6 +83,18 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
         // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
         let input = adjust_caps(&input);
 
+        // remove all extra spaces besides 1 space between words, if all spaces left then reduce to '"
+        let input = input
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .join(" ")
+            .replace(" .", ".")
+            .replace(" ,", ",")
+            .replace(" ?", "?")
+            .replace(" !", "!")
+            .replace(" :", ":")
+            .replace(" ;", ";");
+
         // remove any special characters from the text except for normal punctuation ./,;:?
         let input = input
             .chars()
@@ -113,6 +125,11 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
         let input = input
             .trim_end_matches(|c: char| !c.is_alphanumeric())
             .to_string();
+
+        // check if input is "" empty and if so return here an empty Vec<u8>
+        if input.is_empty() {
+            return Vec::new();
+        }
 
         debug!("\nTTS Speech text input: {}", input);
 

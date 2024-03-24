@@ -8,7 +8,6 @@ use chrono::{TimeZone, Utc};
 use log::{debug, error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
 
@@ -53,42 +52,6 @@ pub struct Choice {
 #[derive(Debug, Deserialize)]
 pub struct Delta {
     content: Option<String>,
-}
-
-// Function to process and print content tokens.
-fn process_and_print_token(token: &str, current_line_length: &mut usize, break_line_length: usize) {
-    let token_length = token.chars().count();
-
-    // Check if adding this token exceeds the line length limit.
-    if *current_line_length + token_length > break_line_length {
-        // Find an opportune break point in the token if it's too long by itself.
-        if token_length > break_line_length {
-            let mut last_break_point = 0;
-            for (i, c) in token.char_indices() {
-                if c.is_ascii_punctuation() || c.is_whitespace() {
-                    last_break_point = i;
-                }
-                // Break the token at the last break point if exceeding the line length.
-                if i - last_break_point > break_line_length {
-                    println!("{}", &token[last_break_point..i]);
-                    *current_line_length = 0; // Reset the line length after printing.
-                    last_break_point = i; // Update the last break point.
-                }
-            }
-            // Print the remaining part of the token.
-            print!("{}", &token[last_break_point..]);
-            *current_line_length = token_length - last_break_point;
-        } else {
-            // If the current token doesn't exceed the limit by itself, just break the line before printing it.
-            println!(); // Print a newline to break the line.
-            print!("{}", token); // Print the current token at the start of a new line.
-            *current_line_length = token_length; // Reset the line length to the current token's length.
-        }
-    } else {
-        // If adding the token doesn't exceed the limit, just print it.
-        print!("{}", token);
-        *current_line_length += token_length; // Update the current line length.
-    }
 }
 
 pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> String {
@@ -208,8 +171,8 @@ pub async fn stream_completion(
     llm_path: &str,
     debug_inline: bool,
     show_output_errors: bool,
-    break_line_length: usize,
-) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
+    external_sender: tokio::sync::mpsc::Sender<String>,
+) {
     let client = Client::new();
 
     // measure messages member size of the content member of each pair of the messages array
@@ -218,35 +181,43 @@ pub async fn stream_completion(
         prompt_token_count += message.content.split_whitespace().count();
     }
 
-    let mut response_messages = Vec::new(); // Collect messages here
-
     let start_time = Instant::now();
-    let mut response = client
+    let response = client
         .post(format!("{}{}", llm_host, llm_path))
         .header("Authorization", format!("Bearer {}", openai_key))
         .json(&open_ai_request)
         .send()
-        .await?;
+        .await;
 
     // handle errors
-    match response.error_for_status_ref() {
-        Ok(_) => (),
+    let mut response = match response {
+        Ok(resp) => resp,
         Err(e) => {
             println!("Error: {}", e);
-            return Err(Box::new(e));
+            return;
         }
-    }
+    };
 
     let mut token_count = 0;
     let mut byte_count = 0;
-    let mut current_line_length = 0;
     let mut loop_count = 0;
-    // errors are strings
 
     if !open_ai_request.stream {
         info!("Response status: {}", response.status());
         debug!("Headers: {:#?}", response.headers());
-        println!("\nLLM Response:\n  {}\n---\n", response.text().await?);
+        let text = match response.text().await {
+            Ok(text) => text,
+            Err(e) => {
+                eprintln!("Failed to get response text: {}", e);
+                return;
+            }
+        };
+        println!("\nLLM Response:\n  {}\n---\n", text);
+        // send back over mpsc channel
+        if let Err(e) = external_sender.send(text).await {
+            eprintln!("Failed to send text over mpsc channel: {}", e);
+            return;
+        }
     } else {
         // Create an mpsc channel
         let (tx, mut rx) = mpsc::channel::<Bytes>(32);
@@ -288,6 +259,8 @@ pub async fn stream_completion(
                 let json_blobs: Vec<&str> = chunk_str.split("\ndata: ").collect();
                 let mut blob_count = 0;
 
+                let mut add_newline = false;
+                let mut add_space = false;
                 for json_blob in json_blobs.iter() {
                     blob_count += 1;
                     debug!("Json Blob: {}/{} - {}", loop_count, blob_count, json_blob);
@@ -383,21 +356,21 @@ pub async fn stream_completion(
                                     }
 
                                     info!(
-                                        "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
-                                        choice.index,
-                                        id,
-                                        object,
-                                        model,
-                                        role,
-                                        created_date,
-                                        reason,
-                                        token_count + prompt_token_count,
-                                        prompt_token_count,
-                                        token_count,
-                                        byte_count,
-                                        token_count as u64 / duration.as_secs(),
-                                        pretty_time
-                                    );
+                                         "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
+                                         choice.index,
+                                         id,
+                                         object,
+                                         model,
+                                         role,
+                                         created_date,
+                                         reason,
+                                         token_count + prompt_token_count,
+                                         prompt_token_count,
+                                         token_count,
+                                         byte_count,
+                                         token_count as u64 / duration.as_secs(),
+                                         pretty_time
+                                     );
 
                                     // break the loop if we have a finish reason
                                     break;
@@ -415,20 +388,41 @@ pub async fn stream_completion(
 
                                 // check if we have content in the delta
                                 if let Some(content) = &choice.delta.content {
+                                    // if add_newline is true, add a new line before the content and set add_newline to false
+                                    let content = if add_newline {
+                                        add_newline = false;
+                                        format!("\n{}", content)
+                                    } else if add_space {
+                                        add_space = false;
+                                        format!(" {}", content)
+                                    } else {
+                                        content.to_string()
+                                    };
+
+                                    // check if contains only a new line, if so set add_newline to true
+                                    // if multiple new lines are present, only add one new line
+                                    // check for one or more new lines and if so set add_newline to true
+                                    if content.contains("\n") && content.trim() == "" {
+                                        add_newline = true;
+                                        continue;
+                                    }
+
+                                    // check if contains only a space, if so set add_space to true
+                                    if content.trim() == "" {
+                                        add_space = true;
+                                        continue;
+                                    }
+
                                     token_count += 1;
                                     byte_count += content.len();
-                                    etx.send(format!("{}", content))
-                                        .await
-                                        .expect("Failed to send content");
+                                    if let Err(e) = etx.send(format!("{}", content)).await {
+                                        error!("Failed to send content: {}", e);
+                                    }
 
-                                    process_and_print_token(
-                                        content,
-                                        &mut current_line_length,
-                                        break_line_length,
-                                    );
-
-                                    // flush stdout
-                                    std::io::stdout().flush().unwrap();
+                                    if let Err(e) = external_sender.send(content.to_string()).await
+                                    {
+                                        error!("Failed to send content to external sender: {}", e);
+                                    }
                                 }
                             } else {
                                 error!("No choices available.");
@@ -442,9 +436,11 @@ pub async fn stream_completion(
                             } else {
                                 // push to etx channel
                                 if show_output_errors {
-                                    etx.send(format!("ERROR: {} - {}", e, response_json))
-                                        .await
-                                        .expect("Failed to send error");
+                                    if let Err(e) =
+                                        etx.send(format!("ERROR: {} - {}", e, response_json)).await
+                                    {
+                                        error!("Failed to send error: {}", e);
+                                    }
                                     print!(".X.");
                                 }
                             }
@@ -457,36 +453,37 @@ pub async fn stream_completion(
         // collect answers from the worker
         let error_collector = tokio::spawn(async move {
             let mut errors = Vec::new();
-            let mut answers = Vec::new();
             while let Some(message) = erx.recv().await {
                 if message.starts_with("ERROR:") {
                     errors.push(message);
-                } else {
-                    // check if there is a period at the end of the message
-                    if message.ends_with('.') {
-                        // send to stable diffusion as a separate thread to avoid blocking
-                    }
-                    answers.push(message);
                 }
             }
-            (errors, answers) // Return collected errors and answers from the task
+            errors // Return collected errors from the task
         });
 
         // Main task to send chunks to the worker
-        while let Some(chunk) = response.chunk().await? {
-            tx.send(chunk).await.expect("Failed to send chunk");
+        while let Ok(Some(chunk)) = response.chunk().await {
+            if let Err(e) = tx.send(chunk).await {
+                error!("Failed to send chunk: {}", e);
+            }
         }
 
         // Close the channel by dropping tx
         drop(tx);
 
         // Await the worker task to finish processing
-        worker.await?;
+        if let Err(e) = worker.await {
+            error!("Worker task failed: {}", e);
+        }
 
-        // Await the error collector task to retrieve the collected errors and answers
-        let (errors, answers) = error_collector
-            .await
-            .unwrap_or_else(|_| (Vec::new(), Vec::new())); // Handle errors by returning empty vectors
+        // Await the error collector task to retrieve the collected errors
+        let errors = match error_collector.await {
+            Ok(errors) => errors,
+            Err(e) => {
+                error!("Error collector task failed: {}", e);
+                Vec::new()
+            }
+        };
 
         // Print errors
         if !errors.is_empty() {
@@ -495,14 +492,5 @@ pub async fn stream_completion(
                 println!("{}", error);
             }
         }
-
-        // Store LLM complete answer from the worker task
-        response_messages.push(Message {
-            role: "assistant".to_string(),
-            content: answers.join(""),
-        });
     }
-
-    // After processing all chunks/responses
-    Ok(response_messages) // Return the collected messages
 }
