@@ -402,7 +402,7 @@ pub async fn stream_completion(
                                     // check if contains only a new line, if so set add_newline to true
                                     // if multiple new lines are present, only add one new line
                                     // check for one or more new lines and if so set add_newline to true
-                                    if content.contains("\n") && content.trim() == "" {
+                                    if content.ends_with("\n") && content.trim() == "" {
                                         add_newline = true;
                                         continue;
                                     }
