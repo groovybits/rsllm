@@ -129,6 +129,13 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
                 .to_string();
         }
 
+        // remove strings of periods anywhere within the input text and replace with a single period.
+        // do it in a loop
+        let mut input = input.clone();
+        while input.contains("..") {
+            input = input.replace("..", ".");
+        }
+
         // check if input is "" empty and if so return here an empty Vec<u8>
         if input.is_empty() {
             return Vec::new();
