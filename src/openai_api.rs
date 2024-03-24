@@ -355,8 +355,8 @@ pub async fn stream_completion(
                                         duration = std::time::Duration::new(1, 0);
                                     }
 
-                                    info!(
-                                         "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {} tokens per second and {} seconds to complete.\n--\n",
+                                    debug!(
+                                         "\n--\nIndex {} ID {}\nObject {} by Model {} User {}\nCreated on {} Finish reason: {}\n {}/{}/{} Tokens/Prompt/Response {} Bytes at {}tps @ {}s.\n--\n",
                                          choice.index,
                                          id,
                                          object,
@@ -391,7 +391,7 @@ pub async fn stream_completion(
                                     // if add_newline is true, add a new line before the content and set add_newline to false
                                     let content = if add_newline {
                                         add_newline = false;
-                                        format!("\n{}", content)
+                                        format!(" {}", content)
                                     } else if add_space {
                                         add_space = false;
                                         format!(" {}", content)

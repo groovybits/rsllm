@@ -140,11 +140,28 @@ async fn main() {
                     // process_image returns an empty vec if there are no images
                     let mut images = process_image(message_data_clone.clone()).await;
 
+                    // check if image is all black
+                    let mut all_black = true;
+                    for img in images.iter() {
+                        for pixel in img.pixels() {
+                            if pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0 {
+                                all_black = false;
+                                break;
+                            }
+                        }
+                    }
+                    if all_black {
+                        log::error!("Image is all black, skipping");
+                        images = vec![];
+                    }
+
                     // Check if the processed images are empty
                     if images.is_empty() {
                         // If the processed images are empty, use the last_images
                         let last_images = last_images_clone.lock().await;
                         images = last_images.clone();
+                        println!("");
+                        log::error!("Images is empty, using last images");
                     } else {
                         // If the processed images are not empty, update the last_images
                         let mut last_images = last_images_clone.lock().await;
