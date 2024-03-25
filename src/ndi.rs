@@ -83,6 +83,9 @@ pub fn send_images_over_ndi(
         log::debug!("Video sending over NDI: frame size {}x{}", width, height);
 
         sender.send_video(frame);
+
+        // sleep for amount of a 60 fps frame
+        std::thread::sleep(std::time::Duration::from_millis(16));
     }
 
     Ok(())
