@@ -62,7 +62,7 @@ fn scale_image(
     }
 }
 
-#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StableDiffusionVersion {
     V1_5,
     V2_1,

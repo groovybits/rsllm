@@ -587,6 +587,24 @@ pub struct Args {
     )]
     pub sd_scaled_width: u32,
 
+    /// SD INTERMEDIARY IMAGES
+    #[clap(
+        long,
+        env = "SD_INTERMEDIARY_IMAGES",
+        default_value_t = false,
+        help = "SD Intermediary Images."
+    )]
+    pub sd_intermediary_images: bool,
+
+    /// Stable Diffusion Version
+    #[clap(
+        long,
+        env = "SD_MODEL",
+        default_value = "turbo",
+        help = "Stable Diffusion Model. options are 1.5, 2.1, xl, turbo"
+    )]
+    pub sd_model: String,
+
     /// hardsub font size
     #[clap(
         long,

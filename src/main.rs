@@ -28,7 +28,7 @@ use rsllm::openai_api::{format_messages_for_llm, stream_completion, Message, Ope
 #[cfg(feature = "ndi")]
 use rsllm::pipeline::send_to_ndi;
 use rsllm::pipeline::{process_image, process_speech, MessageData, ProcessedData};
-use rsllm::stable_diffusion::SDConfig;
+use rsllm::stable_diffusion::{SDConfig, StableDiffusionVersion};
 use rsllm::stream_data::{
     get_pid_map, identify_video_pid, is_mpegts_or_smpte2110, parse_and_store_pat, process_packet,
     update_pid_map, Codec, PmtInfo, StreamData, Tr101290Errors, PAT_PID,
@@ -159,6 +159,8 @@ async fn main() {
                         }
                     }
                     if all_black {
+                        std::io::stdout().flush().unwrap();
+                        println!("");
                         log::error!("Image is all black, skipping");
                         images = vec![];
                     }
@@ -168,6 +170,7 @@ async fn main() {
                         // If the processed images are empty, use the last_images
                         let last_images = last_images_clone.lock().await;
                         images = last_images.clone();
+                        std::io::stdout().flush().unwrap();
                         println!("");
                         log::error!("Images is empty, using last images");
                     } else {
@@ -666,6 +669,19 @@ async fn main() {
         sd_config.height = Some(args.sd_height);
         sd_config.width = Some(args.sd_width);
         sd_config.image_position = Some(args.image_alignment.clone());
+        sd_config.intermediary_images = args.sd_intermediary_images;
+        // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+        sd_config.sd_version = if args.sd_model == "1.5" {
+            StableDiffusionVersion::V1_5
+        } else if args.sd_model == "2.1" {
+            StableDiffusionVersion::V2_1
+        } else if args.sd_model == "xl" {
+            StableDiffusionVersion::Xl
+        } else if args.sd_model == "turbo" {
+            StableDiffusionVersion::Turbo
+        } else {
+            StableDiffusionVersion::V1_5
+        };
 
         let output_id = Uuid::new_v4().simple().to_string(); // Generates a UUID and converts it to a simple, hyphen-free string
         if args.sd_scaled_height > 0 {
@@ -796,12 +812,25 @@ async fn main() {
             sd_config.height = Some(args.sd_height);
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
+            sd_config.intermediary_images = args.sd_intermediary_images;
             if args.sd_scaled_height > 0 {
                 sd_config.scaled_height = Some(args.sd_scaled_height);
             }
             if args.sd_scaled_width > 0 {
                 sd_config.scaled_width = Some(args.sd_scaled_width);
             }
+            // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+            sd_config.sd_version = if args.sd_model == "1.5" {
+                StableDiffusionVersion::V1_5
+            } else if args.sd_model == "2.1" {
+                StableDiffusionVersion::V2_1
+            } else if args.sd_model == "xl" {
+                StableDiffusionVersion::Xl
+            } else if args.sd_model == "turbo" {
+                StableDiffusionVersion::Turbo
+            } else {
+                StableDiffusionVersion::V1_5
+            };
             pipeline_task_sender
                 .send(MessageData {
                     paragraph: "Alice is Shutting Down the AI Channel, goodbye!".to_string(),
@@ -1180,6 +1209,19 @@ async fn main() {
             sd_config.height = Some(args.sd_height);
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
+            sd_config.intermediary_images = args.sd_intermediary_images;
+            // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+            sd_config.sd_version = if args.sd_model == "1.5" {
+                StableDiffusionVersion::V1_5
+            } else if args.sd_model == "2.1" {
+                StableDiffusionVersion::V2_1
+            } else if args.sd_model == "xl" {
+                StableDiffusionVersion::Xl
+            } else if args.sd_model == "turbo" {
+                StableDiffusionVersion::Turbo
+            } else {
+                StableDiffusionVersion::V1_5
+            };
             if args.sd_scaled_height > 0 {
                 sd_config.scaled_height = Some(args.sd_scaled_height);
             }
@@ -1311,12 +1353,25 @@ async fn main() {
                         sd_config.height = Some(args.sd_height);
                         sd_config.width = Some(args.sd_width);
                         sd_config.image_position = Some(image_alignment);
+                        sd_config.intermediary_images = args.sd_intermediary_images;
                         if args.sd_scaled_height > 0 {
                             sd_config.scaled_height = Some(args.sd_scaled_height);
                         }
                         if args.sd_scaled_width > 0 {
                             sd_config.scaled_width = Some(args.sd_scaled_width);
                         }
+                        // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+                        sd_config.sd_version = if args.sd_model == "1.5" {
+                            StableDiffusionVersion::V1_5
+                        } else if args.sd_model == "2.1" {
+                            StableDiffusionVersion::V2_1
+                        } else if args.sd_model == "xl" {
+                            StableDiffusionVersion::Xl
+                        } else if args.sd_model == "turbo" {
+                            StableDiffusionVersion::Turbo
+                        } else {
+                            StableDiffusionVersion::V1_5
+                        };
 
                         let args_clone = args.clone();
                         let mimic3_voice_clone = mimic3_voice.clone();
@@ -1393,12 +1448,25 @@ async fn main() {
                 sd_config.height = Some(args.sd_height);
                 sd_config.width = Some(args.sd_width);
                 sd_config.image_position = Some(image_alignment);
+                sd_config.intermediary_images = args.sd_intermediary_images;
                 if args.sd_scaled_height > 0 {
                     sd_config.scaled_height = Some(args.sd_scaled_height);
                 }
                 if args.sd_scaled_width > 0 {
                     sd_config.scaled_width = Some(args.sd_scaled_width);
                 }
+                // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+                sd_config.sd_version = if args.sd_model == "1.5" {
+                    StableDiffusionVersion::V1_5
+                } else if args.sd_model == "2.1" {
+                    StableDiffusionVersion::V2_1
+                } else if args.sd_model == "xl" {
+                    StableDiffusionVersion::Xl
+                } else if args.sd_model == "turbo" {
+                    StableDiffusionVersion::Turbo
+                } else {
+                    StableDiffusionVersion::V1_5
+                };
 
                 let args_clone = args.clone();
                 let mimic3_voice_clone = mimic3_voice.clone();
@@ -1436,12 +1504,25 @@ async fn main() {
             sd_config.height = Some(args.sd_height);
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
+            sd_config.intermediary_images = args.sd_intermediary_images;
             if args.sd_scaled_height > 0 {
                 sd_config.scaled_height = Some(args.sd_scaled_height);
             }
             if args.sd_scaled_width > 0 {
                 sd_config.scaled_width = Some(args.sd_scaled_width);
             }
+            // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
+            sd_config.sd_version = if args.sd_model == "1.5" {
+                StableDiffusionVersion::V1_5
+            } else if args.sd_model == "2.1" {
+                StableDiffusionVersion::V2_1
+            } else if args.sd_model == "xl" {
+                StableDiffusionVersion::Xl
+            } else if args.sd_model == "turbo" {
+                StableDiffusionVersion::Turbo
+            } else {
+                StableDiffusionVersion::V1_5
+            };
             // just send a message with the last_message field true to indicate the end of the response
             let message_data_for_pipeline = MessageData {
                 paragraph: args.greeting.to_string(),
