@@ -122,8 +122,9 @@ async fn main() {
         let pipeline_sem = Arc::clone(&pipeline_sem);
         let processed_data_store = processed_data_store.clone();
         // create a black frame image in the vec[] to use initially as last_images
+        // Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>
         let black_frame = image::ImageBuffer::from_fn(1920, 1080, |_, _| image::Rgb([0, 0, 0]));
-        let last_images = Arc::new(Mutex::new(vec![black_frame]));
+        let last_images = Arc::new(Mutex::new(vec![black_frame.clone()]));
         tokio::spawn(async move {
             while let Some(message_data) = pipeline_task_receiver.recv().await {
                 let processed_data_store = processed_data_store.clone();
@@ -138,6 +139,10 @@ async fn main() {
                         .acquire()
                         .await
                         .expect("failed to acquire pipeline semaphore permit");
+
+                    // Create a new black_frame for each iteration
+                    let black_frame =
+                        image::ImageBuffer::from_fn(1920, 1080, |_, _| image::Rgb([0, 0, 0]));
 
                     // check length of message_data, if it is less than 80 characters, use last_images
                     /*if message_data_clone.paragraph.len() < 80 {
@@ -162,21 +167,26 @@ async fn main() {
                         std::io::stdout().flush().unwrap();
                         println!("");
                         log::error!("Image is all black, skipping");
-                        images = vec![];
                     }
 
                     // Check if the processed images are empty
-                    if images.is_empty() {
+                    if images.is_empty() || all_black {
                         // If the processed images are empty, use the last_images
-                        let last_images = last_images_clone.lock().await;
-                        images = last_images.clone();
-                        std::io::stdout().flush().unwrap();
-                        println!("");
-                        log::error!("Images is empty, using last images");
+                        let last_images_guard = last_images_clone.lock().await;
+                        if !last_images_guard.is_empty() {
+                            images = last_images_guard.clone();
+                            std::io::stdout().flush().unwrap();
+                            println!("");
+                            log::error!("Images is empty, using last images");
+                        } else {
+                            println!("");
+                            log::error!("Last Images is empty, using black image");
+                            images = vec![black_frame];
+                        }
                     } else {
                         // If the processed images are not empty, update the last_images
-                        let mut last_images = last_images_clone.lock().await;
-                        *last_images = images.clone();
+                        let mut last_images_guard = last_images_clone.lock().await;
+                        *last_images_guard = images.clone();
                     }
 
                     // send images to the image channel
@@ -690,6 +700,7 @@ async fn main() {
         if args.sd_scaled_width > 0 {
             sd_config.scaled_width = Some(args.sd_scaled_width);
         }
+        sd_config.n_steps = args.sd_n_steps;
         // just send a message with the last_message field true to indicate the end of the response
         let message_data_for_pipeline = MessageData {
             paragraph: args.greeting.to_string(),
@@ -831,6 +842,7 @@ async fn main() {
             } else {
                 StableDiffusionVersion::V1_5
             };
+            sd_config.n_steps = args.sd_n_steps;
             pipeline_task_sender
                 .send(MessageData {
                     paragraph: "Alice is Shutting Down the AI Channel, goodbye!".to_string(),
@@ -1228,6 +1240,7 @@ async fn main() {
             if args.sd_scaled_width > 0 {
                 sd_config.scaled_width = Some(args.sd_scaled_width);
             }
+            sd_config.n_steps = args.sd_n_steps;
             // just send a message with the last_message field true to indicate the end of the response
             let message_data_for_pipeline = MessageData {
                 paragraph: query.clone().to_string(),
@@ -1372,6 +1385,7 @@ async fn main() {
                         } else {
                             StableDiffusionVersion::V1_5
                         };
+                        sd_config.n_steps = args.sd_n_steps;
 
                         let args_clone = args.clone();
                         let mimic3_voice_clone = mimic3_voice.clone();
@@ -1467,6 +1481,7 @@ async fn main() {
                 } else {
                     StableDiffusionVersion::V1_5
                 };
+                sd_config.n_steps = args.sd_n_steps;
 
                 let args_clone = args.clone();
                 let mimic3_voice_clone = mimic3_voice.clone();
@@ -1523,6 +1538,7 @@ async fn main() {
             } else {
                 StableDiffusionVersion::V1_5
             };
+            sd_config.n_steps = args.sd_n_steps;
             // just send a message with the last_message field true to indicate the end of the response
             let message_data_for_pipeline = MessageData {
                 paragraph: args.greeting.to_string(),

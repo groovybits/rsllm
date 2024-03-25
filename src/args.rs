@@ -605,6 +605,10 @@ pub struct Args {
     )]
     pub sd_model: String,
 
+    /// sd_n_steps - number of steps for SD
+    #[clap(long, env = "SD_N_STEPS", help = "SD N Steps.")]
+    pub sd_n_steps: Option<usize>,
+
     /// hardsub font size
     #[clap(
         long,

@@ -10,29 +10,35 @@
 
 # === CONFIGURATION ===
 BUILD_TYPE=release
+## Interstitial message
+GREETING="Hi I'm Alice, ask me a question by typing '!message Alice <message>' or chat with me in the chat. Please remember to follow me!"
+## LLM Model Config
 #MODEL=gemma
+USE_API=1
 MODEL=mistral
 MODEL_ID=7b-it
 MAX_TOKENS=600
-ALIGNMENT=right
 TEMPERATURE=0.8
+CONTEXT_SIZE=4000
+QUANTIZED=0
+KEEP_HISTORY=1
+## Pipeline Settings
+DAEMON=1
 CONTINUOUS=1
 POLL_INTERVAL=1000
 PIPELINE_CONCURRENCY=4
-TWITCH_LLM_CONCURRENCY=1
-CONTEXT_SIZE=4000
-SUBTITLES=1
-DAEMON=1
-KEEP_HISTORY=1
-QUANTIZED=0
-GREETING="Hi I'm Alice, ask me a question by typing '!message Alice <message>' or chat with me in the chat. Please remember to follow me!"
-TWITCH_CHAT_HISTORY=16
-TWITCH_MODEL=mistral
 ASYNC_CONCURRENCY=0
-USE_API=1
 NDI_TIMEOUT=300
+## Twitch Chat Settings
+TWITCH_MODEL=mistral
+TWITCH_LLM_CONCURRENCY=1
+TWITCH_CHAT_HISTORY=16
+## Stable Diffusion Settings
 SD_MODEL=turbo
 SD_INTERMEDIARY_IMAGES=true
+SD_N_STEPS=3
+ALIGNMENT=right
+SUBTITLES=1
 # === END OF CONFIGURATION ===
 #
 #
@@ -74,30 +80,31 @@ PROMPT="create a story that continues the last story in history and ends with th
 
 DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     RUST_BACKTRACE=full target/${BUILD_TYPE}/rsllm \
+    --greeting "$GREETING" \
     --query "$PROMPT" \
     --system-prompt "$SYSTEM_PROMPT" \
-    --candle-llm $MODEL \
     --twitch-client \
     --twitch-chat-history $TWITCH_CHAT_HISTORY \
     --twitch-llm-concurrency $TWITCH_LLM_CONCURRENCY \
     --twitch-model $TWITCH_MODEL \
+    --mimic3-tts \
     --sd-image \
     --sd-model $SD_MODEL \
+    --sd-n-steps $SD_N_STEPS \
+    --image-alignment $ALIGNMENT \
+    $SUBTITLE_CMD \
     $SD_INTERMEDIARY_IMAGES_CMD \
     --ndi-audio \
     --ndi-images \
     --ndi-timeout $NDI_TIMEOUT \
-    --mimic3-tts \
+    $USE_API_CMD \
+    --candle-llm $MODEL \
+    --llm-history-size $CONTEXT_SIZE \
     --model-id $MODEL_ID \
-    --image-alignment $ALIGNMENT \
     --temperature $TEMPERATURE \
     --pipeline-concurrency $PIPELINE_CONCURRENCY \
     --poll-interval $POLL_INTERVAL \
-    --llm-history-size $CONTEXT_SIZE \
-    --greeting "$GREETING" \
     $SINGLE_CONCURRENCY_CMD \
-    $USE_API_CMD \
-    $SUBTITLE_CMD \
     $DAEMON_CMD \
     $CONTINUOUS_CMD \
     $NO_HISTORY_CMD \

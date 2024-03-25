@@ -66,7 +66,8 @@ pub async fn process_image(mut data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Ve
                 return images.clone();
             }
             Err(e) => {
-                eprintln!("\nError generating images for {}: {:?}", data.output_id, e);
+                println!("");
+                log::error!("Error generating images for {}: {:?}", data.output_id, e);
             }
         }
     }
@@ -83,6 +84,13 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
 
         // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
         let input = adjust_caps(&input);
+
+        // remove strings of periods anywhere within the input text and replace with a single period.
+        // do it in a loop
+        let mut input = input.clone();
+        while input.contains("..") {
+            input = input.replace("..", ".");
+        }
 
         // remove all extra spaces besides 1 space between words, if all spaces left then reduce to '"
         let input = input
@@ -130,16 +138,12 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
                 .to_string();
         }
 
-        // remove strings of periods anywhere within the input text and replace with a single period.
-        // do it in a loop
-        let mut input = input.clone();
-        while input.contains("..") {
-            input = input.replace("..", ".");
-        }
-
         // check if input is "" empty and if so return here an empty Vec<u8>
         if input.is_empty() {
-            return Vec::new();
+            // write a generic string to input saying that it is empty
+            input = "Attention: The TTS input text was empty. Please provide a valid input text. Error with TTS input text."
+                .to_string();
+            //return Vec::new();
         }
 
         debug!("\nTTS Speech text input: {}", input);
