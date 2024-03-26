@@ -97,7 +97,7 @@ async fn on_msg(
     if !msg.text().starts_with("!help") && !msg.text().starts_with("!message") {
         // LLM Thread
         let (external_sender, mut external_receiver) = tokio::sync::mpsc::channel::<String>(100);
-        let max_tokens = 120;
+        let max_tokens = args.twitch_max_tokens;
         let temperature = 0.8;
         let quantized = false;
         let max_messages = args.twitch_chat_history;

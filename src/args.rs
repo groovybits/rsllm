@@ -735,6 +735,15 @@ pub struct Args {
     )]
     pub twitch_model: String,
 
+    /// Twitch Max Tokens - max tokens for LLM
+    #[clap(
+        long,
+        env = "TWITCH_MAX_TOKENS",
+        default_value_t = 150,
+        help = "Twitch Max Tokens."
+    )]
+    pub twitch_max_tokens: usize,
+
     /// single concurrency - bool single concurrency for all models, wait between each request
     #[clap(
         long,
