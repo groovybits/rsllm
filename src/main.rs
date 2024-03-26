@@ -21,6 +21,7 @@ use log::{debug, error, info};
 use rsllm::args::Args;
 use rsllm::candle_gemma::gemma;
 use rsllm::candle_mistral::mistral;
+use rsllm::clean_tts_input;
 use rsllm::count_tokens;
 use rsllm::handle_long_string;
 use rsllm::network_capture::{network_capture, NetworkCapture};
@@ -1270,9 +1271,14 @@ async fn main() {
             // Store the received token
             answers.push(received.clone());
 
+            // clean tts input
+            let tts_text = clean_tts_input(current_paragraph.join(""));
+
             let token_len = count_tokens(&current_paragraph.join(""));
             // If a newline is at the end of the token, process the accumulated paragraph for image generation
-            if received.contains('\n') && !current_paragraph.is_empty()
+            if !tts_text.await.is_empty()
+                && received.contains('\n')
+                && !current_paragraph.is_empty()
                 || (token_len as f32 > args.sd_max_length as f32 / 1.8
                     && (received.contains('.')
                         || received.contains('?')
@@ -1288,9 +1294,7 @@ async fn main() {
                 );
 
                 // Join the current paragraph tokens into a single String without adding extra spaces
-                if !current_paragraph.is_empty()
-                /*&& !current_paragraph.join("").len() > 80*/
-                {
+                if !current_paragraph.is_empty() {
                     // check if token has the new line character, split it at the new line into two parts, then put the first part onto
                     // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
                     // Safely handle split at the newline character
@@ -1441,8 +1445,11 @@ async fn main() {
             }
         }
 
+        // clean tts input
+        let tts_text = clean_tts_input(current_paragraph.join(""));
+
         // Join the last paragraph tokens into a single String without adding extra spaces
-        if current_paragraph.len() > 0 {
+        if !tts_text.await.is_empty() && current_paragraph.len() > 0 {
             // ** Start of TTS and Image Generation **
             // Check if image generation is enabled and proceed
             if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {

@@ -85,67 +85,6 @@ pub async fn process_speech(data: MessageData) -> Vec<u8> {
         // use function to adjust caps pub fn adjust_caps(paragraph: &str) -> String {
         let input = adjust_caps(&input);
 
-        // remove strings of periods anywhere within the input text and replace with a single period.
-        // do it in a loop
-        let mut input = input.clone();
-        while input.contains("..") {
-            input = input.replace("..", ".");
-        }
-
-        // remove all extra spaces besides 1 space between words, if all spaces left then reduce to '"
-        let input = input
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .join(" ")
-            .replace(" .", ".")
-            .replace(" ,", ",")
-            .replace(" ?", "?")
-            .replace(" !", "!")
-            .replace(" :", ":")
-            .replace(" ;", ";");
-
-        // remove any special characters from the text except for normal punctuation ./,;:?
-        let input = input
-            .chars()
-            .filter(|c| c.is_alphanumeric() || c.is_whitespace() || c.is_ascii_punctuation())
-            .collect::<String>();
-
-        // split into sentences and check if any begin with special characters, remove them
-        let input = input
-            .split('.')
-            .map(|s| {
-                let s = s.trim();
-                if s.starts_with(|c: char| c.is_ascii_punctuation()) {
-                    &s[1..]
-                } else {
-                    s
-                }
-            })
-            .collect::<Vec<&str>>()
-            .join(". ");
-
-        // remove any non ascii characters from the ending of the input text
-        let input = input
-            .chars()
-            .take_while(|c| c.is_ascii())
-            .collect::<String>();
-
-        // loop removing end punctuation until no more
-        let mut input = input.clone();
-        while input.ends_with(|c: char| !c.is_alphanumeric()) {
-            input = input
-                .trim_end_matches(|c: char| !c.is_alphanumeric())
-                .to_string();
-        }
-
-        // check if input is "" empty and if so return here an empty Vec<u8>
-        if input.is_empty() {
-            // write a generic string to input saying that it is empty
-            input = "Attention: The TTS input text was empty. Please provide a valid input text. Error with TTS input text."
-                .to_string();
-            //return Vec::new();
-        }
-
         debug!("\nTTS Speech text input: {}", input);
 
         let bytes_result = if data.args.oai_tts {
