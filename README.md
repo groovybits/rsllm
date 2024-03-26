@@ -4,7 +4,7 @@ RsLLM is AI pipeline 100% in Rust for Transformer/Tensor code that is leveraging
 
 ## Key Features
 
--   **Local LLM Focus**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
+-   **Local LLM**: Utilizes Candle's Rust-based LLMs, Mistral and Gemma, for direct and efficient AI interactions, prioritizing local execution to harness the full power of MacOS Metal GPUs.
 -   **Comprehensive AI Analyzer**: Embeds a sophisticated AI analyzer capable of processing inputs and generating outputs across text, voice, speech, and images, facilitating a seamless flow of AI-generated content. (Work in Progress)
 -   **Voice and Speech Integration**: Plans to incorporate Whisper for voice-driven interactions, akin to Alexa, allowing users to communicate with the toolkit using voice commands and receive streaming text inputs in response. (Planned Feature)
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
@@ -19,9 +19,9 @@ RsLLM is AI pipeline 100% in Rust for Transformer/Tensor code that is leveraging
 
 Candle, a project by Huggingface, offers Rust-native LLMs like Mistral and Gemma, optimized for Metal GPUs on MacOS. This integration facilitates local execution of LLMs, ensuring high performance and low latency in AI model interactions.
 
-### OpenAI API Support
+### OpenAI API Support for llama.cpp LLM server backend
 
-While RsLLM's primary focus is on running local LLMs, it also provides support for the OpenAI API, enabling users to leverage external AI models when necessary. This feature ensures versatility and broad applicability in various AI-driven projects.
+While RsLLM's primary focus is on running local LLMs, it also provides support for the OpenAI API, enabling users to leverage external AI models when necessary. This feature ensures versatility and broad applicability in various AI-driven projects using custom models.
 
 ### Real-time AI Analysis and Content Generation
 
@@ -32,7 +32,8 @@ RsLLM excels in analyzing real-time data streams and generating AI-driven conten
 ### Prerequisites
 
 -   Ensure Rust and Cargo are installed. [Rust Installation Guide](https://www.rust-lang.org/tools/install).
--   MacOS system with an M1/M2/M3 ARM GPU.
+-   Ideally a MacOS system with an M1/M2/M3 ARM GPU. Nvidia may work, need someone to fix it up since I do not have Nvidia GPUs.
+-   NDI Library for OBS NDI streaming output. This is optional.
 
 ### Setup Guide
 
@@ -68,9 +69,10 @@ RsLLM is designed to facilitate a wide range of AI-driven operations, from gener
 
     ```bash
     ./scripts/compile.sh # Build RsLLM
-    ./scripts/mpeg_analyzer.sh
-    ./scripts/mpeg_poetry.sh
-    ./scripts/system_health.sh
+    ./scripts/twitch.sh  # Full command line shown for most features
+    ./scripts/mpeg_analyzer.sh # Experimental MpegTS Analyzer mode (WIP)
+    ./scripts/mpeg_poetry.sh   # Fun poetry about MpegTS Broadcasting with stream input prompt injection
+    ./scripts/system_health.sh # System health status from OS Stats prompt injection 
     ```
 
 -   **Running with Candle and OS Stats for AI System Analysis**:
@@ -78,7 +80,7 @@ RsLLM is designed to facilitate a wide range of AI-driven operations, from gener
     cargo run --release --features fonts,ndi,mps,metavoice,audioplayer -- \
       --candle_llm gemma \
       --model-id "2b-it" \
-      --max-tokens 1000 \
+      --max-tokens 800 \
       --temperature 0.8 \
       --ai-os-stats \
       --sd-image \
@@ -117,21 +119,21 @@ RsLLM's mission is to research and explore the implementation of a versatile, hi
 
 ### Priority:
 
+-   Preserve history using a local database (e.g., SQLite or MongoDB) and feed it into a Chroma DB for RAG.
 -   MpegTS Chat for freeform analysis over current and historical MPEG-TS stream data.
 -   Improve Image/TTS latency and async coordination of output. Use an NDI pre-queue for images and audio to ensure synchronization and minimize latency.
 -   Implement RAG (Retrieval Augmented Generation) using Chromium for document caching and embeddings, providing augmented documentation-based LLM context.
 -   Merge MetaVoice fixes from Candle as they become available (WIP).
+-   Implement Perceptual Hashes (DCT64-based) for frame fingerprinting to detect changes in video frames, recognize and learn repeating content sequences, verify commercial breaks, and detect ad insertions. Integrate SCTE-35 and maintain a database of fingerprinted content for various quality checks, break/logo fidelity confirmation, and presence detection.
+-   Enable daemon mode to run and listen for requests via ZeroMQ input and pass to output.
+-   Expand options for LLMs and the OpenAI API.
 
 ### Future Enhancements:
 
 -   Utilize ffmpeg-next-sys to process video and audio in real-time for generating frames, audio, and text-to-video, as well as transforming video and creating mood videos or themed stories. Explore the possibilities of combining an LLM with FFmpeg.
 -   Enhance MpegTS Analyzer for real-time analysis of MPEG-TS streams, reporting, and AI-driven issue detection.
--   Implement Perceptual Hashes (DCT64-based) for frame fingerprinting to detect changes in video frames, recognize and learn repeating content sequences, verify commercial breaks, and detect ad insertions. Integrate SCTE-35 and maintain a database of fingerprinted content for various quality checks, break/logo fidelity confirmation, and presence detection.
 -   Improve network and system analyzers.
--   Preserve history using a local database (e.g., SQLite or MongoDB) and feed it into a Chroma DB for RAG.
 -   Utilize Chroma DB for RAG with documents to augment prompts with relevant information.
--   Enable daemon mode to run and listen for requests via ZeroMQ input and pass to output.
--   Expand options for LLMs and the OpenAI API.
 -   Implement Cap'n Proto for serialization, deserialization, and modular ZeroMQ protocol communication.
 -   Integrate MetaMusic for mood-based music generation based on results.
 -   Develop talking head video generation with consistent frame context, ensuring objects remain the same within frames.
