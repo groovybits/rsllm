@@ -1283,6 +1283,7 @@ async fn main() {
                     && (received.contains('.')
                         || received.contains('?')
                         || received.contains('\n')
+                        || received.contains(']')
                         || received.contains('!'))
                     || (token_len >= (args.sd_max_length as f32) as usize
                         && (received.contains(' '))))
@@ -1299,20 +1300,30 @@ async fn main() {
                     // the current paragraph and the second part into the answers and current_paragraph later after we store the current paragraph
                     // Safely handle split at the newline character
                     let mut split_pos = received.len();
-                    for delimiter in ['\n', '.', ',', '?', '!'] {
+                    let mut found_delimiter = false;
+                    for delimiter in ['\n', ',', '?', '!', ']'] {
                         if let Some(pos) = received.find(delimiter) {
                             // Adjust position to keep the delimiter with the first part, except for '\n'
                             let end_pos = if delimiter == '\n' { pos } else { pos + 1 };
                             split_pos = split_pos.min(end_pos);
+                            found_delimiter = true;
                             break; // Break after finding the first delimiter
                         }
                     }
-                    // Handle ' ' delimiter separately
-                    if split_pos == received.len() {
-                        if let Some(pos) = received.find(' ') {
-                            // Adjust position to keep the delimiter with the first part, except for '\n'
-                            let end_pos = pos + 1;
-                            split_pos = split_pos.min(end_pos);
+                    // Handle '.' and ' ' delimiter separately
+                    if found_delimiter == false {
+                        if split_pos == received.len() {
+                            if let Some(pos) = received.find('.') {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = pos + 1;
+                                split_pos = split_pos.min(end_pos);
+                            }
+                        } else if split_pos == received.len() {
+                            if let Some(pos) = received.find(' ') {
+                                // Adjust position to keep the delimiter with the first part, except for '\n'
+                                let end_pos = pos + 1;
+                                split_pos = split_pos.min(end_pos);
+                            }
                         }
                     }
 
