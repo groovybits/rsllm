@@ -13,14 +13,17 @@ BUILD_TYPE=release
 ## Interstitial message
 GREETING="Hi I'm Alice, ask me a question by typing '!message Alice <message>' or chat with me in the chat. Please remember to follow me!"
 ## LLM Model Config
-#MODEL=gemma
-USE_API=1
+# Candle settings
+USE_CANDLE=0
 MODEL=mistral
+#MODEL=gemma
 MODEL_ID=7b-it
+# Generic settings
+USE_API=1
 CHAT_FORMAT=chatml
 MAX_TOKENS=1500
 TEMPERATURE=0.8
-CONTEXT_SIZE=16000
+CONTEXT_SIZE=8000
 QUANTIZED=0
 KEEP_HISTORY=1
 ## Pipeline Settings
@@ -55,11 +58,15 @@ QUANTIZED_CMD=
 ASYNC_CONCURRENCY_CMD=
 SD_INTERMEDIARY_IMAGES_CMD=
 SD_API_CMD=
+USE_CANDLE_CMD=
 if [ "$SD_API" == 1 ]; then
     SD_API_CMD="--sd-api"
 fi
 if [ "$SD_INTERMEDIARY_IMAGES" == 1 ]; then
     SD_INTERMEDIARY_IMAGES_CMD="--sd-intermediary-images"
+fi
+if [ "$USE_CANDLE_CMD" == 1 ]; then
+    USE_CANDLE_CMD="--candle-llm $MODEL"
 fi
 if [ "$USE_API" == 1 ]; then
     USE_API_CMD="--use-api"
@@ -113,7 +120,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --ndi-images \
     --ndi-timeout $NDI_TIMEOUT \
     $USE_API_CMD \
-    --candle-llm $MODEL \
+    $USE_CANDLE_CMD \
     --llm-history-size $CONTEXT_SIZE \
     --chat-format $CHAT_FORMAT \
     --model-id $MODEL_ID \
