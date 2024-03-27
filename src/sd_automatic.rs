@@ -6,23 +6,17 @@ use serde::{Deserialize, Serialize};
 use crate::stable_diffusion::SDConfig;
 use base64::engine::general_purpose;
 use base64::Engine;
+use crate::stable_diffusion::StableDiffusionVersion;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct AutomaticPayload {
-    prompt: String,
-    negative_prompt: String,
-    steps: usize,
-    width: usize,
-    height: usize,
-    cfg_scale: f64,
-    sampler_index: String,
-    seed: u64,
-    n_iter: usize,
-    batch_size: usize,
-}
-
-pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>> {
+pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>, anyhow::Error> {
     let client = Client::new();
+
+    let model = match config.sd_version {
+        StableDiffusionVersion::V1_5 => "v1-5-pruned-emaonly.ckpt",
+        StableDiffusionVersion::V2_1 => "v2-1_768-ema-pruned.ckpt",
+        StableDiffusionVersion::Xl => "stabilityai/stable-diffusion-xl-1024-1.0.ckpt",
+        StableDiffusionVersion::Turbo => "madebyollin/turbo-diffusion.ckpt",
+    };
 
     let payload = AutomaticPayload {
         prompt: config.prompt,
@@ -35,6 +29,9 @@ pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8
         seed: config.seed.unwrap_or_else(rand::random) as u64,
         n_iter: config.num_samples,
         batch_size: 1,
+        override_settings: OverrideSettings {
+            sd_model_checkpoint: model.to_string(),
+        },
     };
 
     let response = client
@@ -57,4 +54,24 @@ pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8
     }
 
     Ok(images)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OverrideSettings {
+    sd_model_checkpoint: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AutomaticPayload {
+    prompt: String,
+    negative_prompt: String,
+    steps: usize,
+    width: usize,
+    height: usize,
+    cfg_scale: f64,
+    sampler_index: String,
+    seed: u64,
+    n_iter: usize,
+    batch_size: usize,
+    override_settings: OverrideSettings,
 }
