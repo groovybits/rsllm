@@ -1,14 +1,17 @@
+use crate::scale_image;
+use crate::stable_diffusion::SDConfig;
+use crate::stable_diffusion::StableDiffusionVersion;
 use anyhow::Result;
+use base64::engine::general_purpose;
+use base64::Engine;
 use image::ImageBuffer;
 use image::Rgb;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use crate::stable_diffusion::SDConfig;
-use base64::engine::general_purpose;
-use base64::Engine;
-use crate::stable_diffusion::StableDiffusionVersion;
 
-pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>, anyhow::Error> {
+pub async fn sd_auto(
+    config: SDConfig,
+) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8>>>, anyhow::Error> {
     let client = Client::new();
 
     let model = match config.sd_version {
@@ -53,7 +56,19 @@ pub async fn sd_auto(config: SDConfig) -> Result<Vec<ImageBuffer<Rgb<u8>, Vec<u8
         images.push(image_rgb8);
     }
 
-    Ok(images)
+    let scaled_images: Vec<ImageBuffer<Rgb<u8>, Vec<u8>>> = images
+        .into_iter()
+        .map(|image| {
+            scale_image(
+                image,
+                config.scaled_width,
+                config.scaled_height,
+                config.image_position.clone(),
+            )
+        })
+        .collect();
+
+    Ok(scaled_images)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
