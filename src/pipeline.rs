@@ -16,6 +16,7 @@ use crate::ndi::send_images_over_ndi;
 use crate::openai_tts::tts as oai_tts;
 use crate::openai_tts::Request as OAITTSRequest;
 use crate::openai_tts::Voice as OAITTSVoice;
+use crate::sd_automatic::sd_auto;
 use crate::stable_diffusion::{sd, SDConfig};
 use crate::ApiError;
 use image::ImageBuffer;
@@ -42,8 +43,14 @@ pub async fn process_image(mut data: MessageData) -> Vec<ImageBuffer<Rgb<u8>, Ve
     data.sd_config.prompt = crate::truncate_tokens(&data.sd_config.prompt, data.args.sd_text_min);
     if data.args.sd_image {
         debug!("Generating images with prompt: {}", data.sd_config.prompt);
-        let sd_clone = sd.clone();
-        match sd_clone(data.sd_config).await {
+
+        let images = if data.args.sd_api {
+            sd_auto(data.sd_config).await
+        } else {
+            sd(data.sd_config).await
+        };
+
+        match images {
             // Ensure `sd` function is async and await its result
             Ok(images) => {
                 // Save images to disk

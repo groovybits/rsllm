@@ -489,6 +489,15 @@ pub struct Args {
     )]
     pub sd_image: bool,
 
+    /// Use SD API - use the stable diffusion server api from automatic111111
+    #[clap(
+        long,
+        env = "SD_API",
+        default_value_t = false,
+        help = "SD API - use the stable diffusion server api from automatic111111. Must install it and run on localhost."
+    )]
+    pub sd_api: bool,
+
     /// SD Max Length in tokens for SD Image
     #[clap(
         long,

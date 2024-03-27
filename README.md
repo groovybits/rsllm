@@ -10,6 +10,7 @@ RsLLM is AI pipeline 100% in Rust for Transformer/Tensor code that is leveraging
 -   **Image Generation and NDI Output**: Supports generating images from text descriptions and outputting through NDI for a wide range of applications, including real-time content creation and broadcasting. (In Beta Testing)
 -   **TTS Support**: Candle implements TTS using MetaVoice (default, WIP), OpenAI TTS API (high-quality, real-time), and Mimic3 TTS API (local, free). MetaVoice is being optimized for Metal GPUs, while OpenAI TTS API generates premium speech at a cost. Mimic3 TTS API requires running the mimic3-server but offers a good alternative to OpenAI TTS API. [Mimic3 GitHub](https://github.com/MycroftAI/mimic3)
 -   **Twitch Chat Interactive AI**: Integrated Twitch chat for real-time AI interactions, enabling users to engage with the toolkit through chat commands and receive AI-generated responses.
+-   **Stable Diffusion Image Generation**: Supports either Candle stable diffusion or the AUTOMATIC111111 API server. <https://github.com/AUTOMATIC1111/stable-diffusion-webui/>
 
 ![RSLLM](https://storage.googleapis.com/groovybits/images/rsllm/rsllm.webp)
 

@@ -19,6 +19,7 @@ pub mod network_capture;
 pub mod openai_api;
 pub mod openai_tts;
 pub mod pipeline;
+pub mod sd_automatic;
 pub mod stable_diffusion;
 pub mod stream_data;
 pub mod system_stats;
@@ -28,7 +29,10 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 pub use system_stats::{get_system_stats, SystemStats};
 pub mod candle_gemma;
-use image::{ImageBuffer, Rgb, Rgba};
+use image::{
+    imageops::{resize, FilterType},
+    ImageBuffer, Rgb, Rgba,
+};
 #[cfg(feature = "fonts")]
 use imageproc::drawing::draw_text_mut;
 #[cfg(feature = "fonts")]
@@ -454,4 +458,50 @@ pub async fn clean_tts_input(input: String) -> String {
     }
 
     input
+}
+
+pub fn scale_image(
+    image: ImageBuffer<Rgb<u8>, Vec<u8>>,
+    new_width: Option<u32>,
+    new_height: Option<u32>,
+    image_position: Option<String>,
+) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
+    if let (Some(target_width), Some(target_height)) = (new_width, new_height) {
+        if target_width == 0 || target_height == 0 {
+            return image;
+        }
+
+        let (orig_width, orig_height) = image.dimensions();
+        let scale = (target_width as f32 / orig_width as f32)
+            .min(target_height as f32 / orig_height as f32);
+        let scaled_width = (orig_width as f32 * scale).round() as u32;
+        let scaled_height = (orig_height as f32 * scale).round() as u32;
+
+        // Scale the image while preserving the aspect ratio.
+        let scaled_image = resize(&image, scaled_width, scaled_height, FilterType::Lanczos3);
+
+        // Create a new image with the target dimensions filled with black pixels.
+        let mut new_image = ImageBuffer::from_pixel(target_width, target_height, Rgb([0, 0, 0]));
+
+        // Calculate the offsets to position the scaled image based on image_position.
+        let x_offset = match image_position.as_deref() {
+            Some("left") => 0,
+            Some("right") => target_width - scaled_width,
+            _ => (target_width - scaled_width) / 2, // Default to center if it's not "left" or "right"
+        };
+        let y_offset = (target_height - scaled_height) / 2;
+
+        // Copy the scaled image onto the new image at the calculated offset.
+        for (x, y, pixel) in scaled_image.enumerate_pixels() {
+            // Ensure the pixel is within the bounds of the target image dimensions.
+            if x + x_offset < target_width && y + y_offset < target_height {
+                new_image.put_pixel(x + x_offset, y + y_offset, *pixel);
+            }
+        }
+
+        new_image
+    } else {
+        // Return the original image if dimensions are not specified.
+        image
+    }
 }

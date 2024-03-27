@@ -4,63 +4,15 @@ extern crate accelerate_src;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
+use crate::scale_image;
 use crate::truncate_tokens;
 use candle_transformers::models::stable_diffusion;
 
 use anyhow::{Error as E, Result};
 use candle_core::{DType, Device, IndexOp, Module, Tensor, D};
-use image::{
-    imageops::{resize, FilterType},
-    ImageBuffer, Rgb,
-};
+use image::{ImageBuffer, Rgb};
 use log::debug;
 use tokenizers::Tokenizer;
-
-fn scale_image(
-    image: ImageBuffer<Rgb<u8>, Vec<u8>>,
-    new_width: Option<u32>,
-    new_height: Option<u32>,
-    image_position: Option<String>,
-) -> ImageBuffer<Rgb<u8>, Vec<u8>> {
-    if let (Some(target_width), Some(target_height)) = (new_width, new_height) {
-        if target_width == 0 || target_height == 0 {
-            return image;
-        }
-
-        let (orig_width, orig_height) = image.dimensions();
-        let scale = (target_width as f32 / orig_width as f32)
-            .min(target_height as f32 / orig_height as f32);
-        let scaled_width = (orig_width as f32 * scale).round() as u32;
-        let scaled_height = (orig_height as f32 * scale).round() as u32;
-
-        // Scale the image while preserving the aspect ratio.
-        let scaled_image = resize(&image, scaled_width, scaled_height, FilterType::Lanczos3);
-
-        // Create a new image with the target dimensions filled with black pixels.
-        let mut new_image = ImageBuffer::from_pixel(target_width, target_height, Rgb([0, 0, 0]));
-
-        // Calculate the offsets to position the scaled image based on image_position.
-        let x_offset = match image_position.as_deref() {
-            Some("left") => 0,
-            Some("right") => target_width - scaled_width,
-            _ => (target_width - scaled_width) / 2, // Default to center if it's not "left" or "right"
-        };
-        let y_offset = (target_height - scaled_height) / 2;
-
-        // Copy the scaled image onto the new image at the calculated offset.
-        for (x, y, pixel) in scaled_image.enumerate_pixels() {
-            // Ensure the pixel is within the bounds of the target image dimensions.
-            if x + x_offset < target_width && y + y_offset < target_height {
-                new_image.put_pixel(x + x_offset, y + y_offset, *pixel);
-            }
-        }
-
-        new_image
-    } else {
-        // Return the original image if dimensions are not specified.
-        image
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StableDiffusionVersion {
