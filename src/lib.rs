@@ -8,6 +8,7 @@
 */
 
 pub mod args;
+pub mod sd_automatic;
 pub mod audio;
 pub mod candle_metavoice;
 pub mod candle_mistral;
