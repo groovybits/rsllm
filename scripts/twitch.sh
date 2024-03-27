@@ -35,6 +35,8 @@ TWITCH_LLM_CONCURRENCY=1
 TWITCH_CHAT_HISTORY=16
 TWITCH_MAX_TOKENS=150
 ## Stable Diffusion Settings
+SD_WIDTH=1024
+SD_HEIGHT=1024
 SD_API=1
 SD_MODEL=turbo
 SD_INTERMEDIARY_IMAGES=1
@@ -98,6 +100,8 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --twitch-prompt "$TWITCH_PROMPT" \
     --mimic3-tts \
     $SD_API_CMD \
+    --sd-width $SD_WIDTH \
+    --sd-height $SD_HEIGHT \
     --sd-image \
     --sd-model $SD_MODEL \
     --sd-n-steps $SD_N_STEPS \
