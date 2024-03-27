@@ -27,7 +27,7 @@ pub async fn sd_auto(
         steps: config.n_steps.unwrap_or(20),
         width: config.width.unwrap_or(512),
         height: config.height.unwrap_or(512),
-        cfg_scale: config.guidance_scale.unwrap_or(5.0),
+        cfg_scale: config.guidance_scale.unwrap_or(7.5),
         sampler_index: "Euler".to_string(),
         seed: config.seed.unwrap_or_else(rand::random) as u64,
         n_iter: config.num_samples,
