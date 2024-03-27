@@ -18,7 +18,7 @@ pub async fn sd_auto(
         StableDiffusionVersion::V1_5 => "v1-5-pruned-emaonly.ckpt",
         StableDiffusionVersion::V2_1 => "v2-1_768-ema-pruned.ckpt",
         StableDiffusionVersion::Xl => "stabilityai/stable-diffusion-xl-1024-1.0.ckpt",
-        StableDiffusionVersion::Turbo => "stabilityai/sd_xl_turbo_1.0.safetensors",
+        StableDiffusionVersion::Turbo => "sd_xl_turbo_1.0.safetensors",
     };
 
     let payload = AutomaticPayload {
