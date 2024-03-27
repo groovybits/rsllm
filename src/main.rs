@@ -1116,7 +1116,13 @@ async fn main() {
                 "".to_string()
             }
         } else if args.use_api {
-            "llama2".to_string()
+            if args.chat_format == "chatml" {
+                "chatml".to_string()
+            } else if args.chat_format == "llama2" {
+                "llama2".to_string()
+            } else {
+                "".to_string()
+            }
         } else {
             "".to_string()
         };

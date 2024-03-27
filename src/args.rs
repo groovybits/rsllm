@@ -26,6 +26,15 @@ pub struct Args {
     )]
     pub query: String,
 
+    /// Chat Format - LLM chat format to use, llama2, chatml, gemma, ""
+    #[clap(
+        long,
+        env = "CHAT_FORMAT",
+        default_value = "",
+        help = "Chat Format - LLM chat format to use, llama2, chatml, gemma, \"\""
+    )]
+    pub chat_format: String,
+
     /// Temperature
     #[clap(
         long,

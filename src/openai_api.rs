@@ -64,6 +64,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "[INST]"
     } else if chat_format == "google" {
         "<start_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_start>"
     } else {
         ""
     };
@@ -71,6 +73,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "[/INST]"
     } else if chat_format == "google" {
         "<end_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_end>"
     } else {
         ""
     };
@@ -79,6 +83,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         ""
     } else if chat_format == "google" {
         "<start_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_start>"
     } else {
         ""
     };
@@ -86,6 +92,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         ""
     } else if chat_format == "google" {
         "<end_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_end>"
     } else {
         ""
     };
@@ -94,6 +102,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<<SYS>>"
     } else if chat_format == "google" {
         "<start_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_start>"
     } else {
         ""
     };
@@ -101,6 +111,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<</SYS>>"
     } else if chat_format == "google" {
         "<end_of_turn>"
+    } else if chat_format == "chatml" {
+        "<im_end>"
     } else {
         ""
     };
@@ -109,12 +121,16 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         ""
     } else if chat_format == "google" {
         "model"
+    } else if chat_format == "chatml" {
+        "system"
     } else {
         ""
     };
     let user_name = if chat_format == "llama2" {
         ""
     } else if chat_format == "google" {
+        "user"
+    } else if chat_format == "chatml" {
         "user"
     } else {
         ""
@@ -123,6 +139,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         ""
     } else if chat_format == "google" {
         "model"
+    } else if chat_format == "chatml" {
+        "assistant"
     } else {
         ""
     };

@@ -17,6 +17,7 @@ GREETING="Hi I'm Alice, ask me a question by typing '!message Alice <message>' o
 USE_API=1
 MODEL=mistral
 MODEL_ID=7b-it
+CHAT_FORMAT=chatml
 MAX_TOKENS=1500
 TEMPERATURE=0.8
 CONTEXT_SIZE=16000
@@ -114,6 +115,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     $USE_API_CMD \
     --candle-llm $MODEL \
     --llm-history-size $CONTEXT_SIZE \
+    --chat-format $CHAT_FORMAT \
     --model-id $MODEL_ID \
     --temperature $TEMPERATURE \
     --pipeline-concurrency $PIPELINE_CONCURRENCY \
