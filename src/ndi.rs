@@ -50,10 +50,12 @@ pub fn send_images_over_ndi(
             subtitle_height = height as i32 - (height as i32 / 2) / 2;
         } else if subtitle_position == "center" || subtitle_position == "middle" {
             subtitle_height = height as i32 - (height as i32 / 2);
-        } else if subtitle_position == "mid-bottom" {
+        } else if subtitle_position == "low-center" {
             subtitle_height = height as i32 - (height as i32 / 3);
-        } else if subtitle_position == "bottom" {
+        } else if subtitle_position == "mid-bottom" {
             subtitle_height = height as i32 - (height as i32 / 4);
+        } else if subtitle_position == "bottom" {
+            subtitle_height = height as i32 - (height as i32 / 5);
         } else {
             log::error!(
                 "Invalid subtitle position '{}', using default position bottome as value {} instead.",
