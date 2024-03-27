@@ -35,6 +35,7 @@ TWITCH_LLM_CONCURRENCY=1
 TWITCH_CHAT_HISTORY=16
 TWITCH_MAX_TOKENS=150
 ## Stable Diffusion Settings
+SD_API=1
 SD_MODEL=turbo
 SD_INTERMEDIARY_IMAGES=1
 SD_N_STEPS=6
@@ -50,6 +51,10 @@ NO_HISTORY_CMD=
 QUANTIZED_CMD=
 ASYNC_CONCURRENCY_CMD=
 SD_INTERMEDIARY_IMAGES_CMD=
+SD_API_CMD=
+if [ "$SD_API" == 1 ]; then
+    SD_API_CMD="--sd-api"
+fi
 if [ "$SD_INTERMEDIARY_IMAGES" == 1 ]; then
     SD_INTERMEDIARY_IMAGES_CMD="--sd-intermediary-images"
 fi
@@ -92,6 +97,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --twitch-max-tokens $TWITCH_MAX_TOKENS \
     --twitch-prompt "$TWITCH_PROMPT" \
     --mimic3-tts \
+    $SD_API_CMD \
     --sd-image \
     --sd-model $SD_MODEL \
     --sd-n-steps $SD_N_STEPS \
