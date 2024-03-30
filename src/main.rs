@@ -663,6 +663,7 @@ async fn main() {
     let poll_interval = args.poll_interval;
     let poll_interval_duration = Duration::from_millis(poll_interval);
     let mut poll_start_time = Instant::now();
+    let mut poll_end_time = Instant::now();
     if args.daemon {
         println!(
             "Starting up RsLLM with poll interval of {} seconds...",
@@ -877,7 +878,8 @@ async fn main() {
         if !twitch_query && args.twitch_client {
             if args.continuous {
                 // only play a story after poll_interval_duration has passed, else continue
-                if elapsed < poll_interval_duration {
+                let elapsed_end = poll_end_time.elapsed();
+                if elapsed_end < poll_interval_duration {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }
@@ -1662,5 +1664,6 @@ async fn main() {
                 }
             }
         }
+        poll_end_time = Instant::now();
     }
 }
