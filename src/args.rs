@@ -756,11 +756,20 @@ pub struct Args {
     /// Twitch Max Tokens - max tokens for LLM
     #[clap(
         long,
-        env = "TWITCH_MAX_TOKENS",
+        env = "TWITCH_MAX_TOKENS_CHAT",
         default_value_t = 150,
         help = "Twitch Max Tokens."
     )]
-    pub twitch_max_tokens: usize,
+    pub twitch_max_tokens_chat: usize,
+
+    //// Twitch Max Tokens LLM - max tokens for LLM
+    #[clap(
+        long,
+        env = "TWITCH_MAX_TOKENS_LLM",
+        default_value_t = 150,
+        help = "Twitch Max Tokens LLM."
+    )]
+    pub twitch_max_tokens_llm: usize,
 
     /// single concurrency - bool single concurrency for all models, wait between each request
     #[clap(

@@ -782,15 +782,6 @@ async fn main() {
             }
         }
 
-        // Did not get a message from twitch, so don't process the query
-        if !twitch_query && args.twitch_client {
-            if !args.continuous {
-                // sleep for a while to avoid busy loop
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                continue;
-            }
-        }
-
         // break the loop if we are not running as a daemon or hit max iterations
         let rctrlc_clone = running_ctrlc.clone();
         if (!rctrlc_clone.load(Ordering::SeqCst)
@@ -880,8 +871,28 @@ async fn main() {
         // Calculate elapsed time since last start
         let elapsed = poll_start_time.elapsed();
 
+        let mut max_tokens = args.max_tokens as usize;
+
+        // Did not get a message from twitch, so don't process the query
+        if !twitch_query && args.twitch_client {
+            if args.continuous {
+                // only play a story after poll_interval_duration has passed, else continue
+                if elapsed < poll_interval_duration {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            } else {
+                // sleep for a while to avoid busy loop
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        } else if args.twitch_client && twitch_query {
+            // reset the max tokens
+            max_tokens = args.twitch_max_tokens_llm;
+        }
+
         // Sleep only if the elapsed time is less than the poll interval
-        if !twitch_query
+        if !args.twitch_client
             && iterations > 0
             && !args.interactive
             && (args.daemon || args.max_iterations > 1)
@@ -1148,7 +1159,7 @@ async fn main() {
             tokio::spawn(async move {
                 let open_ai_request = OpenAIRequest {
                     model: &model_clone,
-                    max_tokens: &args.max_tokens,
+                    max_tokens: &max_tokens,
                     messages: messages_clone,
                     temperature: &args.temperature,
                     top_p: &args.top_p,
@@ -1173,7 +1184,7 @@ async fn main() {
                 let mistral_clone = mistral.clone();
                 if let Err(e) = mistral_clone(
                     prompt_clone,
-                    args.max_tokens as usize,
+                    max_tokens as usize,
                     args.temperature as f64,
                     args.quantized,
                     Some(model_id),
@@ -1187,7 +1198,7 @@ async fn main() {
                 let gemma_clone = gemma.clone();
                 if let Err(e) = gemma_clone(
                     prompt_clone,
-                    args.max_tokens as usize,
+                    max_tokens as usize,
                     args.temperature as f64,
                     args.quantized,
                     Some(model_id),
