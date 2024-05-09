@@ -2,6 +2,7 @@ use crate::args::Args;
 use crate::candle_gemma::gemma;
 use crate::candle_mistral::mistral;
 use anyhow::Result;
+use rusqlite::{params, Connection};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -44,7 +45,6 @@ async fn run(
     twitch_tx: mpsc::Sender<String>,
     args: Args,
 ) -> Result<()> {
-    let mut chat_messages = Vec::new();
     // create a semaphore so no more than one message is sent to the AI at a time
     let semaphore = tokio::sync::Semaphore::new(args.twitch_llm_concurrency as usize);
     while running.load(Ordering::SeqCst) {
@@ -54,14 +54,7 @@ async fn run(
             tmi::Message::Privmsg(msg) => {
                 // acquire the semaphore to send a message to the AI
                 let _chat_lock = semaphore.acquire().await.unwrap();
-                on_msg(
-                    &mut client,
-                    msg,
-                    &twitch_tx,
-                    &mut chat_messages,
-                    args.clone(),
-                )
-                .await?
+                on_msg(&mut client, msg, &twitch_tx, args.clone()).await?
             }
             tmi::Message::Reconnect => {
                 client.reconnect().await?;
@@ -78,7 +71,6 @@ async fn on_msg(
     client: &mut tmi::Client,
     msg: tmi::Privmsg<'_>,
     tx: &mpsc::Sender<String>,
-    chat_messages: &mut Vec<String>,
     args: Args,
 ) -> Result<()> {
     log::debug!("\nTwitch Message: {:?}", msg);
@@ -91,6 +83,26 @@ async fn on_msg(
     if client.credentials().is_anon() {
         return Ok(());
     }
+
+    let db_path = "db/twitch_chat.db";
+    let conn = Connection::open(db_path)?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                message TEXT NOT NULL
+            )",
+        [],
+    )?;
+
+    let user_id = msg.sender().name();
+
+    // Retrieve the chat history for the specific user
+    let mut chat_messages: Vec<String> = conn
+        .prepare("SELECT message FROM chat_history WHERE user_id = ?")?
+        .query_map(params![user_id], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
 
     // send message to the LLM and get an answer to send back to the user.
     // also send the message to the main LLM loop to keep history context of the conversation
@@ -251,24 +263,73 @@ async fn on_msg(
 
         let answer = token_thread.await?;
 
-        // remove all new lines from answer:
-        let answer = answer.replace("\n", " ");
+        // remove all backslashes from answer:
+        let answer = answer.replace("\\", "");
 
         println!("\nTwitch received answer:\n{}\n", answer);
 
-        // truncate to 500 characters and remove any urls
-        let answer = answer
-            .chars()
-            .take(500)
-            .collect::<String>()
-            .replace("http", "hxxp");
+        // Check if the answer contains <|im_sep|>
+        let truncated_answer = if let Some(sep_index) = answer.find("<|im_sep|>") {
+            &answer[..sep_index]
+        } else {
+            &answer
+        };
 
-        // Send message to the twitch channel
-        client
-            .privmsg(msg.channel(), &format!("{}", answer.clone(),))
-            .reply_to(msg.message_id())
-            .send()
-            .await?;
+        // Split the answer into sections based on newline characters
+        let sections: Vec<&str> = truncated_answer.split('\n').collect();
+
+        for section in sections {
+            // Split the section into sentences
+            let mut sentences = Vec::new();
+            let mut start = 0;
+            for (i, c) in section.char_indices() {
+                if c == '.' || c == '!' || c == '?' {
+                    sentences.push(&section[start..i + 1]);
+                    start = i + 1;
+                }
+            }
+            if start < section.len() {
+                sentences.push(&section[start..]);
+            }
+
+            let mut chunk = String::new();
+            for sentence in sentences {
+                let trimmed_sentence = sentence.trim();
+
+                // If adding the sentence to the chunk would exceed 500 characters,
+                // send the current chunk and start a new one
+                if chunk.len() + trimmed_sentence.len() + 1 > 500 {
+                    let formatted_chunk = chunk.replace("http", "hxxp");
+
+                    // Send message to the twitch channel
+                    client
+                        .privmsg(msg.channel(), &format!("{}", formatted_chunk))
+                        .reply_to(msg.message_id())
+                        .send()
+                        .await?;
+
+                    chunk.clear();
+                }
+
+                // Add the sentence to the current chunk
+                if !chunk.is_empty() {
+                    chunk.push(' ');
+                }
+                chunk.push_str(trimmed_sentence);
+            }
+
+            // Send the remaining chunk for the current section
+            let formatted_chunk = chunk.replace("http", "hxxp");
+
+            // Send message to the twitch channel
+            if !formatted_chunk.is_empty() {
+                client
+                    .privmsg(msg.channel(), &format!("{}", formatted_chunk))
+                    .reply_to(msg.message_id())
+                    .send()
+                    .await?;
+            }
+        }
 
         // add message to the chat_messages history of strings
         let full_message = format!(
@@ -281,11 +342,17 @@ async fn on_msg(
             end_token,
             assistant_start_token,
             assistant_name,
-            answer.clone(),
+            truncated_answer,
             assistant_end_token,
             eos_token
         );
-        chat_messages.push(full_message);
+        chat_messages.push(full_message.clone());
+
+        // Insert the new message into the database
+        conn.execute(
+            "INSERT INTO chat_history (user_id, message) VALUES (?, ?)",
+            params![user_id, full_message],
+        )?;
 
         // Send message to the main loop through mpsc channels
         tx.send(format!(

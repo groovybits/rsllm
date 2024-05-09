@@ -9,7 +9,7 @@ license-file = "LICENSE"
 homepage = "https://github.com/groovybits/rsllm/wiki"
 repository = "https://github.com/groovybits/rsllm"
 authors = ["Chris Kennedy"]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 [lib]
@@ -84,3 +84,4 @@ clap_builder = "4.5.2"
 safetensors = "0.4.2"
 ctrlc = "3.4.4"
 base64 = "0.22.0"
+rusqlite = "0.31.0"

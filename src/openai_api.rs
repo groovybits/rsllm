@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tokio::sync::mpsc::{self};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Message {
     pub role: String,
     pub content: String,
@@ -66,6 +66,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<start_of_turn>"
     } else if chat_format == "chatml" {
         "<im_start>"
+    } else if chat_format == "vicuna" {
+        ""
     } else {
         ""
     };
@@ -75,6 +77,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<end_of_turn>"
     } else if chat_format == "chatml" {
         "<im_end>"
+    } else if chat_format == "vicuna" {
+        "\n"
     } else {
         ""
     };
@@ -85,6 +89,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<start_of_turn>"
     } else if chat_format == "chatml" {
         "<im_start>"
+    } else if chat_format == "vicuna" {
+        ""
     } else {
         ""
     };
@@ -94,6 +100,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<end_of_turn>"
     } else if chat_format == "chatml" {
         "<im_end>"
+    } else if chat_format == "vicuna" {
+        "\n"
     } else {
         ""
     };
@@ -104,6 +112,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<start_of_turn>"
     } else if chat_format == "chatml" {
         "<im_start>"
+    } else if chat_format == "vicuna" {
+        ""
     } else {
         ""
     };
@@ -113,6 +123,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "<end_of_turn>"
     } else if chat_format == "chatml" {
         "<im_end>"
+    } else if chat_format == "vicuna" {
+        "\n"
     } else {
         ""
     };
@@ -123,6 +135,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "model"
     } else if chat_format == "chatml" {
         "system"
+    } else if chat_format == "vicuna" {
+        "System: "
     } else {
         ""
     };
@@ -132,6 +146,8 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "user"
     } else if chat_format == "chatml" {
         "user"
+    } else if chat_format == "vicuna" {
+        "User: "
     } else {
         ""
     };
@@ -141,31 +157,51 @@ pub fn format_messages_for_llm(messages: Vec<Message>, chat_format: String) -> S
         "model"
     } else if chat_format == "chatml" {
         "assistant"
+    } else if chat_format == "vicuna" {
+        "Assistant: "
     } else {
         ""
     };
 
-    for message in messages {
+    for (index, message) in messages.iter().enumerate() {
+        // check if last message, safely get if this is the last message
+        let is_last = index == messages.len() - 1;
         match message.role.as_str() {
+            // remove <|im_end|> from anywhere in message
             "system" => {
+                let message_content = message.content.replace("<|im_end|>", "");
                 formatted_history += &format!(
                     "{}{}{} {}{}{}\n",
-                    bos_token, sys_token, sys_name, message.content, sys_end_token, eos_token
+                    bos_token, sys_token, sys_name, message_content, sys_end_token, eos_token
                 );
             }
             "user" => {
                 // Assuming user messages should be formatted as instructions
+                let message_content = message.content.replace("<|im_end|>", "");
                 formatted_history += &format!(
                     "{}{}{} {}{}\n",
-                    bos_token, inst_token, user_name, message.content, inst_end_token
+                    bos_token, inst_token, user_name, message_content, inst_end_token
                 );
             }
             "assistant" => {
                 // Close the instruction tag for user/system messages and add the assistant's response
-                formatted_history += &format!(
-                    "{}{} {}{}{}\n",
-                    assist_token, assist_name, message.content, assist_end_token, eos_token
-                );
+                let message_content = message.content.replace("<|im_end|>", "");
+                if is_last {
+                    formatted_history += &format!(
+                        "{}{}{} {}\n",
+                        bos_token, assist_token, assist_name, message_content
+                    );
+                } else {
+                    formatted_history += &format!(
+                        "{}{}{} {}{}{}\n",
+                        bos_token,
+                        assist_token,
+                        assist_name,
+                        message_content,
+                        assist_end_token,
+                        eos_token
+                    );
+                }
             }
             _ => {}
         }

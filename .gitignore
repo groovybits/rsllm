@@ -1,5 +1,6 @@
 /target
 /images/*.png
+/db/*.db
 libndi.dylib
 Cargo.lock
 .env

@@ -1113,36 +1113,9 @@ async fn main() {
         // Capture the start time for performance metrics
         let start = Instant::now();
 
-        let chat_format = if args.candle_llm == "mistral" {
-            // check if model_id includes the string "Instruct" within it
-            if args.model_id.contains("Instruct") {
-                "llama2".to_string()
-            } else {
-                "".to_string()
-            }
-        } else if args.candle_llm == "gemma" {
-            if args.model_id == "7b-it" {
-                "google".to_string()
-            } else if args.model_id == "2b-it" {
-                "google".to_string()
-            } else {
-                "".to_string()
-            }
-        } else if args.use_api {
-            if args.chat_format == "chatml" {
-                "chatml".to_string()
-            } else if args.chat_format == "llama2" {
-                "llama2".to_string()
-            } else {
-                "".to_string()
-            }
-        } else {
-            "".to_string()
-        };
+        let prompt = format_messages_for_llm(messages.clone(), args.chat_format.clone());
 
-        let prompt = format_messages_for_llm(messages.clone(), chat_format);
-
-        debug!("\nPrompt: {}", prompt);
+        info!("\nPrompt: {}", prompt);
 
         // Spawn a thread to run the mistral function, to keep the UI responsive
         if args.candle_llm != "mistral" && args.candle_llm != "gemma" {
