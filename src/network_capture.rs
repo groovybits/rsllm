@@ -310,6 +310,9 @@ pub fn network_capture(network_capture: &mut NetworkCapture, ptx: mpsc::Sender<A
                 }
             };
 
+            // Start packet capture
+            let _ = port.start();
+
             let mut packets = Vec::new();
             while running_capture.load(Ordering::SeqCst) {
                 match port.rx_burst(&mut packets) {

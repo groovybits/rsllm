@@ -2,6 +2,7 @@ use crate::args::Args;
 use crate::candle_gemma::gemma;
 use crate::candle_mistral::mistral;
 use anyhow::Result;
+use rand::Rng;
 use rusqlite::{params, Connection};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -289,6 +290,8 @@ async fn on_msg(
                 }
             }
             if start < section.len() {
+                // sleep for a random range of time between 1 and 3 seconds
+                let _sleep_time = rand::thread_rng().gen_range(1..3);
                 sentences.push(&section[start..]);
             }
 
@@ -320,6 +323,9 @@ async fn on_msg(
 
             // Send the remaining chunk for the current section
             let formatted_chunk = chunk.replace("http", "hxxp");
+
+            // remove any dangling sentences at the end of the chunk without a end of sentence punctuation
+            let formatted_chunk = formatted_chunk.trim_end_matches(|c: char| c.is_whitespace());
 
             // Send message to the twitch channel
             if !formatted_chunk.is_empty() {
