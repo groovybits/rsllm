@@ -20,6 +20,7 @@ pub enum StableDiffusionVersion {
     V2_1,
     Xl,
     Turbo,
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,12 +40,13 @@ impl StableDiffusionVersion {
             Self::V2_1 => "stabilityai/stable-diffusion-2-1",
             Self::V1_5 => "runwayml/stable-diffusion-v1-5",
             Self::Turbo => "stabilityai/sdxl-turbo",
+            Self::Custom => "stabilityai/sdxl-turbo",
         }
     }
 
     fn unet_file(&self, use_f16: bool) -> &'static str {
         match self {
-            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo => {
+            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo | Self::Custom => {
                 if use_f16 {
                     "unet/diffusion_pytorch_model.fp16.safetensors"
                 } else {
@@ -56,7 +58,7 @@ impl StableDiffusionVersion {
 
     fn vae_file(&self, use_f16: bool) -> &'static str {
         match self {
-            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo => {
+            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo | Self::Custom => {
                 if use_f16 {
                     "vae/diffusion_pytorch_model.fp16.safetensors"
                 } else {
@@ -68,7 +70,7 @@ impl StableDiffusionVersion {
 
     fn clip_file(&self, use_f16: bool) -> &'static str {
         match self {
-            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo => {
+            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo | Self::Custom => {
                 if use_f16 {
                     "text_encoder/model.fp16.safetensors"
                 } else {
@@ -80,7 +82,7 @@ impl StableDiffusionVersion {
 
     fn clip2_file(&self, use_f16: bool) -> &'static str {
         match self {
-            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo => {
+            Self::V1_5 | Self::V2_1 | Self::Xl | Self::Turbo | Self::Custom => {
                 if use_f16 {
                     "text_encoder_2/model.fp16.safetensors"
                 } else {
@@ -108,7 +110,7 @@ impl ModelFile {
                             StableDiffusionVersion::V1_5 | StableDiffusionVersion::V2_1 => {
                                 "openai/clip-vit-base-patch32"
                             }
-                            StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo => {
+                            StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo | StableDiffusionVersion::Custom => {
                                 // This seems similar to the patch32 version except some very small
                                 // difference in the split regex.
                                 "openai/clip-vit-large-patch14"
@@ -127,7 +129,7 @@ impl ModelFile {
                         // See https://github.com/huggingface/candle/issues/1060
                         if matches!(
                             version,
-                            StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo,
+                            StableDiffusionVersion::Xl | StableDiffusionVersion::Turbo | StableDiffusionVersion::Custom,
                         ) && use_f16
                         {
                             (
@@ -260,6 +262,7 @@ pub struct SDConfig {
     pub n_steps: Option<usize>,
     pub num_samples: usize,
     pub sd_version: StableDiffusionVersion,
+    pub custom_model: Option<String>,
     pub intermediary_images: bool,
     pub use_flash_attn: bool,
     pub use_f16: bool,
@@ -290,6 +293,7 @@ impl SDConfig {
             n_steps: None,
             num_samples: 1,
             sd_version: StableDiffusionVersion::Turbo,
+            custom_model: None,
             intermediary_images: false,
             use_flash_attn: false,
             use_f16: false,
@@ -337,6 +341,7 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
             | StableDiffusionVersion::V2_1
             | StableDiffusionVersion::Xl => 7.5,
             StableDiffusionVersion::Turbo => 0.,
+            StableDiffusionVersion::Custom => 0.,
         },
     };
     let n_steps = match config.n_steps {
@@ -346,6 +351,7 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
             | StableDiffusionVersion::V2_1
             | StableDiffusionVersion::Xl => 20,
             StableDiffusionVersion::Turbo => 1,
+            StableDiffusionVersion::Custom => 1,
         },
     };
     let dtype = if config.use_f16 {
@@ -370,6 +376,11 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
             config.width,
         ),
         StableDiffusionVersion::Turbo => stable_diffusion::StableDiffusionConfig::sdxl_turbo(
+            config.sliced_attention_size,
+            config.height,
+            config.width,
+        ),
+        StableDiffusionVersion::Custom => stable_diffusion::StableDiffusionConfig::sdxl_turbo(
             config.sliced_attention_size,
             config.height,
             config.width,
@@ -437,6 +448,7 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
         | StableDiffusionVersion::V2_1
         | StableDiffusionVersion::Xl => 0.18215,
         StableDiffusionVersion::Turbo => 0.13025,
+        StableDiffusionVersion::Custom => 0.13025,
     };
 
     // array of image buffers to gather the results

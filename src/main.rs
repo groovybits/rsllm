@@ -682,6 +682,7 @@ async fn main() {
         sd_config.width = Some(args.sd_width);
         sd_config.image_position = Some(args.image_alignment.clone());
         sd_config.intermediary_images = args.sd_intermediary_images;
+        sd_config.custom_model = Some(args.sd_custom_model.clone());
         // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
         sd_config.sd_version = if args.sd_model == "1.5" {
             StableDiffusionVersion::V1_5
@@ -691,6 +692,8 @@ async fn main() {
             StableDiffusionVersion::Xl
         } else if args.sd_model == "turbo" {
             StableDiffusionVersion::Turbo
+        } else if args.sd_model == "Custom" {
+            StableDiffusionVersion::Custom
         } else {
             StableDiffusionVersion::V1_5
         };
@@ -817,6 +820,7 @@ async fn main() {
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
             sd_config.intermediary_images = args.sd_intermediary_images;
+            sd_config.custom_model = Some(args.sd_custom_model.clone());
             if args.sd_scaled_height > 0 {
                 sd_config.scaled_height = Some(args.sd_scaled_height);
             }
@@ -832,6 +836,8 @@ async fn main() {
                 StableDiffusionVersion::Xl
             } else if args.sd_model == "turbo" {
                 StableDiffusionVersion::Turbo
+            } else if args.sd_model == "Custom" {
+                StableDiffusionVersion::Custom
             } else {
                 StableDiffusionVersion::V1_5
             };
@@ -1215,6 +1221,7 @@ async fn main() {
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
             sd_config.intermediary_images = args.sd_intermediary_images;
+            sd_config.custom_model = Some(args.sd_custom_model.clone());
             // match args.sd_model with on of the strings "1.5", "2.1", "xl", "turbo" and set the sd_version accordingly
             sd_config.sd_version = if args.sd_model == "1.5" {
                 StableDiffusionVersion::V1_5
@@ -1224,6 +1231,8 @@ async fn main() {
                 StableDiffusionVersion::Xl
             } else if args.sd_model == "turbo" {
                 StableDiffusionVersion::Turbo
+            } else if args.sd_model == "Custom" {
+                StableDiffusionVersion::Custom
             } else {
                 StableDiffusionVersion::V1_5
             };
@@ -1374,6 +1383,7 @@ async fn main() {
                         sd_config.width = Some(args.sd_width);
                         sd_config.image_position = Some(image_alignment);
                         sd_config.intermediary_images = args.sd_intermediary_images;
+                        sd_config.custom_model = Some(args.sd_custom_model.clone());
                         if args.sd_scaled_height > 0 {
                             sd_config.scaled_height = Some(args.sd_scaled_height);
                         }
@@ -1389,6 +1399,8 @@ async fn main() {
                             StableDiffusionVersion::Xl
                         } else if args.sd_model == "turbo" {
                             StableDiffusionVersion::Turbo
+                        } else if args.sd_model == "babes" {
+                            StableDiffusionVersion::Custom
                         } else {
                             StableDiffusionVersion::V1_5
                         };
@@ -1473,6 +1485,7 @@ async fn main() {
                 sd_config.width = Some(args.sd_width);
                 sd_config.image_position = Some(image_alignment);
                 sd_config.intermediary_images = args.sd_intermediary_images;
+                sd_config.custom_model = Some(args.sd_custom_model.clone());
                 if args.sd_scaled_height > 0 {
                     sd_config.scaled_height = Some(args.sd_scaled_height);
                 }
@@ -1488,6 +1501,8 @@ async fn main() {
                     StableDiffusionVersion::Xl
                 } else if args.sd_model == "turbo" {
                     StableDiffusionVersion::Turbo
+                } else if args.sd_model == "babes" {
+                    StableDiffusionVersion::Custom
                 } else {
                     StableDiffusionVersion::V1_5
                 };
@@ -1530,6 +1545,7 @@ async fn main() {
             sd_config.width = Some(args.sd_width);
             sd_config.image_position = Some(args.image_alignment.clone());
             sd_config.intermediary_images = args.sd_intermediary_images;
+            sd_config.custom_model = Some(args.sd_custom_model.clone());
             if args.sd_scaled_height > 0 {
                 sd_config.scaled_height = Some(args.sd_scaled_height);
             }
@@ -1545,6 +1561,8 @@ async fn main() {
                 StableDiffusionVersion::Xl
             } else if args.sd_model == "turbo" {
                 StableDiffusionVersion::Turbo
+            } else if args.sd_model == "babes" {
+                StableDiffusionVersion::Custom
             } else {
                 StableDiffusionVersion::V1_5
             };

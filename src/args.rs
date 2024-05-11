@@ -614,6 +614,15 @@ pub struct Args {
     )]
     pub sd_intermediary_images: bool,
 
+    /// Stable Diffusion Custom Model Name to load
+    #[clap(
+        long,
+        env = "SD_CUSTOM_MODEL",
+        default_value = "sd_xl_turbo_1.0.safetensors",
+        help = "Custom Stable Diffusion Model. for automatic 111111 API usage, the name must exist as a model locally or remotely."
+    )]
+    pub sd_custom_model: String,
+
     /// Stable Diffusion Version
     #[clap(
         long,

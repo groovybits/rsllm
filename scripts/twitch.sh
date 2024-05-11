@@ -39,15 +39,17 @@ NDI_TIMEOUT=600
 ## Twitch Chat Settings
 TWITCH_MODEL=mistral
 TWITCH_LLM_CONCURRENCY=1
-TWITCH_CHAT_HISTORY=3
-TWITCH_MAX_TOKENS_CHAT=100
+TWITCH_CHAT_HISTORY=32
+TWITCH_MAX_TOKENS_CHAT=200
 TWITCH_MAX_TOKENS_LLM=$MAX_TOKENS
 ## Stable Diffusion Settings
 SD_TEXT_MIN=70
 SD_WIDTH=512
 SD_HEIGHT=512
 SD_API=1
-SD_MODEL=turbo
+SD_MODEL=custom
+#SD_CUSTOM_MODEL="babes_31.safetensors"
+SD_CUSTOM_MODEL="sexyToon3D_v420.safetensors"
 SD_INTERMEDIARY_IMAGES=1
 SD_N_STEPS=20
 ALIGNMENT=center
@@ -118,6 +120,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --sd-height $SD_HEIGHT \
     --sd-image \
     --sd-model $SD_MODEL \
+    --sd-custom-model $SD_CUSTOM_MODEL \
     --sd-n-steps $SD_N_STEPS \
     --image-alignment $ALIGNMENT \
     $SUBTITLE_CMD \
