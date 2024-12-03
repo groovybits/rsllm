@@ -21,7 +21,7 @@ use candle_core::{DType, IndexOp, Tensor};
 #[cfg(feature = "metavoice")]
 use candle_nn::VarBuilder;
 #[cfg(feature = "metavoice")]
-use hf_hub::api::sync::Api;
+use candle_hf_hub::api::sync::Api;
 #[cfg(feature = "metavoice")]
 use rand::Rng;
 #[cfg(feature = "metavoice")]
