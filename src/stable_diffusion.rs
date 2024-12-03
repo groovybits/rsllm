@@ -1,9 +1,3 @@
-#[cfg(feature = "accelerate")]
-extern crate accelerate_src;
-
-#[cfg(feature = "mkl")]
-extern crate intel_mkl_src;
-
 use crate::scale_image;
 use crate::truncate_tokens;
 use candle_transformers::models::stable_diffusion;
@@ -100,7 +94,7 @@ impl ModelFile {
         version: StableDiffusionVersion,
         use_f16: bool,
     ) -> Result<std::path::PathBuf> {
-        use hf_hub::api::sync::Api;
+        use candle_hf_hub::api::sync::Api;
         match filename {
             Some(filename) => Ok(std::path::PathBuf::from(filename)),
             None => {

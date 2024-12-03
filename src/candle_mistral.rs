@@ -1,9 +1,3 @@
-#[cfg(feature = "mkl")]
-extern crate intel_mkl_src;
-
-#[cfg(feature = "accelerate")]
-extern crate accelerate_src;
-
 use anyhow::{Error as E, Result};
 use safetensors::tensor::View;
 use std::io::Write;
@@ -19,7 +13,7 @@ use candle_core::{DType, Device, Tensor};
 use candle_examples::token_output_stream::TokenOutputStream;
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, info};
 use std::sync::Arc;
 use tokenizers::Tokenizer;

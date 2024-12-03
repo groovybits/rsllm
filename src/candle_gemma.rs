@@ -1,9 +1,3 @@
-#[cfg(feature = "mkl")]
-extern crate intel_mkl_src;
-
-#[cfg(feature = "accelerate")]
-extern crate accelerate_src;
-
 use anyhow::{Error as E, Result};
 use log::{debug, info};
 use std::io::Write;
@@ -15,7 +9,7 @@ use candle_core::{DType, Device, Tensor};
 use candle_examples::token_output_stream::TokenOutputStream;
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_hf_hub::{api::sync::Api, Repo, RepoType};
 use safetensors::tensor::View;
 use std::sync::Arc;
 use tokenizers::Tokenizer;
@@ -271,7 +265,7 @@ pub fn gemma(
         DType::F32
     };
     let vb = unsafe { VarBuilder::from_mmaped_safetensors(&filenames, dtype, &device)? };
-    let model = Model::new(&config, vb)?;
+    let model = Model::new(false, &config, vb)?;
 
     info!("loaded the model in {:?}", start.elapsed());
 
