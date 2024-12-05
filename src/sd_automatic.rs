@@ -39,7 +39,8 @@ pub async fn sd_auto(
     };
 
     let response = client
-        .post("http://127.0.0.1:7860/sdapi/v1/txt2img")
+        .post("http://earth:7860/sdapi/v1/txt2img")
+        //.post("http://127.0.0.1:7860/sdapi/v1/txt2img")
         .json(&payload)
         .send()
         .await?;

@@ -58,7 +58,7 @@ pub fn send_images_over_ndi(
             subtitle_height = height as i32 - (height as i32 / 5);
         } else {
             log::error!(
-                "Invalid subtitle position '{}', using default position bottome as value {} instead.",
+                "Invalid subtitle position '{}', using default position bottom as value {} instead.",
                 subtitle_position,
                 subtitle_height
             );

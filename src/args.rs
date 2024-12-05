@@ -484,7 +484,7 @@ pub struct Args {
     #[clap(
         long,
         env = "BREAK_LINE_LENGTH",
-        default_value_t = 120,
+        default_value_t = 300,
         help = "Break Line Length - line length for breaking lines from LLM messages."
     )]
     pub break_line_length: usize,
@@ -511,7 +511,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 70,
+        default_value_t = 200,
         help = "SD Max Length in tokens for SD Image hardsub text segments. example: 77 tokens is avg 77 * 4 == 308 chars."
     )]
     pub sd_max_length: usize,
@@ -520,7 +520,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_PARAGRAPH_MIN",
-        default_value_t = 30,
+        default_value_t = 60,
         help = "SD Min Length for text segments generating Images. Will force past this value before segmenting text."
     )]
     pub sd_text_min: usize,
@@ -685,7 +685,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SUBTITLE_POSITION",
-        default_value = "bottom",
+        default_value = "center",
         help = "Subtitle position."
     )]
     pub subtitle_position: String,
