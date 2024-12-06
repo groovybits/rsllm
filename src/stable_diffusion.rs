@@ -266,7 +266,7 @@ pub struct SDConfig {
     pub scaled_width: Option<u32>,
     pub scaled_height: Option<u32>,
     pub image_position: Option<String>,
-    pub seed: Option<u32>,
+    pub seed: Option<i32>,
 }
 
 impl SDConfig {
@@ -297,7 +297,7 @@ impl SDConfig {
             scaled_width: None,
             scaled_height: None,
             image_position: None,
-            seed: None,
+            seed: Some(-1),
         }
     }
 }
@@ -383,8 +383,12 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
 
     let scheduler = sd_config.build_scheduler(n_steps)?;
     let device = candle_examples::device(config.cpu)?;
-    if let Some(seed) = seed {
-        device.set_seed(seed.into())?;
+    let mut seed_u32 = seed;
+    if seed.is_some() && seed < Some(0) {
+        seed_u32 = None;
+    }
+    if let Some(seed) = seed_u32 {
+        let _ = device.set_seed(seed.try_into().unwrap());
     }
     let use_guide_scale = guidance_scale > 1.0;
 

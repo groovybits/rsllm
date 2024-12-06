@@ -21,5 +21,4 @@ llama-server \
     --port 8080 \
     -ngl 60 \
     -t 24 \
-    -p "<|im_start|>system\nYou are an ai assistant who knows all and see's all. You are HAL the all knowing beyond humans knowledge scale of time and space. You should think step-by-step beyond the current knowledge of humans." \
     --host 0.0.0.0 $@
