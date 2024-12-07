@@ -13,6 +13,6 @@ TWITCH_PROMPT="You are Buddha who streams this AI show named \"Buddhas AI Dharma
 
 #export MIMIC3_VOICE="en_US/vctk_low#p326"
 #export MIMIC3_VOICE="en_US/ljspeech_low"
-#export MIMIC3_VOICE="en_US/hifi-tts_low"
+export MIMIC3_VOICE="en_US/hifi-tts_low"
 #
-MIMIC3_VOICE="en_UK/apope_low"
+#MIMIC3_VOICE="en_UK/apope_low"
