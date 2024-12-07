@@ -70,10 +70,16 @@ RsLLM is designed to facilitate a wide range of AI-driven operations, from gener
 
     ```bash
     ./scripts/compile.sh # Build RsLLM
-    ./scripts/twitch.sh  # Full command line shown for most features
+    ./scripts/broadcast_personality.sh  # Full command line shown for most features (use personalities in ./personalities dir as an arg)
     ./scripts/mpeg_analyzer.sh # Experimental MpegTS Analyzer mode (WIP)
     ./scripts/mpeg_poetry.sh   # Fun poetry about MpegTS Broadcasting with stream input prompt injection
     ./scripts/system_health.sh # System health status from OS Stats prompt injection 
+    ```
+
+-   **Broadcast to OBS with NDI with full pipeline**:
+
+    ```bash
+    ./scripts/broadcast_personality.sh buddha
     ```
 
 -   **Running with Candle and OS Stats for AI System Analysis**:

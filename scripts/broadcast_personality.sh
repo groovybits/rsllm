@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Buddhas AI Dharma Talks Character:
+# Broadcast a personality config from ./personalities:
 #
 # RsLLM configuration script:
 # - @2024 Christi Kennedy
