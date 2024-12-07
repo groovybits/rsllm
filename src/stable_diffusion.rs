@@ -297,7 +297,7 @@ impl SDConfig {
             scaled_width: None,
             scaled_height: None,
             image_position: None,
-            seed: Some(-1),
+            seed: Some(-1)
         }
     }
 }
@@ -309,7 +309,7 @@ pub async fn sd(config: SDConfig) -> Result<Vec<ImageBuffer<image::Rgb<u8>, Vec<
     // Check if config.seed is None and generate a new seed in that case
     let mut seed = config.seed;
 
-    if seed.is_none() {
+    if seed.is_none() || seed == Some(-1) {
         seed = Some(rand::random());
     }
 
