@@ -201,7 +201,7 @@ pub struct Args {
     #[clap(
         long,
         env = "MIMIC3_VOICE",
-        default_value = "en_US/vctk_low#p303",
+        default_value = "en_US/ljspeech_low",
         help = "MIMIC3_VOICE voice model via text string to use for mimic3 tts. Use en_US/vctk_low#p326 for a male voice, default is female."
     )]
     pub mimic3_voice: String,
@@ -457,7 +457,7 @@ pub struct Args {
     #[clap(
         long,
         env = "POLL_INTERVAL",
-        default_value_t = 60_000,
+        default_value_t = 1_000,
         help = "POLL Interval in ms."
     )]
     pub poll_interval: u64,
@@ -479,15 +479,6 @@ pub struct Args {
         help = "Loglevel, control rust log level."
     )]
     pub loglevel: String,
-
-    /// Break Line Length - line length for breaking lines from LLM messages
-    #[clap(
-        long,
-        env = "BREAK_LINE_LENGTH",
-        default_value_t = 300,
-        help = "Break Line Length - line length for breaking lines from LLM messages."
-    )]
-    pub break_line_length: usize,
 
     /// SD Image - create an SD image from the LLM messages
     #[clap(
@@ -511,7 +502,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_MAX_LENGTH",
-        default_value_t = 200,
+        default_value_t = 300,
         help = "SD Max Length in tokens for SD Image hardsub text segments. example: 77 tokens is avg 77 * 4 == 308 chars."
     )]
     pub sd_max_length: usize,
@@ -520,7 +511,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_PARAGRAPH_MIN",
-        default_value_t = 60,
+        default_value_t = 300,
         help = "SD Min Length for text segments generating Images. Will force past this value before segmenting text."
     )]
     pub sd_text_min: usize,
@@ -584,7 +575,7 @@ pub struct Args {
     pub sd_height: usize,
 
     /// sd width
-    #[clap(long, env = "SD_WIDTH", default_value_t = 512, help = "SD Width.")]
+    #[clap(long, env = "SD_WIDTH", default_value_t = 768, help = "SD Width.")]
     pub sd_width: usize,
 
     /// sd scaled height
@@ -618,7 +609,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SD_CUSTOM_MODEL",
-        default_value = "sd_xl_turbo_1.0.safetensors",
+        default_value = "sd_xl_turbo_1.0_fp.safetensors",
         help = "Custom Stable Diffusion Model. for automatic 111111 API usage, the name must exist as a model locally or remotely."
     )]
     pub sd_custom_model: String,
@@ -685,7 +676,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SUBTITLE_POSITION",
-        default_value = "center",
+        default_value = "top",
         help = "Subtitle position."
     )]
     pub subtitle_position: String,
