@@ -1567,6 +1567,10 @@ async fn main() {
                 StableDiffusionVersion::V1_5
             };
             sd_config.n_steps = args.sd_n_steps;
+
+            // clone args and change the args.subtitles value of the cloned version to 0
+            let mut args_clone = args.clone();
+            args_clone.subtitles = true;
             // just send a message with the last_message field true to indicate the end of the response
             let message_data_for_pipeline = MessageData {
                 paragraph: args.greeting.to_string(),
@@ -1574,8 +1578,8 @@ async fn main() {
                 paragraph_count: total_paragraph_count,
                 sd_config,
                 mimic3_voice: args.mimic3_voice.to_string(),
-                subtitle_position: args.subtitle_position.to_string(),
-                args: args.clone(),
+                subtitle_position: "center".to_string(),
+                args: args_clone,
                 shutdown: false,
                 last_message: true,
             };
