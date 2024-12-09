@@ -42,6 +42,7 @@ KEEP_HISTORY=1
 SD_MAX_LENGTH=500
 ## Pipeline Settings
 DAEMON=1
+MAX_ITERATIONS=1
 CONTINUOUS=0
 POLL_INTERVAL=1000
 PIPELINE_CONCURRENCY=1
@@ -122,6 +123,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --query "$PROMPT" \
     --assistant-image-prompt "$ASSISTANT_IMAGE_PROMPT" \
     --system-prompt "$SYSTEM_PROMPT" \
+    --max-iterations $MAX_ITERATIONS \
     --twitch-chat-history $TWITCH_CHAT_HISTORY \
     --twitch-llm-concurrency $TWITCH_LLM_CONCURRENCY \
     --twitch-model $TWITCH_MODEL \
