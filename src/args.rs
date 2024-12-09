@@ -676,7 +676,7 @@ pub struct Args {
     #[clap(
         long,
         env = "SUBTITLE_POSITION",
-        default_value = "top",
+        default_value = "mid-bottom",
         help = "Subtitle position."
     )]
     pub subtitle_position: String,

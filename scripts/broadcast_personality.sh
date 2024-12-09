@@ -68,6 +68,7 @@ SD_CUSTOM_MODEL="sd_xl_turbo_1.0_fp16.safetensors"
 SD_INTERMEDIARY_IMAGES=0
 SD_N_STEPS=20
 ALIGNMENT=center
+SUBTITLE_POSITION=mid-bottom
 SUBTITLES=0
 # === END OF CONFIGURATION ===
 #
@@ -137,6 +138,7 @@ DYLD_LIBRARY_PATH=`pwd`:/usr/local/lib:$DYLD_LIBRARY_PATH \
     --sd-custom-model $SD_CUSTOM_MODEL \
     --sd-n-steps $SD_N_STEPS \
     --image-alignment $ALIGNMENT \
+    --subtitle-position $SUBTITLE_POSITION \
     $SUBTITLE_CMD \
     $SD_INTERMEDIARY_IMAGES_CMD \
     --ndi-audio \

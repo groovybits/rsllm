@@ -706,6 +706,12 @@ async fn main() {
             sd_config.scaled_width = Some(args.sd_scaled_width);
         }
         sd_config.n_steps = args.sd_n_steps;
+
+        /* clone args and set the cloned args args.subtitles to true */
+        let mut args_clone = args.clone();
+        /* set args_clone.subtitles to true */
+        args_clone.subtitles = true;
+        
         // just send a message with the last_message field true to indicate the end of the response
         let message_data_for_pipeline = MessageData {
             paragraph: args.greeting.to_string(),
@@ -713,8 +719,8 @@ async fn main() {
             paragraph_count: total_paragraph_count,
             sd_config,
             mimic3_voice: args.mimic3_voice.to_string(),
-            subtitle_position: args.subtitle_position.to_string(),
-            args: args.clone(),
+            subtitle_position: "center".to_string(),
+            args: args_clone,
             shutdown: false,
             last_message: false,
         };
@@ -842,6 +848,10 @@ async fn main() {
                 StableDiffusionVersion::V1_5
             };
             sd_config.n_steps = args.sd_n_steps;
+            /* clone args and set the cloned args args.subtitles to true */
+            let mut args_clone = args.clone();
+            /* set args_clone.subtitles to true */
+            args_clone.subtitles = true;
             pipeline_task_sender
                 .send(MessageData {
                     paragraph: "Alice is Shutting Down the AI Channel, goodbye!".to_string(),
@@ -849,8 +859,8 @@ async fn main() {
                     paragraph_count: total_paragraph_count,
                     sd_config,
                     mimic3_voice: args.mimic3_voice.to_string(),
-                    subtitle_position: args.subtitle_position.to_string(),
-                    args: args.clone(),
+                    subtitle_position: "center".to_string(),
+                    args: args_clone,
                     shutdown: true,
                     last_message: true,
                 })
@@ -1368,7 +1378,10 @@ async fn main() {
                     // Check if image generation or speech is enabled and proceed
                     if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                         // Clone necessary data for use in the async block
-                        let paragraph_clone = paragraphs[paragraph_count].clone();
+                        let mut paragraph_clone = paragraphs[paragraph_count].clone();
+                        while paragraph_clone.contains("**") {
+                            paragraph_clone = paragraph_clone.replace("**", "");
+                        }
                         let output_id_clone = output_id.clone();
                         let mimic3_voice = args.mimic3_voice.clone().to_string();
                         let image_alignment = args.image_alignment.clone();
@@ -1469,7 +1482,10 @@ async fn main() {
             // Check if image generation is enabled and proceed
             if args.sd_image || args.tts_enable || args.oai_tts || args.mimic3_tts {
                 // Clone necessary data for use in the async block
-                let paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                let mut paragraph_text = current_paragraph.join(""); // Join without spaces as indicated
+                while paragraph_text.contains("**") {
+                    paragraph_text = paragraph_text.replace("**", "");
+                }
                 let paragraph_clone = paragraph_text.clone();
                 let output_id_clone = output_id.clone();
                 let mimic3_voice = args.mimic3_voice.clone().to_string();
@@ -1568,9 +1584,11 @@ async fn main() {
             };
             sd_config.n_steps = args.sd_n_steps;
 
-            // clone args and change the args.subtitles value of the cloned version to 0
+            /* clone args and set the cloned args args.subtitles to true */
             let mut args_clone = args.clone();
+            /* set args_clone.subtitles to true */
             args_clone.subtitles = true;
+
             // just send a message with the last_message field true to indicate the end of the response
             let message_data_for_pipeline = MessageData {
                 paragraph: args.greeting.to_string(),

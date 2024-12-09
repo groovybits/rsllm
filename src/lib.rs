@@ -410,6 +410,9 @@ pub async fn clean_tts_input(input: String) -> String {
     while input.contains("..") {
         input = input.replace("..", ".");
     }
+    while input.contains("**") {
+        input = input.replace("**", "");
+    }
 
     // remove <|im_end|> string from input and replace with ""
     let input = input.replace("<|im_end|>", "");
